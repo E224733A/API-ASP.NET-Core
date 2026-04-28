@@ -4,16 +4,34 @@ namespace API_ASP.NET_Core.Data;
 
 public class SqlConnectionFactory
 {
-    private readonly string _connectionString;
+    private readonly IConfiguration _configuration;
 
     public SqlConnectionFactory(IConfiguration configuration)
     {
-        _connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? throw new InvalidOperationException("La chaîne de connexion DefaultConnection est manquante.");
+        _configuration = configuration;
     }
 
-    public SqlConnection CreateConnection()
+    public SqlConnection CreateAbssoluteConnection()
     {
-        return new SqlConnection(_connectionString);
+        var connectionString = _configuration.GetConnectionString("AbssoluteConnection");
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("La chaîne de connexion AbssoluteConnection est manquante.");
+        }
+
+        return new SqlConnection(connectionString);
+    }
+
+    public SqlConnection CreateMobileConnection()
+    {
+        var connectionString = _configuration.GetConnectionString("MobileConnection");
+
+        if (string.IsNullOrWhiteSpace(connectionString))
+        {
+            throw new InvalidOperationException("La chaîne de connexion MobileConnection est manquante.");
+        }
+
+        return new SqlConnection(connectionString);
     }
 }

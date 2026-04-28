@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("61c9ac4b-9dd5-4966-85fa-b6bbcf1c02e1")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("API-ASP.NET-Core")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+563fff30d2928c984b0604a5adc5dbe3d5addf4e")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+b3116b15dae793ff3f31350e555d33c4dab746e8")]
 [assembly: System.Reflection.AssemblyProductAttribute("API-ASP.NET-Core")]
 [assembly: System.Reflection.AssemblyTitleAttribute("API-ASP.NET-Core")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

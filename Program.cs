@@ -4,11 +4,9 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 
-// OpenAPI + Swagger UI
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Connexion SQL Server
 builder.Services.AddSingleton<SqlConnectionFactory>();
 
 var app = builder.Build();
@@ -19,9 +17,9 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// Désactivé pour le développement local HTTP.
-// En production, HTTPS sera configuré correctement sous IIS.
- // app.UseHttpsRedirection();
+// En développement local, on laisse HTTP.
+// En production sous IIS, HTTPS sera configuré proprement.
+// app.UseHttpsRedirection();
 
 app.MapControllers();
 

@@ -22,21 +22,40 @@ public class HealthController : ControllerBase
         {
             service = "API-ASP.NET-Core",
             status = "ok",
+            environment = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT"),
             date = DateTime.Now
         });
     }
 
-    [HttpGet("sql")]
-    public async Task<IActionResult> CheckSql()
+    [HttpGet("abssolute")]
+    public async Task<IActionResult> CheckAbssoluteConnection()
     {
-        using var connection = _connectionFactory.CreateConnection();
+        using var connection = _connectionFactory.CreateAbssoluteConnection();
 
-        var result = await connection.ExecuteScalarAsync<int>("SELECT 1");
+        var databaseName = await connection.ExecuteScalarAsync<string>("SELECT DB_NAME();");
 
         return Ok(new
         {
-            sql = result == 1 ? "ok" : "erreur",
-            date = DateTime.Now
+            connection = "AbssoluteConnection",
+            status = "ok",
+            database = databaseName,
+            usage = "Lecture des vues ABSSolute"
+        });
+    }
+
+    [HttpGet("mobile")]
+    public async Task<IActionResult> CheckMobileConnection()
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        var databaseName = await connection.ExecuteScalarAsync<string>("SELECT DB_NAME();");
+
+        return Ok(new
+        {
+            connection = "MobileConnection",
+            status = "ok",
+            database = databaseName,
+            usage = "Tables dédiées au projet mobile"
         });
     }
 }
