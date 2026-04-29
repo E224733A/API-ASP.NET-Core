@@ -14,4 +14,3 @@ public class SynchronisationSaisieRequest
     public string? HeureValidation { get; set; }
     public bool EstValidee { get; set; }
 }
-}
