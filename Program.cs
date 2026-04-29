@@ -1,5 +1,6 @@
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Repositories;
+using API_ASP.NET_Core.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,9 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<SqlConnectionFactory>();
 
 builder.Services.AddScoped<LivreursRepository>();
+
+builder.Services.AddScoped<TourneesRepository>();
+builder.Services.AddScoped<TourneesService>();
 
 var app = builder.Build();
 
