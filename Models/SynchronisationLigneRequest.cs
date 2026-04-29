@@ -1,1 +1,1 @@
-﻿
+﻿namespace API_ASP.NET_Core.Models; public class SynchronisationLigneRequest { public string IdLigneSource { get; set; } = string.Empty; public int OrdreArret { get; set; } public SynchronisationClientRequest? Client { get; set; } public SynchronisationPointLivraisonRequest? PointLivraison { get; set; } public SynchronisationSaisieRequest? Saisie { get; set; } }

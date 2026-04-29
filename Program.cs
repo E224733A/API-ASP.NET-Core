@@ -1,10 +1,29 @@
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Repositories;
 using API_ASP.NET_Core.Services;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Mvc;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole();
+
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+    });
+
+builder.Services.Configure<ApiBehaviorOptions>(options =>
+{
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState.Values.SelectMany(v => v.Errors);
+        return new BadRequestObjectResult(new { errors = errors.Select(e => e.ErrorMessage) });
+    };
+});
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -15,6 +34,7 @@ builder.Services.AddScoped<LivreursRepository>();
 
 builder.Services.AddScoped<TourneesRepository>();
 builder.Services.AddScoped<TourneesService>();
+builder.Services.AddScoped<SynchronisationsRepository>();
 
 var app = builder.Build();
 
