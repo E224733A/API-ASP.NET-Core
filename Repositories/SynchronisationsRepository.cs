@@ -1,10 +1,17 @@
 using Dapper;
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Models;
-using System.Data;
 
 namespace API_ASP.NET_Core.Repositories;
 
+/// <summary>
+/// Repository pour l'enregistrement et la vérification des synchronisations.
+/// Utilise les tables mobiles :
+/// - Mobile_Livreur
+/// - Mobile_Tournee
+/// - Mobile_TourneeLigne
+/// - Mobile_LogSynchronisation
+/// </summary>
 public class SynchronisationsRepository
 {
     private readonly SqlConnectionFactory _connectionFactory;
@@ -15,129 +22,323 @@ public class SynchronisationsRepository
     }
 
     /// <summary>
-    /// Vérifie si une synchronisation avec le même IdSynchronisation existe déjà
+    /// Vérifie si une synchronisation existe déjà dans Mobile_Tournee.
     /// </summary>
     public async Task<bool> SynchronisationExistsAsync(string idSynchronisation)
     {
-        using var connection = _connectionFactory.CreateAbssoluteConnection();
+        if (!Guid.TryParse(idSynchronisation, out var guid))
+            return false;
 
-        var exists = await connection.QueryFirstOrDefaultAsync(
-            "SELECT 1 FROM Mobile_Synchronisation WHERE IdSynchronisation = @IdSync",
-            new { IdSync = idSynchronisation });
+        using var connection = _connectionFactory.CreateMobileConnection();
 
-        return exists != null;
+        var exists = await connection.QueryFirstOrDefaultAsync<int?>(
+            @"SELECT 1
+              FROM Mobile_Tournee
+              WHERE IdSynchronisation = @IdSynchronisation;",
+            new { IdSynchronisation = guid });
+
+        return exists.HasValue;
     }
 
     /// <summary>
-    /// Enregistre une synchronisation complète dans la base Mobile_
+    /// Enregistre une synchronisation de tournée complète.
     /// </summary>
     public async Task SaveSynchronisationAsync(SynchronisationTourneeRequest request)
     {
-        using var connection = _connectionFactory.CreateAbssoluteConnection();
+        using var connection = _connectionFactory.CreateMobileConnection();
         await connection.OpenAsync();
 
         using var transaction = await connection.BeginTransactionAsync();
 
         try
         {
-            // 1. Insérer la synchronisation
-            await connection.ExecuteAsync(
-                @"INSERT INTO Mobile_Synchronisation 
-                  (IdSynchronisation, DateSynchronisation, SchemaVersion, CodeTournee, DateTournee, CommentaireGlobal)
-                  VALUES (@IdSync, @DateSync, @SchemaVersion, @CodeTournee, @DateTournee, @CommentaireGlobal)",
-                new
-                {
-                    IdSync = request.IdSynchronisation,
-                    DateSync = DateTime.Now,
-                    SchemaVersion = request.SchemaVersion,
-                    CodeTournee = request.CodeTournee,
-                    DateTournee = request.DateTournee,
-                    CommentaireGlobal = request.CommentaireGlobal
-                },
-                transaction);
+            var now = DateTime.Now;
 
-            // 2. Insérer ou mettre à jour le livreur
+            if (!Guid.TryParse(request.IdSynchronisation, out var idSynchronisationGuid))
+                throw new ArgumentException("IdSynchronisation doit être un GUID valide.");
+
+            if (!DateTime.TryParse(request.DateTournee, out var dateTournee))
+                throw new ArgumentException("DateTournee invalide.");
+
+            DateTime? dateChargementMobile = null;
+            if (!string.IsNullOrWhiteSpace(request.Mobile?.DateChargementMobile) &&
+                DateTime.TryParse(request.Mobile.DateChargementMobile, out var parsedChargement))
+            {
+                dateChargementMobile = parsedChargement;
+            }
+
+            DateTime? dateEnvoiMobile = null;
+            if (!string.IsNullOrWhiteSpace(request.Mobile?.DateEnvoiMobile) &&
+                DateTime.TryParse(request.Mobile.DateEnvoiMobile, out var parsedEnvoi))
+            {
+                dateEnvoiMobile = parsedEnvoi;
+            }
+
+            // 1. Création ou mise à jour du livreur
             await connection.ExecuteAsync(
                 @"MERGE INTO Mobile_Livreur AS target
-                  USING (SELECT @CodeLivreur AS CodeLivreur) AS source
+                  USING (
+                      SELECT
+                          @CodeLivreur AS CodeLivreur,
+                          @NomLivreur AS NomLivreur
+                  ) AS source
                   ON target.CodeLivreur = source.CodeLivreur
                   WHEN MATCHED THEN
-                    UPDATE SET NomLivreur = @NomLivreur, DateMajLivreur = @DateMaj
+                      UPDATE SET
+                          NomLivreur = source.NomLivreur,
+                          EstActif = 1,
+                          DateModification = @Now
                   WHEN NOT MATCHED THEN
-                    INSERT (CodeLivreur, NomLivreur, DateMajLivreur) 
-                    VALUES (@CodeLivreur, @NomLivreur, @DateMaj)",
+                      INSERT
+                      (
+                          CodeLivreur,
+                          NomLivreur,
+                          EstActif,
+                          DateCreation,
+                          DateModification
+                      )
+                      VALUES
+                      (
+                          source.CodeLivreur,
+                          source.NomLivreur,
+                          1,
+                          @Now,
+                          NULL
+                      );",
                 new
                 {
                     CodeLivreur = request.Livreur?.CodeLivreur,
                     NomLivreur = request.Livreur?.NomLivreur,
-                    DateMaj = DateTime.Now
+                    Now = now
                 },
                 transaction);
 
-            // 3. Boucle sur les lignes et insertion
+            var idLivreur = await connection.QuerySingleAsync<int>(
+                @"SELECT IdLivreur
+                  FROM Mobile_Livreur
+                  WHERE CodeLivreur = @CodeLivreur;",
+                new { CodeLivreur = request.Livreur?.CodeLivreur },
+                transaction);
+
+            // 2. Insertion de la tournée synchronisée
+            var idTourneeMobile = await connection.QuerySingleAsync<long>(
+                @"INSERT INTO Mobile_Tournee
+                  (
+                      IdSynchronisation,
+                      DateTournee,
+                      CodeTournee,
+                      LibelleTournee,
+                      IdLivreur,
+                      StatutSynchronisation,
+                      DateChargementMobile,
+                      DateReceptionApi,
+                      DateEnvoi,
+                      EstVerrouillee,
+                      NombrePointsPrevus,
+                      NombrePointsSaisis,
+                      CommentaireGlobal,
+                      NomAppareil,
+                      VersionApplication,
+                      AdresseIP,
+                      DateCreation,
+                      DateModification
+                  )
+                  OUTPUT INSERTED.IdTourneeMobile
+                  VALUES
+                  (
+                      @IdSynchronisation,
+                      @DateTournee,
+                      @CodeTournee,
+                      @LibelleTournee,
+                      @IdLivreur,
+                      'ENVOYEE',
+                      @DateChargementMobile,
+                      @DateReceptionApi,
+                      @DateEnvoi,
+                      1,
+                      @NombrePointsPrevus,
+                      @NombrePointsSaisis,
+                      @CommentaireGlobal,
+                      @NomAppareil,
+                      @VersionApplication,
+                      NULL,
+                      @Now,
+                      NULL
+                  );",
+                new
+                {
+                    IdSynchronisation = idSynchronisationGuid,
+                    DateTournee = dateTournee.Date,
+                    CodeTournee = request.CodeTournee,
+                    LibelleTournee = request.LibelleTournee,
+                    IdLivreur = idLivreur,
+                    DateChargementMobile = dateChargementMobile,
+                    DateReceptionApi = now,
+                    DateEnvoi = dateEnvoiMobile ?? now,
+                    NombrePointsPrevus = request.Lignes.Count,
+                    NombrePointsSaisis = request.Lignes.Count,
+                    CommentaireGlobal = request.CommentaireGlobal,
+                    NomAppareil = request.Mobile?.NomAppareil,
+                    VersionApplication = request.Mobile?.VersionApplication,
+                    Now = now
+                },
+                transaction);
+
+            // 3. Insertion des lignes de tournée
             foreach (var ligne in request.Lignes)
             {
                 var saisie = ligne.Saisie;
-                var quantiteLivree = (saisie?.NbExpes ?? 0) + (saisie?.NbRolls ?? 0) + 
-                                     (saisie?.NbVetements ?? 0) + (saisie?.NbTapis ?? 0) + 
-                                     (saisie?.NbSacs ?? 0);
-                var quantiteReprise = saisie?.NbRecuperes ?? 0;
 
-                // Convertir heureValidation string en DateTime
+                var nbExpes = saisie?.NbExpes ?? 0;
+                var nbRolls = saisie?.NbRolls ?? 0;
+                var nbVetements = saisie?.NbVetements ?? 0;
+                var nbTapis = saisie?.NbTapis ?? 0;
+                var nbSacs = saisie?.NbSacs ?? 0;
+                var nbRecuperes = saisie?.NbRecuperes ?? 0;
+
+                var quantiteLivree =
+                    nbExpes +
+                    nbRolls +
+                    nbVetements +
+                    nbTapis +
+                    nbSacs;
+
+                var quantiteReprise = nbRecuperes;
+
                 DateTime? heureValidation = null;
                 if (!string.IsNullOrWhiteSpace(saisie?.HeureValidation))
                 {
-                    if (DateTime.TryParse(saisie.HeureValidation, out var parsedHeure))
-                        heureValidation = parsedHeure;
+                    if (TimeSpan.TryParse(saisie.HeureValidation, out var heureSimple))
+                    {
+                        heureValidation = dateTournee.Date.Add(heureSimple);
+                    }
+                    else if (DateTime.TryParse(saisie.HeureValidation, out var heureComplete))
+                    {
+                        heureValidation = heureComplete;
+                    }
                 }
 
                 await connection.ExecuteAsync(
-                    @"INSERT INTO Mobile_SynchronisationLigne 
-                      (IdSynchronisation, IdLigneSource, OrdreArret, NumClient, NomClient, NomAffichage,
-                       CodePDL, DescriptionPDL, NbExpes, NbRolls, NbVetements, NbTapis, NbSacs, NbRecuperes,
-                       QuantiteLivree, QuantiteReprise, PrecisionLivreur, StatutPassage, CommentaireLivreur, 
-                       HeureValidation, EstValidee, DateEnregistrement)
-                      VALUES (@IdSync, @IdLigneSource, @OrdreArret, @NumClient, @NomClient, @NomAffiche,
-                              @CodePDL, @DescriptionPDL, @NbExpes, @NbRolls, @NbVetements, @NbTapis, @NbSacs, 
-                              @NbRecuperes, @QuantiteLivree, @QuantiteReprise, @PrecisionLivreur, @StatutPassage, 
-                              @CommentaireLivreur, @HeureValidation, @EstValidee, @DateEnregistrement)",
+                    @"INSERT INTO Mobile_TourneeLigne
+                      (
+                          IdTourneeMobile,
+                          CodeTournee,
+                          OrdreArret,
+                          NumClient,
+                          NomClient,
+                          CodePDL,
+                          DescriptionPDL,
+                          NbExpes,
+                          NbRolls,
+                          NbVetements,
+                          NbTapis,
+                          NbSacs,
+                          NbRecuperes,
+                          QuantiteLivree,
+                          QuantiteReprise,
+                          PrecisionLivreur,
+                          StatutPassage,
+                          CommentaireLivreur,
+                          HeureValidation,
+                          EstValidee,
+                          DateCreation,
+                          DateModification
+                      )
+                      VALUES
+                      (
+                          @IdTourneeMobile,
+                          @CodeTournee,
+                          @OrdreArret,
+                          @NumClient,
+                          @NomClient,
+                          @CodePDL,
+                          @DescriptionPDL,
+                          @NbExpes,
+                          @NbRolls,
+                          @NbVetements,
+                          @NbTapis,
+                          @NbSacs,
+                          @NbRecuperes,
+                          @QuantiteLivree,
+                          @QuantiteReprise,
+                          @PrecisionLivreur,
+                          @StatutPassage,
+                          @CommentaireLivreur,
+                          @HeureValidation,
+                          @EstValidee,
+                          @Now,
+                          NULL
+                      );",
                     new
                     {
-                        IdSync = request.IdSynchronisation,
-                        IdLigneSource = ligne.IdLigneSource,
+                        IdTourneeMobile = idTourneeMobile,
+                        CodeTournee = request.CodeTournee,
                         OrdreArret = ligne.OrdreArret,
                         NumClient = ligne.Client?.NumClient,
                         NomClient = ligne.Client?.NomClient,
-                        NomAffiche = ligne.Client?.NomAffiche,
                         CodePDL = ligne.PointLivraison?.CodePDL,
                         DescriptionPDL = ligne.PointLivraison?.DescriptionPDL,
-                        NbExpes = saisie?.NbExpes,
-                        NbRolls = saisie?.NbRolls,
-                        NbVetements = saisie?.NbVetements,
-                        NbTapis = saisie?.NbTapis,
-                        NbSacs = saisie?.NbSacs,
-                        NbRecuperes = saisie?.NbRecuperes,
+                        NbExpes = nbExpes,
+                        NbRolls = nbRolls,
+                        NbVetements = nbVetements,
+                        NbTapis = nbTapis,
+                        NbSacs = nbSacs,
+                        NbRecuperes = nbRecuperes,
                         QuantiteLivree = quantiteLivree,
                         QuantiteReprise = quantiteReprise,
                         PrecisionLivreur = saisie?.PrecisionLivreur,
                         StatutPassage = saisie?.StatutPassage,
                         CommentaireLivreur = saisie?.CommentaireLivreur,
                         HeureValidation = heureValidation,
-                        EstValidee = saisie?.EstValidee,
-                        DateEnregistrement = DateTime.Now
+                        EstValidee = saisie?.EstValidee ?? false,
+                        Now = now
                     },
                     transaction);
             }
 
-            // 4. Enregistrer le log
+            // 4. Log de succès de la synchronisation
             await connection.ExecuteAsync(
-                @"INSERT INTO Mobile_LogSynchronisation (IdSynchronisation, Type, DateLog)
-                  VALUES (@IdSync, @Type, @DateLog)",
+                @"INSERT INTO Mobile_LogSynchronisation
+                  (
+                      IdTourneeMobile,
+                      IdLivreur,
+                      IdSynchronisation,
+                      DateEvenement,
+                      TypeEvenement,
+                      Niveau,
+                      Message,
+                      DetailTechnique,
+                      AdresseIP,
+                      NomAppareil,
+                      VersionApplication
+                  )
+                  VALUES
+                  (
+                      @IdTourneeMobile,
+                      @IdLivreur,
+                      @IdSynchronisation,
+                      @DateEvenement,
+                      @TypeEvenement,
+                      @Niveau,
+                      @Message,
+                      @DetailTechnique,
+                      @AdresseIP,
+                      @NomAppareil,
+                      @VersionApplication
+                  );",
                 new
                 {
-                    IdSync = request.IdSynchronisation,
-                    Type = "ENVOI_REUSSI",
-                    DateLog = DateTime.Now
+                    IdTourneeMobile = idTourneeMobile,
+                    IdLivreur = idLivreur,
+                    IdSynchronisation = idSynchronisationGuid,
+                    DateEvenement = now,
+                    TypeEvenement = "ENVOI_REUSSI",
+                    Niveau = "INFO",
+                    Message = "Synchronisation enregistrée avec succès.",
+                    DetailTechnique = $"Tournée {request.CodeTournee} du {dateTournee:yyyy-MM-dd} synchronisée avec {request.Lignes.Count} ligne(s).",
+                    AdresseIP = (string?)null,
+                    NomAppareil = request.Mobile?.NomAppareil,
+                    VersionApplication = request.Mobile?.VersionApplication
                 },
                 transaction);
 
