@@ -5,7 +5,7 @@ using API_ASP.NET_Core.Models;
 namespace API_ASP.NET_Core.Repositories;
 
 /// <summary>
-/// Repository pour l'enregistrement et la vérification des synchronisations.
+/// Repository pour l'enregistrement, la vérification et la consultation des synchronisations.
 /// Utilise les tables mobiles :
 /// - Mobile_Livreur
 /// - Mobile_Tournee
@@ -38,6 +38,242 @@ public class SynchronisationsRepository
             new { IdSynchronisation = guid });
 
         return exists.HasValue;
+    }
+
+    /// <summary>
+    /// Consulte les synchronisations envoyées.
+    /// Filtres possibles :
+    /// - dateTournee
+    /// - codeTournee
+    /// - codeLivreur
+    /// </summary>
+    public async Task<IReadOnlyList<SynchronisationResumeDto>> GetSynchronisationsAsync(
+        DateTime? dateTournee,
+        string? codeTournee,
+        string? codeLivreur)
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        var result = await connection.QueryAsync<SynchronisationResumeDto>(
+            @"SELECT
+                  t.IdTourneeMobile,
+                  t.IdSynchronisation,
+                  t.DateTournee,
+                  t.CodeTournee,
+                  t.LibelleTournee,
+
+                  t.IdLivreur,
+                  l.CodeLivreur,
+                  l.NomLivreur,
+
+                  t.StatutSynchronisation,
+                  t.DateChargementMobile,
+                  t.DateReceptionApi,
+                  t.DateEnvoi,
+
+                  t.EstVerrouillee,
+                  t.NombrePointsPrevus,
+                  t.NombrePointsSaisis,
+
+                  t.CommentaireGlobal,
+                  t.NomAppareil,
+                  t.VersionApplication,
+
+                  SUM(CASE WHEN tl.StatutPassage = 'FAIT' THEN 1 ELSE 0 END) AS NombreFaits,
+                  SUM(CASE WHEN tl.StatutPassage = 'NON_FAIT' THEN 1 ELSE 0 END) AS NombreNonFaits,
+                  SUM(CASE WHEN tl.StatutPassage = 'ANOMALIE' THEN 1 ELSE 0 END) AS NombreAnomalies
+
+              FROM Mobile_Tournee t
+              LEFT JOIN Mobile_Livreur l
+                     ON l.IdLivreur = t.IdLivreur
+              LEFT JOIN Mobile_TourneeLigne tl
+                     ON tl.IdTourneeMobile = t.IdTourneeMobile
+
+              WHERE (@DateTournee IS NULL OR t.DateTournee = @DateTournee)
+                AND (@CodeTournee IS NULL OR t.CodeTournee = @CodeTournee)
+                AND (@CodeLivreur IS NULL OR l.CodeLivreur = @CodeLivreur)
+
+              GROUP BY
+                  t.IdTourneeMobile,
+                  t.IdSynchronisation,
+                  t.DateTournee,
+                  t.CodeTournee,
+                  t.LibelleTournee,
+                  t.IdLivreur,
+                  l.CodeLivreur,
+                  l.NomLivreur,
+                  t.StatutSynchronisation,
+                  t.DateChargementMobile,
+                  t.DateReceptionApi,
+                  t.DateEnvoi,
+                  t.EstVerrouillee,
+                  t.NombrePointsPrevus,
+                  t.NombrePointsSaisis,
+                  t.CommentaireGlobal,
+                  t.NomAppareil,
+                  t.VersionApplication
+
+              ORDER BY t.DateReceptionApi DESC, t.IdTourneeMobile DESC;",
+            new
+            {
+                DateTournee = dateTournee?.Date,
+                CodeTournee = string.IsNullOrWhiteSpace(codeTournee) ? null : codeTournee,
+                CodeLivreur = string.IsNullOrWhiteSpace(codeLivreur) ? null : codeLivreur
+            });
+
+        return result.ToList();
+    }
+
+    /// <summary>
+    /// Consulte le détail complet d'une synchronisation envoyée.
+    /// Inclut :
+    /// - l'entête de tournée
+    /// - les lignes saisies
+    /// - les logs associés
+    /// </summary>
+    public async Task<SynchronisationDetailDto?> GetSynchronisationByIdAsync(long idTourneeMobile)
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        var detail = await connection.QuerySingleOrDefaultAsync<SynchronisationDetailDto>(
+            @"SELECT
+                  t.IdTourneeMobile,
+                  t.IdSynchronisation,
+                  t.DateTournee,
+                  t.CodeTournee,
+                  t.LibelleTournee,
+
+                  t.IdLivreur,
+                  l.CodeLivreur,
+                  l.NomLivreur,
+
+                  t.StatutSynchronisation,
+                  t.DateChargementMobile,
+                  t.DateReceptionApi,
+                  t.DateEnvoi,
+
+                  t.EstVerrouillee,
+                  t.NombrePointsPrevus,
+                  t.NombrePointsSaisis,
+
+                  t.CommentaireGlobal,
+                  t.NomAppareil,
+                  t.VersionApplication,
+
+                  (
+                      SELECT COUNT(1)
+                      FROM Mobile_TourneeLigne x
+                      WHERE x.IdTourneeMobile = t.IdTourneeMobile
+                        AND x.StatutPassage = 'FAIT'
+                  ) AS NombreFaits,
+
+                  (
+                      SELECT COUNT(1)
+                      FROM Mobile_TourneeLigne x
+                      WHERE x.IdTourneeMobile = t.IdTourneeMobile
+                        AND x.StatutPassage = 'NON_FAIT'
+                  ) AS NombreNonFaits,
+
+                  (
+                      SELECT COUNT(1)
+                      FROM Mobile_TourneeLigne x
+                      WHERE x.IdTourneeMobile = t.IdTourneeMobile
+                        AND x.StatutPassage = 'ANOMALIE'
+                  ) AS NombreAnomalies
+
+              FROM Mobile_Tournee t
+              LEFT JOIN Mobile_Livreur l
+                     ON l.IdLivreur = t.IdLivreur
+              WHERE t.IdTourneeMobile = @IdTourneeMobile;",
+            new { IdTourneeMobile = idTourneeMobile });
+
+        if (detail is null)
+            return null;
+
+        var lignes = await connection.QueryAsync<SynchronisationLigneDto>(
+            @"SELECT
+                  IdTourneeLigne,
+                  IdTourneeMobile,
+
+                  OrdreArret,
+
+                  NumClient,
+                  NomClient,
+
+                  CodePDL,
+                  DescriptionPDL,
+
+                  AdresseLigne1,
+                  AdresseLigne2,
+                  AdresseLigne3,
+                  Ville,
+                  CodePostal,
+
+                  JourTournee,
+                  SchemaLivraison,
+                  CodeTournee,
+                  LibelleTournee,
+
+                  JourTourneeRetour,
+                  CodeTourneeRetour,
+                  LibelleTourneeRetour,
+
+                  Instructions,
+                  ZoneDechargement,
+                  Zone,
+                  TypeLinge,
+
+                  EstFerme,
+                  DateFermeture,
+                  MotifFermeture,
+
+                  QuantiteLivree,
+                  QuantiteReprise,
+
+                  NbExpes,
+                  NbRolls,
+                  NbVetements,
+                  NbTapis,
+                  NbSacs,
+                  NbRecuperes,
+
+                  PrecisionLivreur,
+                  StatutPassage,
+                  CommentaireLivreur,
+                  HeureValidation,
+                  EstValidee,
+
+                  DateCreation,
+                  DateModification
+
+              FROM Mobile_TourneeLigne
+              WHERE IdTourneeMobile = @IdTourneeMobile
+              ORDER BY OrdreArret, IdTourneeLigne;",
+            new { IdTourneeMobile = idTourneeMobile });
+
+        var logs = await connection.QueryAsync<SynchronisationLogDto>(
+            @"SELECT
+                  IdLog,
+                  IdTourneeMobile,
+                  IdLivreur,
+                  IdSynchronisation,
+                  DateEvenement,
+                  TypeEvenement,
+                  Niveau,
+                  Message,
+                  DetailTechnique,
+                  AdresseIP,
+                  NomAppareil,
+                  VersionApplication
+              FROM Mobile_LogSynchronisation
+              WHERE IdTourneeMobile = @IdTourneeMobile
+              ORDER BY DateEvenement DESC, IdLog DESC;",
+            new { IdTourneeMobile = idTourneeMobile });
+
+        detail.Lignes = lignes.ToList();
+        detail.Logs = logs.ToList();
+
+        return detail;
     }
 
     /// <summary>
@@ -74,7 +310,6 @@ public class SynchronisationsRepository
                 dateEnvoiMobile = parsedEnvoi;
             }
 
-            // 1. Création ou mise à jour du livreur
             await connection.ExecuteAsync(
                 @"MERGE INTO Mobile_Livreur AS target
                   USING (
@@ -120,7 +355,6 @@ public class SynchronisationsRepository
                 new { CodeLivreur = request.Livreur?.CodeLivreur },
                 transaction);
 
-            // 2. Insertion de la tournée synchronisée
             var idTourneeMobile = await connection.QuerySingleAsync<long>(
                 @"INSERT INTO Mobile_Tournee
                   (
@@ -184,7 +418,6 @@ public class SynchronisationsRepository
                 },
                 transaction);
 
-            // 3. Insertion des lignes de tournée
             foreach (var ligne in request.Lignes)
             {
                 var saisie = ligne.Saisie;
@@ -296,7 +529,6 @@ public class SynchronisationsRepository
                     transaction);
             }
 
-            // 4. Log de succès de la synchronisation
             await connection.ExecuteAsync(
                 @"INSERT INTO Mobile_LogSynchronisation
                   (

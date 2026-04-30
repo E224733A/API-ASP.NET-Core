@@ -1,220 +1,272 @@
-using Microsoft.AspNetCore.Mvc;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Repositories;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace API_ASP.NET_Core.Controllers;
 
-/// <summary>
-/// Contrôleur HTTP pour recevoir les synchronisations de tournée.
-/// </summary>
-[Route("api/synchronisations")]
 [ApiController]
+[Route("api/synchronisations")]
 public class SynchronisationsController : ControllerBase
 {
-    private readonly SynchronisationsRepository _synchronisationsRepository;
+    private readonly SynchronisationsRepository _repository;
 
-    public SynchronisationsController(SynchronisationsRepository synchronisationsRepository)
+    public SynchronisationsController(SynchronisationsRepository repository)
     {
-        _synchronisationsRepository = synchronisationsRepository;
+        _repository = repository;
     }
 
     /// <summary>
-    /// Envoie une synchronisation de tournée.
+    /// Consulte les synchronisations envoyées.
+    /// Filtres possibles :
+    /// - dateTournee
+    /// - codeTournee
+    /// - codeLivreur
+    /// </summary>
+    [HttpGet]
+    public async Task<IActionResult> GetSynchronisations(
+        [FromQuery] string? dateTournee,
+        [FromQuery] string? codeTournee,
+        [FromQuery] string? codeLivreur)
+    {
+        DateTime? parsedDateTournee = null;
+
+        if (!string.IsNullOrWhiteSpace(dateTournee))
+        {
+            if (!DateTime.TryParse(dateTournee, out var date))
+            {
+                return BadRequest(new
+                {
+                    statut = "VALIDATION_ERROR",
+                    errors = new[]
+                    {
+                        "Le paramètre dateTournee est invalide. Format attendu : yyyy-MM-dd."
+                    }
+                });
+            }
+
+            parsedDateTournee = date.Date;
+        }
+
+        var synchronisations = await _repository.GetSynchronisationsAsync(
+            parsedDateTournee,
+            codeTournee,
+            codeLivreur);
+
+        return Ok(new
+        {
+            statut = "SUCCESS",
+            count = synchronisations.Count,
+            synchronisations
+        });
+    }
+
+    /// <summary>
+    /// Consulte le détail complet d'une synchronisation envoyée.
+    /// </summary>
+    [HttpGet("{idTourneeMobile:long}")]
+    public async Task<IActionResult> GetSynchronisationById(long idTourneeMobile)
+    {
+        var synchronisation = await _repository.GetSynchronisationByIdAsync(idTourneeMobile);
+
+        if (synchronisation is null)
+        {
+            return NotFound(new
+            {
+                statut = "NOT_FOUND",
+                message = $"Aucune synchronisation trouvée avec l'ID {idTourneeMobile}."
+            });
+        }
+
+        return Ok(new
+        {
+            statut = "SUCCESS",
+            synchronisation
+        });
+    }
+
+    /// <summary>
+    /// Enregistre une synchronisation de tournée envoyée par le mobile.
     /// </summary>
     [HttpPost]
-    public async Task<ActionResult<SynchronisationResponse>> CreateSynchronisation(
-        [FromBody] SynchronisationTourneeRequest request)
+    public async Task<IActionResult> PostSynchronisation([FromBody] SynchronisationTourneeRequest request)
     {
-        // Valider l’objet
-        var validationErrors = ValidateSynchronisation(request);
-        if (validationErrors.Any())
+        var errors = ValidateSynchronisationRequest(request);
+
+        if (errors.Count > 0)
         {
             return BadRequest(new
             {
                 statut = "VALIDATION_ERROR",
-                errors = validationErrors
+                errors
             });
         }
 
         try
         {
-            // Vérifier l'unicité dans Mobile_Tournee (via repository)
-            var exists = await _synchronisationsRepository.SynchronisationExistsAsync(request.IdSynchronisation);
-            if (exists)
+            if (await _repository.SynchronisationExistsAsync(request.IdSynchronisation))
             {
-                return Conflict(new SynchronisationResponse
+                return Conflict(new
                 {
-                    Statut = "CONFLICT",
-                    Message = $"Une synchronisation avec l'ID {request.IdSynchronisation} existe déjà."
+                    statut = "CONFLICT",
+                    message = $"Une synchronisation avec l'ID {request.IdSynchronisation} existe déjà."
                 });
             }
 
-            // Sauvegarder la synchronisation
-            await _synchronisationsRepository.SaveSynchronisationAsync(request);
+            await _repository.SaveSynchronisationAsync(request);
 
-            return Ok(new SynchronisationResponse
+            return Ok(new
             {
-                Statut = "SUCCESS",
-                Message = "Synchronisation enregistrée avec succès."
+                statut = "SUCCESS",
+                message = "Synchronisation enregistrée avec succès."
+            });
+        }
+        catch (SqlException ex) when (ex.Number is 2601 or 2627)
+        {
+            return Conflict(new
+            {
+                statut = "CONFLICT",
+                message = "Cette tournée a déjà été synchronisée."
             });
         }
         catch (Exception ex)
         {
-            return StatusCode(500, new SynchronisationResponse
+            return StatusCode(500, new
             {
-                Statut = "ERROR",
-                Message = $"Erreur lors de la synchronisation : {ex.Message}"
+                statut = "ERROR",
+                message = $"Erreur lors de la synchronisation : {ex.Message}"
             });
         }
     }
 
-    private static List<string> ValidateSynchronisation(SynchronisationTourneeRequest request)
+    private static List<string> ValidateSynchronisationRequest(SynchronisationTourneeRequest? request)
     {
         var errors = new List<string>();
 
-        // IdSynchronisation requis et doit être un GUID
-        if (string.IsNullOrWhiteSpace(request.IdSynchronisation))
-            errors.Add("IdSynchronisation est requis.");
-        else if (!Guid.TryParse(request.IdSynchronisation, out _))
-            errors.Add("IdSynchronisation doit être un GUID valide.");
-
-        // DateTournee requise et au format YYYY-MM-DD
-        if (string.IsNullOrWhiteSpace(request.DateTournee))
-            errors.Add("DateTournee est requise.");
-        else if (!DateTime.TryParse(request.DateTournee, out _))
-            errors.Add("DateTournee est invalide. Format attendu : YYYY-MM-DD.");
-
-        if (string.IsNullOrWhiteSpace(request.CodeTournee))
-            errors.Add("CodeTournee est requis.");
-
-        if (request.Livreur == null)
+        if (request is null)
         {
-            errors.Add("Livreur est requis.");
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(request.Livreur.CodeLivreur))
-                errors.Add("Livreur.CodeLivreur est requis.");
-
-            if (string.IsNullOrWhiteSpace(request.Livreur.NomLivreur))
-                errors.Add("Livreur.NomLivreur est requis.");
-        }
-
-        if (request.Mobile == null)
-        {
-            errors.Add("Mobile est requis.");
-        }
-        else
-        {
-            if (string.IsNullOrWhiteSpace(request.Mobile.NomAppareil))
-                errors.Add("Mobile.NomAppareil est requis.");
-
-            if (string.IsNullOrWhiteSpace(request.Mobile.VersionApplication))
-                errors.Add("Mobile.VersionApplication est requis.");
-
-            if (!string.IsNullOrWhiteSpace(request.Mobile.DateChargementMobile) &&
-                !DateTime.TryParse(request.Mobile.DateChargementMobile, out _))
-                errors.Add("Mobile.DateChargementMobile est invalide.");
-
-            if (!string.IsNullOrWhiteSpace(request.Mobile.DateEnvoiMobile) &&
-                !DateTime.TryParse(request.Mobile.DateEnvoiMobile, out _))
-                errors.Add("Mobile.DateEnvoiMobile est invalide.");
-        }
-
-        // Vérifier les lignes
-        if (request.Lignes == null || !request.Lignes.Any())
-        {
-            errors.Add("Au moins une ligne de tournée est requise.");
+            errors.Add("Le corps de la requête est obligatoire.");
             return errors;
         }
 
-        foreach (var (ligne, index) in request.Lignes.Select((l, i) => (l, i)))
+        if (string.IsNullOrWhiteSpace(request.SchemaVersion))
+            errors.Add("SchemaVersion est obligatoire.");
+        else if (request.SchemaVersion != "1.0")
+            errors.Add($"SchemaVersion {request.SchemaVersion} n'est pas supportée.");
+
+        if (string.IsNullOrWhiteSpace(request.IdSynchronisation))
         {
-            var iLigne = index + 1;
-            if (ligne == null)
-            {
-                errors.Add($"Ligne {iLigne} : la ligne est requise.");
-                continue;
-            }
+            errors.Add("IdSynchronisation est obligatoire.");
+        }
+        else if (!Guid.TryParse(request.IdSynchronisation, out _))
+        {
+            errors.Add("IdSynchronisation doit être un UUID valide.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.DateTournee))
+        {
+            errors.Add("DateTournee est obligatoire.");
+        }
+        else if (!DateTime.TryParse(request.DateTournee, out _))
+        {
+            errors.Add("DateTournee est invalide.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CodeTournee))
+            errors.Add("CodeTournee est obligatoire.");
+
+        if (request.Livreur is null)
+        {
+            errors.Add("Livreur est obligatoire.");
+        }
+        else if (string.IsNullOrWhiteSpace(request.Livreur.CodeLivreur))
+        {
+            errors.Add("Livreur.CodeLivreur est obligatoire.");
+        }
+
+        if (request.Lignes is null || request.Lignes.Count == 0)
+        {
+            errors.Add("La liste des lignes ne doit pas être vide.");
+            return errors;
+        }
+
+        var idsLigneSource = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < request.Lignes.Count; i++)
+        {
+            var numeroLigne = i + 1;
+            var ligne = request.Lignes[i];
+            var saisie = ligne.Saisie;
 
             if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
-                errors.Add($"Ligne {iLigne} : IdLigneSource est requis.");
-
-            if (ligne.OrdreArret < 0)
-                errors.Add($"Ligne {iLigne} : OrdreArret ne peut pas être négatif.");
-
-            if (ligne.Client == null)
             {
-                errors.Add($"Ligne {iLigne} : Client est requis.");
+                errors.Add($"Ligne {numeroLigne} : IdLigneSource est obligatoire.");
             }
-            else
+            else if (!idsLigneSource.Add(ligne.IdLigneSource))
             {
-                if (string.IsNullOrWhiteSpace(ligne.Client.NumClient))
-                    errors.Add($"Ligne {iLigne} : Client.NumClient est requis.");
-
-                if (string.IsNullOrWhiteSpace(ligne.Client.NomClient))
-                    errors.Add($"Ligne {iLigne} : Client.NomClient est requis.");
+                errors.Add($"Ligne {numeroLigne} : IdLigneSource est dupliqué dans la requête.");
             }
 
-            if (ligne.PointLivraison == null)
+            if (saisie is null)
             {
-                errors.Add($"Ligne {iLigne} : PointLivraison est requis.");
-            }
-            else
-            {
-                if (string.IsNullOrWhiteSpace(ligne.PointLivraison.CodePDL))
-                    errors.Add($"Ligne {iLigne} : PointLivraison.CodePDL est requis.");
-
-                if (string.IsNullOrWhiteSpace(ligne.PointLivraison.DescriptionPDL))
-                    errors.Add($"Ligne {iLigne} : PointLivraison.DescriptionPDL est requis.");
-            }
-
-            var saisie = ligne.Saisie;
-            if (saisie == null)
-            {
-                errors.Add($"Ligne {iLigne} : Saisie est requise.");
+                errors.Add($"Ligne {numeroLigne} : Saisie est obligatoire.");
                 continue;
             }
 
-            // Quantités non négatives
-            if (saisie.NbExpes < 0) errors.Add($"Ligne {iLigne} : NbExpes ne peut pas être négatif.");
-            if (saisie.NbRolls < 0) errors.Add($"Ligne {iLigne} : NbRolls ne peut pas être négatif.");
-            if (saisie.NbVetements < 0) errors.Add($"Ligne {iLigne} : NbVetements ne peut pas être négatif.");
-            if (saisie.NbTapis < 0) errors.Add($"Ligne {iLigne} : NbTapis ne peut pas être négatif.");
-            if (saisie.NbSacs < 0) errors.Add($"Ligne {iLigne} : NbSacs ne peut pas être négatif.");
-            if (saisie.NbRecuperes < 0) errors.Add($"Ligne {iLigne} : NbRecuperes ne peut pas être négatif.");
+            if ((saisie.NbExpes) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbExpes ne peut pas être négatif.");
 
-            // estValidee doit être true
+            if ((saisie.NbRolls) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbRolls ne peut pas être négatif.");
+
+            if ((saisie.NbVetements) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbVetements ne peut pas être négatif.");
+
+            if ((saisie.NbTapis) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbTapis ne peut pas être négatif.");
+
+            if ((saisie.NbSacs) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbSacs ne peut pas être négatif.");
+
+            if ((saisie.NbRecuperes) < 0)
+                errors.Add($"Ligne {numeroLigne} : NbRecuperes ne peut pas être négatif.");
+
+            var statut = saisie.StatutPassage?.Trim().ToUpperInvariant();
+
+            if (string.IsNullOrWhiteSpace(statut))
+            {
+                errors.Add($"Ligne {numeroLigne} : StatutPassage est obligatoire.");
+            }
+            else if (statut is not "A_FAIRE" and not "FAIT" and not "NON_FAIT" and not "ANOMALIE")
+            {
+                errors.Add($"Ligne {numeroLigne} : StatutPassage doit être A_FAIRE, FAIT, NON_FAIT ou ANOMALIE.");
+            }
+            else if (statut == "A_FAIRE")
+            {
+                errors.Add($"Ligne {numeroLigne} : A_FAIRE est interdit dans l'envoi final.");
+            }
+
             if (!saisie.EstValidee)
-                errors.Add($"Ligne {iLigne} : EstValidee doit être true.");
-
-            // Statut de passage et règles associées
-            if (string.IsNullOrWhiteSpace(saisie.StatutPassage))
             {
-                errors.Add($"Ligne {iLigne} : StatutPassage est requis.");
-            }
-            else if (saisie.StatutPassage != "FAIT" &&
-                     saisie.StatutPassage != "NON_FAIT" &&
-                     saisie.StatutPassage != "ANOMALIE")
-            {
-                errors.Add($"Ligne {iLigne} : StatutPassage '{saisie.StatutPassage}' est invalide. Valeurs autorisées : FAIT, NON_FAIT, ANOMALIE.");
+                errors.Add($"Ligne {numeroLigne} : EstValidee doit être true pour l'envoi final.");
             }
 
-            // heureValidation obligatoire et valide
-            if (string.IsNullOrWhiteSpace(saisie.HeureValidation))
+            if (saisie.EstValidee && string.IsNullOrWhiteSpace(saisie.HeureValidation))
             {
-                errors.Add($"Ligne {iLigne} : HeureValidation est obligatoire.");
-            }
-            else if (!DateTime.TryParse(saisie.HeureValidation, out _))
-            {
-                errors.Add($"Ligne {iLigne} : HeureValidation est invalide.");
+                errors.Add($"Ligne {numeroLigne} : HeureValidation est obligatoire.");
             }
 
-            // Commentaire obligatoire pour NON_FAIT ou ANOMALIE
-            if ((saisie.StatutPassage == "NON_FAIT" || saisie.StatutPassage == "ANOMALIE") &&
+            if (!string.IsNullOrWhiteSpace(saisie.HeureValidation) &&
+                !DateTime.TryParse(saisie.HeureValidation, out _) &&
+                !TimeSpan.TryParse(saisie.HeureValidation, out _))
+            {
+                errors.Add($"Ligne {numeroLigne} : HeureValidation est invalide.");
+            }
+
+            if ((statut == "NON_FAIT" || statut == "ANOMALIE") &&
                 string.IsNullOrWhiteSpace(saisie.CommentaireLivreur))
             {
-                errors.Add($"Ligne {iLigne} : CommentaireLivreur est obligatoire pour le statut {saisie.StatutPassage}.");
+                errors.Add($"Ligne {numeroLigne} : CommentaireLivreur est obligatoire pour le statut {statut}.");
             }
         }
 
