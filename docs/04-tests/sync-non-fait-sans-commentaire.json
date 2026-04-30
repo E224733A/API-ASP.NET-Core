@@ -1,0 +1,46 @@
+﻿{
+  "schemaVersion": "1.0",
+  "idSynchronisation": "fc9682c4-3743-45c6-a23f-a7b346601fa9",
+  "dateTournee": "2026-04-28",
+  "codeTournee": "8256",
+  "libelleTournee": "MDR VENDEE",
+  "livreur": {
+    "codeLivreur": "2",
+    "nomLivreur": "DAVID LEBAS"
+  },
+  "mobile": {
+    "nomAppareil": "Samsung A15",
+    "versionApplication": "1.0.0",
+    "dateChargementMobile": "2026-04-28T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-04-28T16:45:00+02:00"
+  },
+  "commentaireGlobal": null,
+  "lignes": [
+    {
+      "idLigneSource": "2026-04-28|8256|2|1058|1|1",
+      "ordreArret": 1,
+      "client": {
+        "numClient": "1058",
+        "nomClient": "EHPAD L EQUAIZIERE",
+        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+      },
+      "pointLivraison": {
+        "codePDL": "1",
+        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+      },
+      "saisie": {
+        "nbExpes": 0,
+        "nbRolls": 0,
+        "nbVetements": 0,
+        "nbTapis": 0,
+        "nbSacs": 0,
+        "nbRecuperes": 0,
+        "precisionLivreur": "2 rolls repris au local arrière",
+        "statutPassage": "NON_FAIT",
+        "commentaireLivreur": null,
+        "heureValidation": "2026-04-28T09:12:00+02:00",
+        "estValidee": true
+      }
+    }
+  ]
+}
