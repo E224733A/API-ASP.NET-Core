@@ -1,6 +1,6 @@
 ﻿{
-  "schemaVersion": "1.0",
-  "idSynchronisation": "4e17a871-5fc5-4f49-8d01-4d791a6d9941",
+  "schemaVersion": "1.1",
+  "idSynchronisation": "11111111-1111-1111-1111-111111111111",
   "dateTournee": "2026-04-28",
   "codeTournee": "2001",
   "libelleTournee": "MDR VENDEE",
@@ -11,8 +11,8 @@
   "mobile": {
     "nomAppareil": "Samsung A15",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-04-28T07:30:00",
-    "dateEnvoiMobile": "2026-04-28T16:45:00"
+    "dateChargementMobile": "2026-04-28T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-04-28T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
@@ -29,17 +29,31 @@
         "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
       },
       "saisie": {
-        "nbExpes": 0,
-        "nbRolls": 3,
-        "nbVetements": 0,
-        "nbTapis": 1,
-        "nbSacs": 0,
-        "nbRecuperes": 2,
         "precisionLivreur": "2 rolls repris au local arrière",
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": "2026-04-28T09:12:00",
-        "estValidee": true
+        "heureValidation": "2026-04-28T09:12:00+02:00",
+        "estValidee": true,
+        "quantites": [
+          {
+            "codeArticle": "ROLLS",
+            "libelle": "Rolls",
+            "quantiteLivree": 3,
+            "quantiteRecuperee": 2
+          },
+          {
+            "codeArticle": "TAPIS",
+            "libelle": "Tapis",
+            "quantiteLivree": 1,
+            "quantiteRecuperee": 0
+          },
+          {
+            "codeArticle": "SACS",
+            "libelle": "Sacs",
+            "quantiteLivree": 0,
+            "quantiteRecuperee": 0
+          }
+        ]
       }
     }
   ]

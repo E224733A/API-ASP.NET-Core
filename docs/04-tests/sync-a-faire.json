@@ -1,9 +1,9 @@
 ﻿{
   "schemaVersion": "1.1",
-  "idSynchronisation": "55555555-5555-5555-5555-555555555555",
-  "dateTournee": "2026-05-01",
-  "codeTournee": "2004",
-  "libelleTournee": "TEST ANOMALIE",
+  "idSynchronisation": "88888888-8888-8888-8888-888888888888",
+  "dateTournee": "2026-05-04",
+  "codeTournee": "2007",
+  "libelleTournee": "TEST A FAIRE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -11,13 +11,13 @@
   "mobile": {
     "nomAppareil": "Samsung A15",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-01T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-01T16:45:00+02:00"
+    "dateChargementMobile": "2026-05-04T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-05-04T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-01|2004|2|1058|1|1",
+      "idLigneSource": "2026-05-04|2007|2|1058|1|1",
       "ordreArret": 1,
       "client": {
         "numClient": "1058",
@@ -30,10 +30,10 @@
       },
       "saisie": {
         "precisionLivreur": null,
-        "statutPassage": "ANOMALIE",
+        "statutPassage": "A_FAIRE",
         "commentaireLivreur": null,
-        "heureValidation": "2026-05-01T09:12:00+02:00",
-        "estValidee": true,
+        "heureValidation": null,
+        "estValidee": false,
         "quantites": [
           {
             "codeArticle": "ROLLS",

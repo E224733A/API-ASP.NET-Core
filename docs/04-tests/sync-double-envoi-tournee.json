@@ -1,9 +1,9 @@
 ﻿{
   "schemaVersion": "1.1",
-  "idSynchronisation": "55555555-5555-5555-5555-555555555555",
-  "dateTournee": "2026-05-01",
-  "codeTournee": "2004",
-  "libelleTournee": "TEST ANOMALIE",
+  "idSynchronisation": "22222222-2222-2222-2222-222222222222",
+  "dateTournee": "2026-04-28",
+  "codeTournee": "2001",
+  "libelleTournee": "MDR VENDEE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -11,13 +11,13 @@
   "mobile": {
     "nomAppareil": "Samsung A15",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-01T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-01T16:45:00+02:00"
+    "dateChargementMobile": "2026-04-28T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-04-28T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-01|2004|2|1058|1|1",
+      "idLigneSource": "2026-04-28|2001|2|1058|1|1",
       "ordreArret": 1,
       "client": {
         "numClient": "1058",
@@ -29,15 +29,27 @@
         "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
       },
       "saisie": {
-        "precisionLivreur": null,
-        "statutPassage": "ANOMALIE",
+        "precisionLivreur": "2 rolls repris au local arrière",
+        "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": "2026-05-01T09:12:00+02:00",
+        "heureValidation": "2026-04-28T09:12:00+02:00",
         "estValidee": true,
         "quantites": [
           {
             "codeArticle": "ROLLS",
             "libelle": "Rolls",
+            "quantiteLivree": 3,
+            "quantiteRecuperee": 2
+          },
+          {
+            "codeArticle": "TAPIS",
+            "libelle": "Tapis",
+            "quantiteLivree": 1,
+            "quantiteRecuperee": 0
+          },
+          {
+            "codeArticle": "SACS",
+            "libelle": "Sacs",
             "quantiteLivree": 0,
             "quantiteRecuperee": 0
           }

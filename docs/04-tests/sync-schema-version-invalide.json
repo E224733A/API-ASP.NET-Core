@@ -1,9 +1,9 @@
-﻿{
-  "schemaVersion": "1.1",
-  "idSynchronisation": "11111111-1111-1111-1111-111111111111",
-  "dateTournee": "2026-04-28",
-  "codeTournee": "2001",
-  "libelleTournee": "MDR VENDEE",
+{
+  "schemaVersion": "1.0",
+  "idSynchronisation": "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb",
+  "dateTournee": "2026-05-07",
+  "codeTournee": "2010",
+  "libelleTournee": "TEST VERSION SCHEMA INVALIDE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -17,7 +17,7 @@
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-04-28|2001|2|1058|1|1",
+      "idLigneSource": "2026-05-07|2010|2|1058|1|1",
       "ordreArret": 1,
       "client": {
         "numClient": "1058",

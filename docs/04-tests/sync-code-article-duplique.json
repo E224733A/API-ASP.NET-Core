@@ -1,9 +1,9 @@
 ﻿{
   "schemaVersion": "1.1",
-  "idSynchronisation": "66666666-6666-6666-6666-666666666666",
-  "dateTournee": "2026-05-02",
-  "codeTournee": "2005",
-  "libelleTournee": "TEST VALIDEE SANS HEURE",
+  "idSynchronisation": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+  "dateTournee": "2026-05-06",
+  "codeTournee": "2009",
+  "libelleTournee": "TEST CODE ARTICLE DUPLIQUE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -11,34 +11,40 @@
   "mobile": {
     "nomAppareil": "Samsung A15",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-02T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-02T16:45:00+02:00"
+    "dateChargementMobile": "2026-05-06T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-05-06T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-02|2005|2|1058|1|1",
+      "idLigneSource": "2026-05-06|2009|2|1058|1|1",
       "ordreArret": 1,
       "client": {
         "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+        "nomClient": "CLIENT TEST",
+        "nomAffiche": "CLIENT TEST"
       },
       "pointLivraison": {
         "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+        "descriptionPDL": "PDL TEST"
       },
       "saisie": {
         "precisionLivreur": null,
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": null,
+        "heureValidation": "2026-05-06T09:12:00+02:00",
         "estValidee": true,
         "quantites": [
           {
             "codeArticle": "ROLLS",
             "libelle": "Rolls",
             "quantiteLivree": 1,
+            "quantiteRecuperee": 0
+          },
+          {
+            "codeArticle": "ROLLS",
+            "libelle": "Rolls",
+            "quantiteLivree": 2,
             "quantiteRecuperee": 0
           }
         ]

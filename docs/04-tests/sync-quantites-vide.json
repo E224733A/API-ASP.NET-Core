@@ -1,9 +1,9 @@
-﻿{
+{
   "schemaVersion": "1.1",
-  "idSynchronisation": "11111111-1111-1111-1111-111111111111",
-  "dateTournee": "2026-04-28",
-  "codeTournee": "2001",
-  "libelleTournee": "MDR VENDEE",
+  "idSynchronisation": "cccccccc-cccc-cccc-cccc-cccccccccccc",
+  "dateTournee": "2026-05-08",
+  "codeTournee": "2011",
+  "libelleTournee": "TEST QUANTITES VIDE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -17,7 +17,7 @@
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-04-28|2001|2|1058|1|1",
+      "idLigneSource": "2026-05-08|2011|2|1058|1|1",
       "ordreArret": 1,
       "client": {
         "numClient": "1058",
@@ -34,26 +34,7 @@
         "commentaireLivreur": null,
         "heureValidation": "2026-04-28T09:12:00+02:00",
         "estValidee": true,
-        "quantites": [
-          {
-            "codeArticle": "ROLLS",
-            "libelle": "Rolls",
-            "quantiteLivree": 3,
-            "quantiteRecuperee": 2
-          },
-          {
-            "codeArticle": "TAPIS",
-            "libelle": "Tapis",
-            "quantiteLivree": 1,
-            "quantiteRecuperee": 0
-          },
-          {
-            "codeArticle": "SACS",
-            "libelle": "Sacs",
-            "quantiteLivree": 0,
-            "quantiteRecuperee": 0
-          }
-        ]
+        "quantites": []
       }
     }
   ]

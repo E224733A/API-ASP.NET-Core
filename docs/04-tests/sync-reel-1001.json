@@ -1,0 +1,300 @@
+﻿{
+    "schemaVersion":  "1.1",
+    "idSynchronisation":  "49a51928-3389-48e5-9060-8f94f8ca1727",
+    "dateTournee":  "2026-05-04",
+    "codeTournee":  "1001",
+    "libelleTournee":  "CHATAIGNERAIE LES HERBIERS",
+    "livreur":  {
+                    "nomLivreur":  "DAVID VARIN",
+                    "codeLivreur":  "3"
+                },
+    "mobile":  {
+                   "versionApplication":  "1.0.0",
+                   "nomAppareil":  "Test PowerShell",
+                   "dateEnvoiMobile":  "2026-05-04T16:45:00+02:00",
+                   "dateChargementMobile":  "2026-05-04T07:30:00+02:00"
+               },
+    "commentaireGlobal":  "Test réel généré depuis GET /api/tournees/jour",
+    "lignes":  [
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|1108|1664|0",
+                       "client":  {
+                                      "numClient":  "1108",
+                                      "nomAffiche":  "HOTEL LA VERRIAIRE - LA VERRIE",
+                                      "nomClient":  "HOTEL LA VERRIAIRE SAS"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "HOTEL LA VERRIAIRE - LA VERRIE",
+                                              "codePDL":  "1664"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  0
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|3411|2559|1",
+                       "client":  {
+                                      "numClient":  "3411",
+                                      "nomAffiche":  "LP HOPITAL LA CHATAIGNERAIE",
+                                      "nomClient":  "HOPITAL LA CHATAIGNERAIE"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "LP HOPITAL LA CHATAIGNERAIE",
+                                              "codePDL":  "2559"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  1
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|3413|2563|5",
+                       "client":  {
+                                      "numClient":  "3413",
+                                      "nomAffiche":  "LP RES.COMTESSE D ASNIERES",
+                                      "nomClient":  "RES.COMTESSE D ASNIERES"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "LP RES.COMTESSE D ASNIERES",
+                                              "codePDL":  "2563"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  2,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  5
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|1175|1881|10",
+                       "client":  {
+                                      "numClient":  "1175",
+                                      "nomAffiche":  "HOSTEL LES BOIS VERTS",
+                                      "nomClient":  "HOSTEL LES BOIS VERTS"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "HOSTEL LES BOIS VERTS",
+                                              "codePDL":  "1881"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  10
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|979|1378|15",
+                       "client":  {
+                                      "numClient":  "979",
+                                      "nomAffiche":  "MDDA - HOTEL B\u0026B",
+                                      "nomClient":  "MDDA - HOTEL B \u0026 B"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "MDDA - HOTEL B\u0026B",
+                                              "codePDL":  "1378"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  15
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|907|1212|20",
+                       "client":  {
+                                      "numClient":  "907",
+                                      "nomAffiche":  "RESTAURANT CIVILISATION",
+                                      "nomClient":  "RESTAURANT CIVILISATION"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "RESTAURANT CIVILISATION",
+                                              "codePDL":  "1212"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  20
+                   },
+                   {
+                       "idLigneSource":  "2026-05-04|1001|1|1347|2422|25",
+                       "client":  {
+                                      "numClient":  "1347",
+                                      "nomAffiche":  "IBIS LES HERBIERS",
+                                      "nomClient":  "IBIS LES HERBIERS"
+                                  },
+                       "pointLivraison":  {
+                                              "descriptionPDL":  "IBIS LES HERBIERS",
+                                              "codePDL":  "2422"
+                                          },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test avec données réelles",
+                                      "estValidee":  true,
+                                      "heureValidation":  "2026-05-04T09:12:00+02:00",
+                                      "quantites":  [
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Rolls",
+                                                            "codeArticle":  "ROLLS",
+                                                            "quantiteLivree":  1
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Tapis",
+                                                            "codeArticle":  "TAPIS",
+                                                            "quantiteLivree":  0
+                                                        },
+                                                        {
+                                                            "quantiteRecuperee":  0,
+                                                            "libelle":  "Sacs",
+                                                            "codeArticle":  "SACS",
+                                                            "quantiteLivree":  0
+                                                        }
+                                                    ],
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null
+                                  },
+                       "ordreArret":  25
+                   }
+               ]
+}

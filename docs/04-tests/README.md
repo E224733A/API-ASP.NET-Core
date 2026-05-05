@@ -1,20 +1,134 @@
-# Tests API mobile
+# Tests API mobile — contrat JSON v1.1
 
-Date de validation : 2026-04-30  
+Date de mise à jour : 2026-05-05  
 URL locale utilisée : `http://localhost:5120`
+
+Ce dossier contient les tests métier minimaux pour vérifier les routes principales de l’API mobile :
+
+- `GET /api/tournees/jour` : chargement réel d’une tournée depuis les vues ABSSolute ;
+- `POST /api/synchronisations` : envoi final d’une tournée renseignée par le mobile ;
+- `GET /api/synchronisations` : consultation des synchronisations envoyées ;
+- `GET /api/synchronisations/{idTourneeMobile}` : détail d’une synchronisation envoyée.
+
+Le contrat JSON utilisé est uniquement la version `1.1` avec le tableau `saisie.quantites[]`.
 
 ---
 
-# Test GET /api
+## 1. Préconditions
 
-## Objectif
-
-Vérifier que l’API répond correctement avant de tester les routes métier.
-
-## Test de disponibilité de l’API
+Avant de lancer les tests :
 
 ```powershell
-curl.exe -i "http://localhost:5120"
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core"
+dotnet build
+dotnet run
+```
+
+Dans un second terminal PowerShell :
+
+```powershell
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core\docs\04-tests"
+$api = "http://localhost:5120"
+```
+
+Important : les tests `POST` utilisent des `idSynchronisation` fixes. Pour obtenir exactement les résultats attendus `SUCCESS` puis `CONFLICT`, il faut les lancer dans l’ordre indiqué, de préférence sur une base de test réinitialisée.
+
+Si un fichier JSON a déjà été envoyé avec succès, un nouvel envoi du même fichier doit retourner `409 Conflict`. C’est normal : l’API bloque les doubles envois.
+
+---
+
+## 2. Logique métier vérifiée
+
+### Chargement du matin
+
+Le livreur s’identifie par `codeLivreur`. La date est affichée mais non modifiable côté mobile. Le livreur choisit sa tournée. L’API récupère les lignes de la tournée depuis les vues ABSSolute et renvoie une structure exploitable par l’application mobile.
+
+La réponse attendue contient notamment :
+
+```text
+schemaVersion = 1.1
+dateModifiable = false
+livreur.codeLivreur
+livreur.nomLivreur
+articlesSaisissables
+lignes[]
+saisie.quantites[]
+```
+
+### Envoi du soir
+
+Une tournée envoyée est verrouillée côté mobile. Le livreur ne doit plus pouvoir la modifier après synchronisation réussie.
+
+L’API doit refuser :
+
+```text
+- le même idSynchronisation envoyé deux fois ;
+- la même DateTournee + CodeTournee + CodeLivreur envoyée deux fois ;
+- une quantité négative ;
+- un statut NON_FAIT sans commentaire ;
+- un statut ANOMALIE sans commentaire ;
+- une ligne validée sans heureValidation ;
+- une ligne non validée dans l’envoi final ;
+- un statut A_FAIRE dans l’envoi final ;
+- un idLigneSource dupliqué dans la même requête ;
+- un codeArticle dupliqué dans une même ligne ;
+- une version de schéma non supportée ;
+- un tableau quantites vide.
+```
+
+La tournée peut être recommencée la semaine suivante, car l’anti-doublon métier utilise la date :
+
+```text
+DateTournee + CodeTournee + IdLivreur
+```
+
+Donc ceci est interdit :
+
+```text
+2026-04-28 + 2001 + livreur 2
+2026-04-28 + 2001 + livreur 2
+```
+
+Mais ceci est autorisé :
+
+```text
+2026-04-28 + 2001 + livreur 2
+2026-05-05 + 2001 + livreur 2
+```
+
+Une tournée déjà envoyée ne peut pas être modifiée côté mobile.
+Une nouvelle occurrence de la même tournée est possible uniquement avec une nouvelle date de tournée.
+
+---
+
+## 3. Fichiers JSON utilisés
+
+| Fichier | Rôle | Résultat attendu |
+|---|---|---|
+| `sync-valide.json` | Envoi valide minimal | `200 OK / SUCCESS` |
+| `sync-doublon.json` | Même `idSynchronisation` que `sync-valide.json` | `409 Conflict / CONFLICT` |
+| `sync-double-envoi-tournee.json` | Même date + tournée + livreur, mais autre `idSynchronisation` | `409 Conflict / CONFLICT` |
+| `sync-quantite-negative.json` | Quantité livrée négative | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-non-fait-sans-commentaire.json` | `NON_FAIT` sans commentaire | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-anomalie-sans-commentaire.json` | `ANOMALIE` sans commentaire | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-validee-sans-heure.json` | `estValidee = true` sans `heureValidation` | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-est-validee-false.json` | Ligne non validée dans l’envoi final | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-a-faire.json` | Statut `A_FAIRE` dans l’envoi final | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-idligne-duplique.json` | Même `idLigneSource` deux fois dans la requête | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-code-article-duplique.json` | Même `codeArticle` deux fois dans une ligne | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-schema-version-invalide.json` | Version `schemaVersion` non supportée | `400 Bad Request / VALIDATION_ERROR` |
+| `sync-quantites-vide.json` | Tableau `quantites` vide | `400 Bad Request / VALIDATION_ERROR` |
+| `get-tournee-reelle-1001.json` | Réponse réelle sauvegardée du GET | vérification manuelle |
+| `sync-reel-1001.json` | Envoi réel construit à partir du GET | `200 OK / SUCCESS` si pas déjà envoyé, sinon `409 Conflict` |
+
+---
+
+## 4. Tests GET — chargement réel d’une tournée
+
+### 4.1 Charger une tournée réelle depuis ABSSolute
+
+```powershell
+curl.exe -i "$api/api/tournees/jour?dateTournee=2026-04-27&codeTournee=1001&codeLivreur=3"
 ```
 
 Résultat attendu :
@@ -23,274 +137,336 @@ Résultat attendu :
 HTTP/1.1 200 OK
 ```
 
-Si la route racine n’existe pas dans le projet, ce test peut retourner `404 Not Found`. Dans ce cas, ce n’est pas bloquant si les routes métier fonctionnent correctement.
+La réponse doit contenir :
 
----
-
-# Test GET /api/tournees/jour validé
-
-## Objectif
-
-Vérifier que l’API est capable de charger une tournée du jour depuis les données ABSSolute.
-
-## Route testée
-
-```http
-GET /api/tournees/jour?dateTournee=2026-04-28&codeTournee=2001&codeLivreur=2
+```text
+schemaVersion = 1.1
+dateTournee = 2026-04-27
+dateModifiable = false
+jourTournee = 1
+jourLibelle = Lundi
+codeTournee = 1001
+libelleTournee = CHATAIGNERAIE LES HERBIERS
+livreur.codeLivreur = 3
+livreur.nomLivreur = DAVID VARIN
+chargement.nombrePointsEnvoyes = 7
+articlesSaisissables = ROLLS, TAPIS, SACS
+lignes.Count = 7
 ```
 
-## Commande utilisée
+### 4.2 Sauvegarder la réponse réelle
 
 ```powershell
-curl.exe -i "http://localhost:5120/api/tournees/jour?dateTournee=2026-04-28&codeTournee=2001&codeLivreur=2"
+curl.exe "$api/api/tournees/jour?dateTournee=2026-04-27&codeTournee=1001&codeLivreur=3" `
+  -o "get-tournee-reelle-1001.json"
 ```
 
-## Résultat attendu
+### 4.3 Vérifier le nombre de lignes
 
-L’API doit retourner un JSON contenant :
+```powershell
+$json = Get-Content ".\get-tournee-reelle-1001.json" -Raw | ConvertFrom-Json
+$json.lignes.Count
+```
+
+Résultat attendu :
 
 ```text
-schemaVersion
-dateTournee
-jourTournee
-jourLibelle
-codeTournee
-libelleTournee
-statutSynchronisation
-livreur
-chargement
-lignes
+7
 ```
 
-## Exemple de structure attendue
+### 4.4 Vérifier qu’aucun `idLigneSource` n’est dupliqué
 
-```json
-{
-  "schemaVersion": "1.0",
-  "dateTournee": "2026-04-28",
-  "jourTournee": 2,
-  "jourLibelle": "Mardi",
-  "codeTournee": "2001",
-  "libelleTournee": "MDR VENDEE",
-  "statutSynchronisation": "NON_ENVOYEE",
-  "livreur": {
-    "codeLivreur": "2",
-    "nomLivreur": "DAVID LEBAS"
-  },
-  "chargement": {
-    "dateGenerationApi": "2026-04-28T07:30:00+02:00",
-    "nombrePointsEnvoyes": 8
-  },
-  "lignes": [
-    {
-      "idLigneSource": "2026-04-28|2001|2|1058|1|1",
-      "ordreArret": 1,
-      "horaire": 1,
-      "client": {
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
-      },
-      "pointLivraison": {
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE",
-        "adresseLigne1": "7 RUE JAN ET JOEL MARTEL",
-        "adresseLigne2": null,
-        "adresseLigne3": "-",
-        "ville": "LA GARNACHE",
-        "codePostal": "85710"
-      },
-      "tournee": {
-        "codeTournee": "2001",
-        "libelleTournee": "MDR VENDEE",
-        "jourTournee": 2,
-        "schemaLivraison": "1W1"
-      },
-      "retour": {
-        "jourTourneeRetour": 2,
-        "jourRetourLibelle": "Mardi",
-        "codeTourneeRetour": "2001",
-        "libelleTourneeRetour": "MDR VENDEE"
-      },
-      "infosLivreur": {
-        "instructions": null,
-        "commentaireFiche": null,
-        "zoneDechargement": "EHPAD",
-        "zone": "EHPAD",
-        "precision": null,
-        "cle": null,
-        "estFerme": false,
-        "dateFermeture": null,
-        "motifFermeture": null
-      },
-      "saisie": {
-        "nbExpes": 0,
-        "nbRolls": 0,
-        "nbVetements": 0,
-        "nbTapis": 0,
-        "nbSacs": 0,
-        "nbRecuperes": 0,
-        "precisionLivreur": null,
-        "statutPassage": "A_FAIRE",
-        "commentaireLivreur": null,
-        "heureValidation": null,
-        "estValidee": false
-      }
-    }
-  ]
-}
+```powershell
+$json.lignes |
+  Group-Object idLigneSource |
+  Where-Object { $_.Count -gt 1 }
 ```
 
-## Points vérifiés
+Résultat attendu : aucun résultat.
 
-```text
-La route GET retourne bien une tournée.
-La tournée contient les informations générales.
-Le livreur est présent.
-Les lignes de tournée sont présentes.
-Chaque ligne contient un client.
-Chaque ligne contient un point de livraison.
-Chaque ligne contient une structure saisie initialisée.
-Le statut de synchronisation initial est NON_ENVOYEE.
-Le statut de passage initial est A_FAIRE.
-Les quantités initiales sont à 0.
+### 4.5 Date invalide
+
+```powershell
+curl.exe -i "$api/api/tournees/jour?dateTournee=date-invalide&codeTournee=1001&codeLivreur=3"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+### 4.6 Tournée inexistante
+
+```powershell
+curl.exe -i "$api/api/tournees/jour?dateTournee=2026-04-27&codeTournee=9999&codeLivreur=3"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+### 4.7 Livreur inexistant
+
+```powershell
+curl.exe -i "$api/api/tournees/jour?dateTournee=2026-04-27&codeTournee=1001&codeLivreur=999999"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 404 Not Found
 ```
 
 ---
 
-# Test GET avec paramètres manquants ou invalides
+## 5. Tests POST — synchronisation mobile
 
-## Date manquante
-
-```powershell
-curl.exe -i "http://localhost:5120/api/tournees/jour?codeTournee=2001&codeLivreur=2"
-```
-
-Résultat attendu :
-
-```http
-HTTP/1.1 400 Bad Request
-```
-
-## Code tournée manquant
+### 5.1 Envoi valide
 
 ```powershell
-curl.exe -i "http://localhost:5120/api/tournees/jour?dateTournee=2026-04-28&codeLivreur=2"
-```
-
-Résultat attendu :
-
-```http
-HTTP/1.1 400 Bad Request
-```
-
-## Code livreur manquant
-
-```powershell
-curl.exe -i "http://localhost:5120/api/tournees/jour?dateTournee=2026-04-28&codeTournee=2001"
-```
-
-Résultat attendu :
-
-```http
-HTTP/1.1 400 Bad Request
-```
-
-## Date invalide
-
-```powershell
-curl.exe -i "http://localhost:5120/api/tournees/jour?dateTournee=date-invalide&codeTournee=2001&codeLivreur=2"
-```
-
-Résultat attendu :
-
-```http
-HTTP/1.1 400 Bad Request
-```
-
----
-
-# Test POST /api/synchronisations validé
-
-Date du test : 2026-04-30
-
-## Objectif
-
-Vérifier que l’application mobile peut envoyer une tournée renseignée en fin de journée.
-
-La route doit :
-
-```text
-insérer ou mettre à jour le livreur dans Mobile_Livreur ;
-insérer la tournée dans Mobile_Tournee ;
-insérer les lignes dans Mobile_TourneeLigne ;
-calculer QuantiteLivree ;
-calculer QuantiteReprise ;
-insérer un log dans Mobile_LogSynchronisation ;
-bloquer les erreurs métier ;
-bloquer le double envoi.
-```
-
-## Route testée
-
-```http
-POST /api/synchronisations
-```
-
-## Exemple de commande utilisée
-
-```powershell
-curl.exe -X POST "http://localhost:5120/api/synchronisations" `
+curl.exe -i -X POST "$api/api/synchronisations" `
   -H "Content-Type: application/json" `
-  --data-binary "@sync.json"
+  --data-binary "@sync-valide.json"
 ```
 
-## Réponse obtenue
+Résultat attendu :
+
+```http
+HTTP/1.1 200 OK
+```
 
 ```json
-{
-  "statut": "SUCCESS",
-  "message": "Synchronisation enregistrée avec succès."
-}
+{"statut":"SUCCESS","message":"Synchronisation enregistrée avec succès."}
 ```
 
----
+### 5.2 Doublon technique avec le même `idSynchronisation`
 
-# Test du double envoi
-
-Si on essaye d’envoyer deux fois le même fichier avec le même `idSynchronisation`, l’API refuse le deuxième envoi.
-
-## Commande utilisée
 
 ```powershell
-curl.exe -X POST "http://localhost:5120/api/synchronisations" `
+curl.exe -i -X POST "$api/api/synchronisations" `
   -H "Content-Type: application/json" `
-  --data-binary "@sync.json"
+  --data-binary "@sync-doublon.json"
 ```
 
-## Réponse obtenue
-
-```json
-{
-  "statut": "CONFLICT",
-  "message": "Une synchronisation avec l'ID 4e17a871-5fc5-4f49-8d01-4d791a6d9941 existe déjà."
-}
-```
-
-## Code HTTP obtenu
+Résultat attendu :
 
 ```http
 HTTP/1.1 409 Conflict
 ```
 
----
+```json
+{"statut":"CONFLICT"}
+```
 
-# Bloc PowerShell pour effectuer les tests POST
-
-Copier-coller ce bloc pour effectuer les tests :
+### 5.3 Double envoi métier de la même tournée
 
 ```powershell
-$ApiUrl = "http://localhost:5120/api/synchronisations"
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-double-envoi-tournee.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 409 Conflict
+```
+
+```json
+{"statut":"CONFLICT"}
+```
+
+### 5.4 Quantité négative
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-quantite-negative.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.5 `NON_FAIT` sans commentaire
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-non-fait-sans-commentaire.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.6 `ANOMALIE` sans commentaire
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-anomalie-sans-commentaire.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.7 Ligne validée sans `heureValidation`
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-validee-sans-heure.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.8 `estValidee = false` dans l’envoi final
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-est-validee-false.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.9 `A_FAIRE` dans l’envoi final
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-a-faire.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.10 `idLigneSource` dupliqué dans la même requête
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-idligne-duplique.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.11 `codeArticle` dupliqué dans une ligne
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-code-article-duplique.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.12 Version de schéma non supportée
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-schema-version-invalide.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+### 5.13 Tableau `quantites` vide
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-quantites-vide.json"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 400 Bad Request
+```
+
+```json
+{"statut":"VALIDATION_ERROR"}
+```
+
+---
+
+## 6. Bloc PowerShell complet pour les tests POST
+
+Ce bloc permet d’enchaîner les tests `POST`. À lancer depuis `docs\04-tests`, après avoir défini `$api`.
+
+```powershell
+$ApiUrl = "$api/api/synchronisations"
 
 function Test-Synchronisation {
     param(
@@ -312,68 +488,227 @@ function Test-Synchronisation {
 }
 
 Test-Synchronisation `
-    -NomTest "1 - Synchronisation valide" `
-    -Fichier "sync-valide.json" `
-    -ResultatAttendu "SUCCESS"
+  -NomTest "01 - Synchronisation valide" `
+  -Fichier "sync-valide.json" `
+  -ResultatAttendu "200 OK / SUCCESS"
 
 Test-Synchronisation `
-    -NomTest "2 - Doublon avec le même idSynchronisation" `
-    -Fichier "sync-doublon.json" `
-    -ResultatAttendu "CONFLICT"
+  -NomTest "02 - Doublon technique idSynchronisation" `
+  -Fichier "sync-doublon.json" `
+  -ResultatAttendu "409 Conflict / CONFLICT"
 
 Test-Synchronisation `
-    -NomTest "3 - Quantité négative" `
-    -Fichier "sync-quantite-negative.json" `
-    -ResultatAttendu "VALIDATION_ERROR"
+  -NomTest "03 - Double envoi métier même date + tournée + livreur" `
+  -Fichier "sync-double-envoi-tournee.json" `
+  -ResultatAttendu "409 Conflict / CONFLICT"
 
 Test-Synchronisation `
-    -NomTest "4 - NON_FAIT sans commentaire" `
-    -Fichier "sync-non-fait-sans-commentaire.json" `
-    -ResultatAttendu "VALIDATION_ERROR"
+  -NomTest "04 - Quantité négative" `
+  -Fichier "sync-quantite-negative.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
 
 Test-Synchronisation `
-    -NomTest "5 - ANOMALIE sans commentaire" `
-    -Fichier "sync-anomalie-sans-commentaire.json" `
-    -ResultatAttendu "VALIDATION_ERROR"
+  -NomTest "05 - NON_FAIT sans commentaire" `
+  -Fichier "sync-non-fait-sans-commentaire.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
 
 Test-Synchronisation `
-    -NomTest "6 - Ligne validée sans heureValidation" `
-    -Fichier "sync-validee-sans-heure.json" `
-    -ResultatAttendu "VALIDATION_ERROR"
+  -NomTest "06 - ANOMALIE sans commentaire" `
+  -Fichier "sync-anomalie-sans-commentaire.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
 
 Test-Synchronisation `
-    -NomTest "7 - estValidee false dans l’envoi final" `
-    -Fichier "sync-est-validee-false.json" `
-    -ResultatAttendu "VALIDATION_ERROR"
+  -NomTest "07 - Ligne validée sans heureValidation" `
+  -Fichier "sync-validee-sans-heure.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "08 - estValidee false dans envoi final" `
+  -Fichier "sync-est-validee-false.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "09 - A_FAIRE dans envoi final" `
+  -Fichier "sync-a-faire.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "10 - idLigneSource dupliqué" `
+  -Fichier "sync-idligne-duplique.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "11 - codeArticle dupliqué" `
+  -Fichier "sync-code-article-duplique.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "12 - schemaVersion non supportée" `
+  -Fichier "sync-schema-version-invalide.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
+
+Test-Synchronisation `
+  -NomTest "13 - quantites vide" `
+  -Fichier "sync-quantites-vide.json" `
+  -ResultatAttendu "400 Bad Request / VALIDATION_ERROR"
 ```
 
 ---
 
-# Résultats POST validés
+## 7. Test réel avec les données ABSSolute
 
-| Test | Fichier JSON | Résultat attendu | Résultat obtenu |
-|---|---|---|---|
-| Synchronisation valide | `sync-valide.json` | `SUCCESS` | `200 OK / SUCCESS` |
-| Doublon `idSynchronisation` | `sync-doublon.json` | `CONFLICT` | `409 Conflict / CONFLICT` |
-| Quantité négative | `sync-quantite-negative.json` | `VALIDATION_ERROR` | `400 Bad Request / VALIDATION_ERROR` |
-| `NON_FAIT` sans commentaire | `sync-non-fait-sans-commentaire.json` | `VALIDATION_ERROR` | `400 Bad Request / VALIDATION_ERROR` |
-| `ANOMALIE` sans commentaire | `sync-anomalie-sans-commentaire.json` | `VALIDATION_ERROR` | `400 Bad Request / VALIDATION_ERROR` |
-| Ligne validée sans `heureValidation` | `sync-validee-sans-heure.json` | `VALIDATION_ERROR` | `400 Bad Request / VALIDATION_ERROR` |
-| `estValidee = false` | `sync-est-validee-false.json` | `VALIDATION_ERROR` | `400 Bad Request` |
+Ce test valide le flux complet avec une vraie tournée récupérée depuis les vues ABSSolute.
 
----
+### 7.1 Charger la tournée réelle
 
-# Vérifications SQL réalisées après le POST
+```powershell
+curl.exe "$api/api/tournees/jour?dateTournee=2026-04-27&codeTournee=1001&codeLivreur=3" `
+  -o "get-tournee-reelle-1001.json"
+```
 
-Après le test valide, les données ont été vérifiées dans :
+### 7.2 Vérifier le fichier obtenu
+
+```powershell
+$json = Get-Content ".\get-tournee-reelle-1001.json" -Raw | ConvertFrom-Json
+$json.schemaVersion
+$json.dateModifiable
+$json.chargement.nombrePointsEnvoyes
+$json.lignes.Count
+$json.articlesSaisissables
+$json.lignes | Group-Object idLigneSource | Where-Object { $_.Count -gt 1 }
+```
+
+Résultat attendu :
 
 ```text
-Mobile_Tournee
-Mobile_TourneeLigne
-Mobile_LogSynchronisation
+schemaVersion = 1.1
+dateModifiable = false
+nombrePointsEnvoyes = 7
+lignes.Count = 7
+aucun idLigneSource dupliqué
 ```
 
-## Requêtes SQL utilisées
+### 7.3 Envoyer le fichier réel
+
+```powershell
+curl.exe -i -X POST "$api/api/synchronisations" `
+  -H "Content-Type: application/json" `
+  --data-binary "@sync-reel-1001.json"
+```
+
+Résultat attendu si le fichier n’a jamais été envoyé :
+
+```http
+HTTP/1.1 200 OK
+```
+
+Résultat attendu si le fichier a déjà été envoyé :
+
+```http
+HTTP/1.1 409 Conflict
+```
+
+Le conflit est normal dans ce cas, car `sync-reel-1001.json` contient un `idSynchronisation` fixe.
+
+---
+
+## 8. Tests GET — consultation admin
+
+### 8.1 Liste des synchronisations
+
+```powershell
+curl.exe -i "$api/api/synchronisations"
+```
+
+Résultat attendu :
+
+```json
+{"statut":"SUCCESS","count":0,"synchronisations":[]}
+```
+
+Le `count` dépend des données déjà présentes en base.
+
+### 8.2 Filtre par date
+
+```powershell
+curl.exe -i "$api/api/synchronisations?dateTournee=2026-04-28"
+```
+
+Résultat attendu :
+
+```json
+{"statut":"SUCCESS"}
+```
+
+### 8.3 Filtre par date + tournée
+
+```powershell
+curl.exe -i "$api/api/synchronisations?dateTournee=2026-04-28&codeTournee=2001"
+```
+
+Résultat attendu :
+
+```json
+{"statut":"SUCCESS"}
+```
+
+### 8.4 Filtre par date + tournée + livreur
+
+```powershell
+curl.exe -i "$api/api/synchronisations?dateTournee=2026-04-28&codeTournee=2001&codeLivreur=2"
+```
+
+Résultat attendu :
+
+```json
+{"statut":"SUCCESS"}
+```
+
+### 8.5 Détail d’une synchronisation
+
+Récupérer d’abord un ID :
+
+```sql
+SELECT TOP 1 IdTourneeMobile
+FROM Mobile_Tournee
+ORDER BY IdTourneeMobile DESC;
+```
+
+Puis remplacer `1` par le vrai `IdTourneeMobile` :
+
+```powershell
+curl.exe -i "$api/api/synchronisations/1"
+```
+
+Résultat attendu :
+
+```json
+{"statut":"SUCCESS","synchronisation":{}}
+```
+
+### 8.6 Détail inexistant
+
+```powershell
+curl.exe -i "$api/api/synchronisations/999999999"
+```
+
+Résultat attendu :
+
+```http
+HTTP/1.1 404 Not Found
+```
+
+---
+
+## 9. Vérifications SQL après un POST valide
+
+À exécuter dans `bd_eric`.
+
+```sql
+SELECT TOP 10 *
+FROM Mobile_Livreur
+ORDER BY IdLivreur DESC;
+```
 
 ```sql
 SELECT TOP 10 *
@@ -388,186 +723,99 @@ ORDER BY IdTourneeMobile DESC, OrdreArret;
 ```
 
 ```sql
-SELECT TOP 10 *
+SELECT TOP 100 *
+FROM Mobile_TourneeLigneQuantite
+ORDER BY IdQuantite DESC;
+```
+
+```sql
+SELECT TOP 20 *
 FROM Mobile_LogSynchronisation
 ORDER BY IdLog DESC;
 ```
 
-## Résultat confirmé
+### Requête complète de contrôle
+
+```sql
+SELECT TOP 100
+    t.IdTourneeMobile,
+    t.IdSynchronisation,
+    t.DateTournee,
+    t.CodeTournee,
+    t.LibelleTournee,
+    liv.CodeLivreur,
+    liv.NomLivreur,
+    t.StatutSynchronisation,
+    t.EstVerrouillee,
+    l.IdTourneeLigne,
+    l.IdLigneSource,
+    l.OrdreArret,
+    l.NumClient,
+    l.NomClient,
+    l.CodePDL,
+    l.DescriptionPDL,
+    l.QuantiteLivree AS TotalLivre,
+    l.QuantiteReprise AS TotalRecupere,
+    q.CodeArticle,
+    q.LibelleArticle,
+    q.QuantiteLivree,
+    q.QuantiteRecuperee
+FROM Mobile_Tournee t
+INNER JOIN Mobile_Livreur liv
+    ON liv.IdLivreur = t.IdLivreur
+INNER JOIN Mobile_TourneeLigne l
+    ON l.IdTourneeMobile = t.IdTourneeMobile
+INNER JOIN Mobile_TourneeLigneQuantite q
+    ON q.IdTourneeLigne = l.IdTourneeLigne
+ORDER BY
+    t.IdTourneeMobile DESC,
+    l.OrdreArret,
+    q.CodeArticle;
+```
+
+Pour `sync-valide.json`, on attend :
 
 ```text
-Mobile_Tournee :
-- tournée insérée ;
-- statut ENVOYEE ;
-- verrouillage actif ;
-- DateEnvoi renseignée ;
-- NombrePointsPrevus renseigné ;
-- NombrePointsSaisis renseigné.
+1 ligne dans Mobile_Tournee
+1 ligne dans Mobile_TourneeLigne
+3 lignes dans Mobile_TourneeLigneQuantite
+1 log ENVOI_REUSSI dans Mobile_LogSynchronisation
+```
 
-Mobile_TourneeLigne :
-- ligne insérée ;
-- client inséré ;
-- point de livraison inséré ;
-- quantités détaillées insérées ;
-- QuantiteLivree calculée ;
-- QuantiteReprise calculée ;
-- statut FAIT enregistré ;
-- heureValidation enregistrée ;
-- précision livreur enregistrée.
+Pour `sync-reel-1001.json`, on attend si le fichier est envoyé sur une base vide :
 
-Mobile_LogSynchronisation :
-- log ENVOI_REUSSI créé ;
-- niveau INFO ;
-- message de succès enregistré ;
-- détail technique enregistré ;
-- appareil mobile enregistré ;
-- version application enregistrée.
+```text
+1 ligne dans Mobile_Tournee
+7 lignes dans Mobile_TourneeLigne
+21 lignes dans Mobile_TourneeLigneQuantite
+1 log ENVOI_REUSSI dans Mobile_LogSynchronisation
 ```
 
 ---
 
-# Test consultation admin des synchronisations envoyées
+## 10. Conclusion attendue
 
-## Objectif
-
-Vérifier que l’API permet de consulter les synchronisations déjà envoyées.
-
-Ces routes serviront plus tard à l’interface admin Windows.
-
-## Routes testées
-
-```http
-GET /api/synchronisations
-GET /api/synchronisations/{idTourneeMobile}
-GET /api/synchronisations?dateTournee=2026-04-28
-GET /api/synchronisations?dateTournee=2026-04-28&codeTournee=2001&codeLivreur=2
-```
-
-## Liste complète
-
-```powershell
-curl.exe -i "http://localhost:5120/api/synchronisations"
-```
-
-## Filtre par date
-
-```powershell
-curl.exe -i "http://localhost:5120/api/synchronisations?dateTournee=2026-04-28"
-```
-
-## Filtre par date + tournée
-
-```powershell
-curl.exe -i "http://localhost:5120/api/synchronisations?dateTournee=2026-04-28&codeTournee=2001"
-```
-
-## Filtre par date + tournée + livreur
-
-```powershell
-curl.exe -i "http://localhost:5120/api/synchronisations?dateTournee=2026-04-28&codeTournee=2001&codeLivreur=2"
-```
-
-## Détail d’une synchronisation
-
-Remplacer `9` par l’`IdTourneeMobile` vu en SQL.
-
-```powershell
-curl.exe -i "http://localhost:5120/api/synchronisations/9"
-```
-
-## Résultat attendu pour la liste
-
-```json
-{
-  "statut": "SUCCESS",
-  "count": 1,
-  "synchronisations": [
-    {
-      "idTourneeMobile": 9,
-      "idSynchronisation": "4e17a871-5fc5-4f49-8d01-4d791a6d9941",
-      "dateTournee": "2026-04-28T00:00:00",
-      "codeTournee": "2001",
-      "libelleTournee": "MDR VENDEE",
-      "idLivreur": 9,
-      "codeLivreur": "2",
-      "nomLivreur": "DAVID LEBAS",
-      "statutSynchronisation": "ENVOYEE",
-      "estVerrouillee": true,
-      "nombrePointsPrevus": 1,
-      "nombrePointsSaisis": 1,
-      "nomAppareil": "Samsung A15",
-      "versionApplication": "1.0.0",
-      "nombreFaits": 1,
-      "nombreNonFaits": 0,
-      "nombreAnomalies": 0
-    }
-  ]
-}
-```
-
-## Résultat attendu pour le détail
-
-```json
-{
-  "statut": "SUCCESS",
-  "synchronisation": {
-    "idTourneeMobile": 9,
-    "idSynchronisation": "4e17a871-5fc5-4f49-8d01-4d791a6d9941",
-    "dateTournee": "2026-04-28T00:00:00",
-    "codeTournee": "2001",
-    "libelleTournee": "MDR VENDEE",
-    "codeLivreur": "2",
-    "nomLivreur": "DAVID LEBAS",
-    "statutSynchronisation": "ENVOYEE",
-    "lignes": [
-      {
-        "idTourneeLigne": 6,
-        "idTourneeMobile": 9,
-        "ordreArret": 1,
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE",
-        "quantiteLivree": 4,
-        "quantiteReprise": 2,
-        "nbExpes": 0,
-        "nbRolls": 3,
-        "nbVetements": 0,
-        "nbTapis": 1,
-        "nbSacs": 0,
-        "nbRecuperes": 2,
-        "precisionLivreur": "2 rolls repris au local arrière",
-        "statutPassage": "FAIT",
-        "commentaireLivreur": null,
-        "heureValidation": "2026-04-28T09:12:00",
-        "estValidee": true
-      }
-    ],
-    "logs": [
-      {
-        "typeEvenement": "ENVOI_REUSSI",
-        "niveau": "INFO",
-        "message": "Synchronisation enregistrée avec succès.",
-        "detailTechnique": "Tournée 2001 du 2026-04-28 synchronisée avec 1 ligne(s).",
-        "nomAppareil": "Samsung A15",
-        "versionApplication": "1.0.0"
-      }
-    ]
-  }
-}
-```
-
----
-
-# Conclusion des tests
-
-Les tests confirment que :
+Les tests couvrent les réponses principales de l’API :
 
 ```text
-Le GET de chargement permet de récupérer une tournée exploitable par le mobile.
-Le POST de synchronisation enregistre correctement les données du soir.
-Les règles métier principales sont bien appliquées.
-Le double envoi avec le même idSynchronisation est bloqué.
-Les données sont bien présentes dans SQL Server.
-La consultation admin permet de relire les synchronisations envoyées.
+200 OK / SUCCESS
+400 Bad Request / VALIDATION_ERROR
+404 Not Found
+409 Conflict / CONFLICT
+```
+
+Les règles métier importantes sont couvertes :
+
+```text
+- chargement réel d’une tournée ;
+- date non modifiable ;
+- identification par code livreur ;
+- quantités en format quantites[] ;
+- blocage des quantités négatives ;
+- blocage des statuts incomplets ;
+- blocage d’une ligne non validée ;
+- blocage de A_FAIRE dans l’envoi final ;
+- blocage des doublons techniques ;
+- blocage des doublons métier ;
+- consultation admin des synchronisations envoyées.
 ```

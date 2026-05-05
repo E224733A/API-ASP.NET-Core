@@ -1,0 +1,76 @@
+﻿{
+  "schemaVersion": "1.1",
+  "idSynchronisation": "99999999-9999-9999-9999-999999999999",
+  "dateTournee": "2026-05-05",
+  "codeTournee": "2008",
+  "libelleTournee": "TEST ID LIGNE DUPLIQUE",
+  "livreur": {
+    "codeLivreur": "2",
+    "nomLivreur": "DAVID LEBAS"
+  },
+  "mobile": {
+    "nomAppareil": "Samsung A15",
+    "versionApplication": "1.0.0",
+    "dateChargementMobile": "2026-05-05T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-05-05T16:45:00+02:00"
+  },
+  "commentaireGlobal": null,
+  "lignes": [
+    {
+      "idLigneSource": "2026-05-05|2008|2|1058|1|1",
+      "ordreArret": 1,
+      "client": {
+        "numClient": "1058",
+        "nomClient": "CLIENT TEST 1",
+        "nomAffiche": "CLIENT TEST 1"
+      },
+      "pointLivraison": {
+        "codePDL": "1",
+        "descriptionPDL": "PDL TEST 1"
+      },
+      "saisie": {
+        "precisionLivreur": null,
+        "statutPassage": "FAIT",
+        "commentaireLivreur": null,
+        "heureValidation": "2026-05-05T09:12:00+02:00",
+        "estValidee": true,
+        "quantites": [
+          {
+            "codeArticle": "ROLLS",
+            "libelle": "Rolls",
+            "quantiteLivree": 1,
+            "quantiteRecuperee": 0
+          }
+        ]
+      }
+    },
+    {
+      "idLigneSource": "2026-05-05|2008|2|1058|1|1",
+      "ordreArret": 2,
+      "client": {
+        "numClient": "1059",
+        "nomClient": "CLIENT TEST 2",
+        "nomAffiche": "CLIENT TEST 2"
+      },
+      "pointLivraison": {
+        "codePDL": "2",
+        "descriptionPDL": "PDL TEST 2"
+      },
+      "saisie": {
+        "precisionLivreur": null,
+        "statutPassage": "FAIT",
+        "commentaireLivreur": null,
+        "heureValidation": "2026-05-05T10:12:00+02:00",
+        "estValidee": true,
+        "quantites": [
+          {
+            "codeArticle": "ROLLS",
+            "libelle": "Rolls",
+            "quantiteLivree": 1,
+            "quantiteRecuperee": 0
+          }
+        ]
+      }
+    }
+  ]
+}
