@@ -1,4 +1,5 @@
 using Dapper;
+using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Models;
 
@@ -6,21 +7,21 @@ namespace API_ASP.NET_Core.Repositories;
 
 /// <summary>
 /// Repository pour l'enregistrement, la vérification et la consultation des synchronisations.
-/// 
-/// Utilise les tables mobiles :
+///
+/// Tables utilisées :
 /// - Mobile_Livreur
 /// - Mobile_Tournee
 /// - Mobile_TourneeLigne
 /// - Mobile_TourneeLigneQuantite
 /// - Mobile_LogSynchronisation
-/// 
-/// Ce repository utilise uniquement le nouveau contrat JSON :
+///
+/// Contrat JSON officiel :
 /// - schemaVersion = 1.1
 /// - saisie.quantites[]
 /// - quantiteLivree
 /// - quantiteRecuperee
 /// </summary>
-public class SynchronisationsRepository
+public sealed class SynchronisationsRepository
 {
     private readonly SqlConnectionFactory _connectionFactory;
 
@@ -31,6 +32,7 @@ public class SynchronisationsRepository
 
     /// <summary>
     /// Vérifie si une synchronisation existe déjà dans Mobile_Tournee.
+    /// Anti-doublon technique : un même paquet mobile ne doit pas être enregistré deux fois.
     /// </summary>
     public async Task<bool> SynchronisationExistsAsync(string idSynchronisation)
     {
@@ -57,20 +59,20 @@ public class SynchronisationsRepository
 
     /// <summary>
     /// Consulte les synchronisations envoyées.
-    /// 
+    ///
     /// Filtres possibles :
     /// - dateTournee
     /// - codeTournee
     /// - codeLivreur
     /// </summary>
-    public async Task<List<dynamic>> GetSynchronisationsAsync(
+    public async Task<List<SynchronisationResumeDto>> GetSynchronisationsAsync(
         DateTime? dateTournee,
         string? codeTournee,
         string? codeLivreur)
     {
         using var connection = _connectionFactory.CreateMobileConnection();
 
-        var result = await connection.QueryAsync<dynamic>(
+        var result = await connection.QueryAsync<SynchronisationResumeDto>(
             """
             SELECT
                 t.IdTourneeMobile,
@@ -91,9 +93,9 @@ public class SynchronisationsRepository
                 t.CommentaireGlobal,
                 t.NomAppareil,
                 t.VersionApplication,
-                SUM(CASE WHEN tl.StatutPassage = 'FAIT' THEN 1 ELSE 0 END) AS NombreFaits,
-                SUM(CASE WHEN tl.StatutPassage = 'NON_FAIT' THEN 1 ELSE 0 END) AS NombreNonFaits,
-                SUM(CASE WHEN tl.StatutPassage = 'ANOMALIE' THEN 1 ELSE 0 END) AS NombreAnomalies
+                SUM(CASE WHEN tl.StatutPassage = @StatutFait THEN 1 ELSE 0 END) AS NombreFaits,
+                SUM(CASE WHEN tl.StatutPassage = @StatutNonFait THEN 1 ELSE 0 END) AS NombreNonFaits,
+                SUM(CASE WHEN tl.StatutPassage = @StatutAnomalie THEN 1 ELSE 0 END) AS NombreAnomalies
             FROM Mobile_Tournee t
             LEFT JOIN Mobile_Livreur l
                 ON l.IdLivreur = t.IdLivreur
@@ -128,8 +130,11 @@ public class SynchronisationsRepository
             new
             {
                 DateTournee = dateTournee?.Date,
-                CodeTournee = string.IsNullOrWhiteSpace(codeTournee) ? null : codeTournee.Trim(),
-                CodeLivreur = string.IsNullOrWhiteSpace(codeLivreur) ? null : codeLivreur.Trim()
+                CodeTournee = EmptyToNull(codeTournee),
+                CodeLivreur = EmptyToNull(codeLivreur),
+                StatutFait = StatutsPassage.Fait,
+                StatutNonFait = StatutsPassage.NonFait,
+                StatutAnomalie = StatutsPassage.Anomalie
             });
 
         return result.ToList();
@@ -137,18 +142,18 @@ public class SynchronisationsRepository
 
     /// <summary>
     /// Consulte le détail complet d'une synchronisation envoyée.
-    /// 
+    ///
     /// Inclut :
-    /// - l'en-tête de tournée
-    /// - les lignes saisies
-    /// - les quantités par article
-    /// - les logs associés
+    /// - l'en-tête de tournée ;
+    /// - les lignes saisies ;
+    /// - les quantités détaillées ;
+    /// - les logs associés.
     /// </summary>
-    public async Task<object?> GetSynchronisationByIdAsync(long idTourneeMobile)
+    public async Task<SynchronisationDetailDto?> GetSynchronisationByIdAsync(long idTourneeMobile)
     {
         using var connection = _connectionFactory.CreateMobileConnection();
 
-        var entete = await connection.QuerySingleOrDefaultAsync<dynamic>(
+        var entete = await connection.QuerySingleOrDefaultAsync<SynchronisationResumeDto>(
             """
             SELECT
                 t.IdTourneeMobile,
@@ -173,19 +178,19 @@ public class SynchronisationsRepository
                     SELECT COUNT(1)
                     FROM Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = 'FAIT'
+                      AND x.StatutPassage = @StatutFait
                 ) AS NombreFaits,
                 (
                     SELECT COUNT(1)
                     FROM Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = 'NON_FAIT'
+                      AND x.StatutPassage = @StatutNonFait
                 ) AS NombreNonFaits,
                 (
                     SELECT COUNT(1)
                     FROM Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = 'ANOMALIE'
+                      AND x.StatutPassage = @StatutAnomalie
                 ) AS NombreAnomalies
             FROM Mobile_Tournee t
             LEFT JOIN Mobile_Livreur l
@@ -194,7 +199,10 @@ public class SynchronisationsRepository
             """,
             new
             {
-                IdTourneeMobile = idTourneeMobile
+                IdTourneeMobile = idTourneeMobile,
+                StatutFait = StatutsPassage.Fait,
+                StatutNonFait = StatutsPassage.NonFait,
+                StatutAnomalie = StatutsPassage.Anomalie
             });
 
         if (entete is null)
@@ -202,7 +210,7 @@ public class SynchronisationsRepository
             return null;
         }
 
-        var lignes = await connection.QueryAsync<dynamic>(
+        var lignes = await connection.QueryAsync<SynchronisationLigneDetailDto>(
             """
             SELECT
                 IdTourneeLigne,
@@ -253,7 +261,7 @@ public class SynchronisationsRepository
                 IdTourneeMobile = idTourneeMobile
             });
 
-        var quantites = await connection.QueryAsync<dynamic>(
+        var quantites = await connection.QueryAsync<SynchronisationQuantiteDetailDto>(
             """
             SELECT
                 q.IdQuantite,
@@ -277,7 +285,7 @@ public class SynchronisationsRepository
                 IdTourneeMobile = idTourneeMobile
             });
 
-        var logs = await connection.QueryAsync<dynamic>(
+        var logs = await connection.QueryAsync<SynchronisationLogDto>(
             """
             SELECT
                 IdLog,
@@ -303,7 +311,7 @@ public class SynchronisationsRepository
                 IdTourneeMobile = idTourneeMobile
             });
 
-        return new
+        return new SynchronisationDetailDto
         {
             Entete = entete,
             Lignes = lignes.ToList(),
@@ -314,12 +322,14 @@ public class SynchronisationsRepository
 
     /// <summary>
     /// Enregistre une synchronisation de tournée complète.
-    /// 
-    /// Nouveau comportement :
-    /// - lit uniquement saisie.quantites[]
-    /// - calcule les totaux QuantiteLivree et QuantiteReprise
-    /// - insère les lignes dans Mobile_TourneeLigne
-    /// - insère les quantités détaillées dans Mobile_TourneeLigneQuantite
+    ///
+    /// Le repository lit uniquement :
+    /// - saisie.quantites[]
+    /// - quantiteLivree
+    /// - quantiteRecuperee
+    ///
+    /// Les totaux de compatibilité QuantiteLivree et QuantiteReprise
+    /// sont recalculés depuis le tableau des quantités.
     /// </summary>
     public async Task SaveSynchronisationAsync(SynchronisationTourneeRequest request)
     {
@@ -435,7 +445,7 @@ public class SynchronisationsRepository
                     @CodeTournee,
                     @LibelleTournee,
                     @IdLivreur,
-                    'ENVOYEE',
+                    @StatutSynchronisation,
                     @DateChargementMobile,
                     @DateReceptionApi,
                     @DateEnvoi,
@@ -457,6 +467,7 @@ public class SynchronisationsRepository
                     CodeTournee = codeTournee,
                     LibelleTournee = request.LibelleTournee,
                     IdLivreur = idLivreur,
+                    StatutSynchronisation = StatutsSynchronisation.Envoyee,
                     DateChargementMobile = dateChargementMobile,
                     DateReceptionApi = now,
                     DateEnvoi = dateEnvoiMobile ?? now,
@@ -486,15 +497,15 @@ public class SynchronisationsRepository
                 var quantiteLivree = quantites.Sum(q => q.QuantiteLivree);
                 var quantiteReprise = quantites.Sum(q => q.QuantiteRecuperee);
 
-                var nbExpes = GetQuantiteLivreePourArticle(quantites, "EXPES");
-                var nbRolls = GetQuantiteLivreePourArticle(quantites, "ROLLS");
-                var nbVetements = GetQuantiteLivreePourArticle(quantites, "VETEMENTS");
-                var nbTapis = GetQuantiteLivreePourArticle(quantites, "TAPIS");
-                var nbSacs = GetQuantiteLivreePourArticle(quantites, "SACS");
+                var nbExpes = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Expes);
+                var nbRolls = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Rolls);
+                var nbVetements = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Vetements);
+                var nbTapis = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Tapis);
+                var nbSacs = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Sacs);
 
                 /*
-                 * NbRecuperes reste une colonne de compatibilité dans Mobile_TourneeLigne.
-                 * Le nouveau détail officiel est stocké dans Mobile_TourneeLigneQuantite.
+                 * NbRecuperes reste une colonne de compatibilité.
+                 * Le détail officiel est stocké dans Mobile_TourneeLigneQuantite.
                  */
                 var nbRecuperes = quantiteReprise;
 
