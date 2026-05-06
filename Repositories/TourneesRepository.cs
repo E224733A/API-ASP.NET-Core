@@ -10,6 +10,12 @@ public record LivreurRecord
     public string NomLivreur { get; init; } = string.Empty;
 }
 
+public record TourneeDisponibleRecord
+{
+    public string CodeTournee { get; init; } = string.Empty;
+    public string? LibelleTournee { get; init; }
+}
+
 public record TourneeLigneRecord
 {
     public string NumClient { get; init; } = string.Empty;
@@ -60,12 +66,6 @@ public class TourneesRepository
         _connectionFactory = connectionFactory;
     }
 
-    /// <summary>
-    /// Vérifie l'existence du livreur dans les données chauffeurs ABSSolute.
-    ///
-    /// Le code livreur utilisé par l'application correspond à :
-    /// v_chauffeurs.DRIVERNUMERO.
-    /// </summary>
     public async Task<LivreurRecord?> GetLivreurAsync(string codeLivreur)
     {
         using var connection = _connectionFactory.CreateAbssoluteConnection();
@@ -86,6 +86,40 @@ public class TourneesRepository
             });
     }
 
+    /// <summary>
+    /// Renvoie uniquement les tournées disponibles pour un jour.
+    /// Cette méthode est volontairement légère : elle ne renvoie pas les clients.
+    /// </summary>
+    public async Task<IEnumerable<TourneeDisponibleRecord>> GetTourneesDisponiblesAsync(
+        DateOnly dateTournee)
+    {
+        using var connection = _connectionFactory.CreateAbssoluteConnection();
+
+        var jourTournee = GetJourTournee(dateTournee);
+
+        const string sql = """
+            SELECT
+                LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) AS CodeTournee,
+                MAX(t.TOURNEE_DESC) AS LibelleTournee
+            FROM v_tournee AS t
+            WHERE TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50))))) = @JourTournee
+              AND t.TOURNEE IS NOT NULL
+              AND LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) <> ''
+            GROUP BY
+                LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50))))
+            ORDER BY
+                TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50))))),
+                LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50))));
+            """;
+
+        return await connection.QueryAsync<TourneeDisponibleRecord>(
+            sql,
+            new
+            {
+                JourTournee = jourTournee
+            });
+    }
+
     private async Task<string> GetFermetureCustomerColumnAsync(IDbConnection connection)
     {
         const string sql = """
@@ -102,15 +136,6 @@ public class TourneesRepository
             : "CUSTOMERNUBLER";
     }
 
-    /// <summary>
-    /// Récupère les lignes réelles d'une tournée.
-    ///
-    /// Nouvelle règle :
-    /// - codeLivreur sert à identifier le livreur dans v_chauffeurs ;
-    /// - les lignes sont récupérées avec codeTournee + jourTournee ;
-    /// - v_route_number n'est plus utilisé comme filtre livreur, car id_liv
-    ///   ne correspond pas de manière fiable au code chauffeur.
-    /// </summary>
     public async Task<IEnumerable<TourneeLigneRecord>> GetTourneeLinesAsync(
         DateOnly dateTournee,
         string codeLivreur,
@@ -128,17 +153,18 @@ public class TourneesRepository
                         ROW_NUMBER() OVER (
                             PARTITION BY
                                 LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))),
-                                t.JOUR_TOURNEE,
+                                LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50)))),
                                 LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))),
                                 LTRIM(RTRIM(CAST(t.PDL AS NVARCHAR(50)))),
-                                t.ARRET
+                                LTRIM(RTRIM(CAST(t.ARRET AS NVARCHAR(50))))
                             ORDER BY
-                                t.ARRET,
-                                t.NUM_CLI,
-                                t.PDL
+                                TRY_CONVERT(INT, t.ARRET),
+                                LTRIM(RTRIM(CAST(t.ARRET AS NVARCHAR(50)))),
+                                LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))),
+                                LTRIM(RTRIM(CAST(t.PDL AS NVARCHAR(50))))
                         ) AS RowNum
                     FROM v_tournee AS t
-                    WHERE t.JOUR_TOURNEE = @JourTournee
+                    WHERE TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50))))) = @JourTournee
                       AND (
                             @CodeTournee IS NULL
                             OR LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) = @CodeTournee
@@ -149,23 +175,23 @@ public class TourneesRepository
                         p.*,
                         ROW_NUMBER() OVER (
                             PARTITION BY
-                                p.NUMEROCLIENT,
-                                p.NUMEROPOINTLIVRAISON,
-                                p.DAYNUMBER
+                                LTRIM(RTRIM(CAST(p.NUMEROCLIENT AS NVARCHAR(50)))),
+                                LTRIM(RTRIM(CAST(p.NUMEROPOINTLIVRAISON AS NVARCHAR(50)))),
+                                LTRIM(RTRIM(CAST(p.DAYNUMBER AS NVARCHAR(50))))
                             ORDER BY
-                                p.NUMEROCLIENT,
-                                p.NUMEROPOINTLIVRAISON,
-                                p.DAYNUMBER
+                                LTRIM(RTRIM(CAST(p.NUMEROCLIENT AS NVARCHAR(50)))),
+                                LTRIM(RTRIM(CAST(p.NUMEROPOINTLIVRAISON AS NVARCHAR(50)))),
+                                TRY_CONVERT(INT, LTRIM(RTRIM(CAST(p.DAYNUMBER AS NVARCHAR(50)))))
                         ) AS RowNum
                     FROM v_pdl_jour AS p
                 )
                 SELECT
-                    CAST(t.NUM_CLI AS NVARCHAR(50)) AS NumClient,
+                    LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))) AS NumClient,
                     t.NOM_CLI AS NomClient,
 
                     t.PDL_DESC AS NomAffiche,
 
-                    CAST(t.PDL AS NVARCHAR(50)) AS CodePDL,
+                    LTRIM(RTRIM(CAST(t.PDL AS NVARCHAR(50)))) AS CodePDL,
                     t.PDL_DESC AS DescriptionPDL,
 
                     p.STREET AS AdresseLigne1,
@@ -174,16 +200,16 @@ public class TourneesRepository
                     p.CITY AS Ville,
                     p.ZIPCODE AS CodePostal,
 
-                    t.ARRET AS OrdreArret,
-                    t.ARRET AS Horaire,
+                    TRY_CONVERT(INT, t.ARRET) AS OrdreArret,
+                    TRY_CONVERT(INT, t.ARRET) AS Horaire,
 
-                    t.JOUR_TOURNEE AS JourTournee,
+                    TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50))))) AS JourTournee,
 
-                    CAST(t.TOURNEE AS NVARCHAR(50)) AS CodeTournee,
+                    LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) AS CodeTournee,
                     t.TOURNEE_DESC AS LibelleTournee,
 
-                    t.JOUR_TOURNEE_RETOUR AS JourTourneeRetour,
-                    CAST(t.TOURNEE_RET AS NVARCHAR(50)) AS CodeTourneeRetour,
+                    TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE_RETOUR AS NVARCHAR(50))))) AS JourTourneeRetour,
+                    LTRIM(RTRIM(CAST(t.TOURNEE_RET AS NVARCHAR(50)))) AS CodeTourneeRetour,
                     t.TOURNEE_RETOUR_DESC AS LibelleTourneeRetour,
 
                     t.SCHEMA_LIV AS SchemaLivraison,
@@ -198,33 +224,36 @@ public class TourneesRepository
                     CAST(NULL AS NVARCHAR(100)) AS Cle,
 
                     CASE
-                        WHEN f.ACTIVE = 1 THEN CAST(1 AS BIT)
+                        WHEN UPPER(LTRIM(RTRIM(CAST(f.ACTIVE AS NVARCHAR(20))))) IN ('1', 'Y', 'YES', 'O', 'OUI', 'TRUE', 'VRAI')
+                            THEN CAST(1 AS BIT)
                         ELSE CAST(0 AS BIT)
                     END AS EstFerme,
 
-                    f.NONBUSINESSDAY AS DateFermeture,
+                    TRY_CONVERT(DATETIME, f.NONBUSINESSDAY) AS DateFermeture,
                     CAST(NULL AS NVARCHAR(255)) AS MotifFermeture
                 FROM TourneeDedoublonnee AS t
                 LEFT JOIN PdlDedoublonnee AS p
-                    ON t.NUM_CLI = p.NUMEROCLIENT
-                   AND t.PDL = p.NUMEROPOINTLIVRAISON
-                   AND t.JOUR_TOURNEE = p.DAYNUMBER
+                    ON LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))) = LTRIM(RTRIM(CAST(p.NUMEROCLIENT AS NVARCHAR(50))))
+                   AND LTRIM(RTRIM(CAST(t.PDL AS NVARCHAR(50)))) = LTRIM(RTRIM(CAST(p.NUMEROPOINTLIVRAISON AS NVARCHAR(50))))
+                   AND TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50)))))
+                        = TRY_CONVERT(INT, LTRIM(RTRIM(CAST(p.DAYNUMBER AS NVARCHAR(50)))))
                    AND p.RowNum = 1
                 LEFT JOIN v_fermeture AS f
-                    ON t.NUM_CLI = f.{fermetureCustomerColumn}
-                   AND f.NONBUSINESSDAY = @DateFermeture
+                    ON LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))) = LTRIM(RTRIM(CAST(f.{fermetureCustomerColumn} AS NVARCHAR(50))))
+                   AND TRY_CONVERT(DATE, f.NONBUSINESSDAY) = @DateFermeture
                 WHERE t.RowNum = 1
                 ORDER BY
-                    t.ARRET,
-                    t.NUM_CLI,
-                    t.PDL;
+                    TRY_CONVERT(INT, t.ARRET),
+                    LTRIM(RTRIM(CAST(t.ARRET AS NVARCHAR(50)))),
+                    LTRIM(RTRIM(CAST(t.NUM_CLI AS NVARCHAR(50)))),
+                    LTRIM(RTRIM(CAST(t.PDL AS NVARCHAR(50))));
                 """;
 
         return await connection.QueryAsync<TourneeLigneRecord>(
             sql,
             new
             {
-                DateFermeture = dateTournee.ToDateTime(TimeOnly.MinValue),
+                DateFermeture = dateTournee.ToDateTime(TimeOnly.MinValue).Date,
                 JourTournee = jourTournee,
                 CodeTournee = string.IsNullOrWhiteSpace(codeTournee)
                     ? null
