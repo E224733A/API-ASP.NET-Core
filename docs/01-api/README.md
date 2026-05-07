@@ -2,6 +2,21 @@
 
 Cette documentation décrit l’état actuel de l’API après refactorisation qualité.
 
+## Documentation Swagger
+
+Une documentation dédiée à Swagger est disponible ici :
+
+[Documentation Swagger de l'API Mobile SLI](./swagger.md)
+
+Elle explique :
+
+- comment ouvrir Swagger en développement local ;
+- comment tester les routes depuis l’interface Swagger ;
+- comment lire les modèles JSON dans la partie `Schemas` ;
+- comment tester les routes avec `curl` ;
+- quelles règles sont documentées côté API ;
+- quelles règles doivent rester dans la documentation mobile.
+
 ## Architecture du code
 
 L’API est organisée par responsabilités.
