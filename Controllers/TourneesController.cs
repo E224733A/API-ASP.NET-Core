@@ -4,6 +4,10 @@ using API_ASP.NET_Core.Services;
 
 namespace API_ASP.NET_Core.Controllers;
 
+/// <summary>
+/// Contrôleur utilisé par l'application mobile pour consulter les tournées disponibles
+/// et charger le détail d'une tournée sélectionnée.
+/// </summary>
 [ApiController]
 [Route("api/tournees")]
 public class TourneesController : ControllerBase
@@ -16,15 +20,32 @@ public class TourneesController : ControllerBase
     }
 
     /// <summary>
-    /// Renvoie uniquement la liste des tournées disponibles pour une date.
-    ///
+    /// Renvoie la liste des tournées disponibles pour une date et un livreur.
+    /// </summary>
+    /// <remarks>
     /// Cette route est utilisée par l'écran mobile "Choix de tournée".
-    /// Elle ne renvoie pas les lignes clients.
+    ///
+    /// Elle permet à l'application mobile de récupérer les tournées disponibles
+    /// avant de charger le détail complet d'une tournée.
+    ///
+    /// Paramètres :
+    /// - dateTournee : date de la tournée au format yyyy-MM-dd ;
+    /// - codeLivreur : code du livreur connecté.
+    ///
+    /// Réponse :
+    /// - 200 : liste des tournées disponibles. La liste peut être vide si aucune tournée n'est trouvée ;
+    /// - 400 : date invalide ou code livreur manquant ;
+    /// - 404 : livreur introuvable ;
+    /// - 500 : erreur technique côté serveur.
     ///
     /// Exemple :
-    ///"GET /api/tournees/disponibles?dateTournee=2026-05-06&amp;codeLivreur=2"
-    /// </summary>
+    /// GET /api/tournees/disponibles?dateTournee=2026-05-06&amp;codeLivreur=2
+    /// </remarks>
     [HttpGet("disponibles")]
+    [ProducesResponseType(typeof(IReadOnlyList<TourneeDisponibleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<TourneeDisponibleDto>>> GetTourneesDisponibles(
         [FromQuery] string dateTournee,
         [FromQuery] string codeLivreur)
@@ -50,14 +71,37 @@ public class TourneesController : ControllerBase
     }
 
     /// <summary>
-    /// Renvoie la tournée complète du jour pour un livreur et un code tournée.
+    /// Renvoie le détail complet d'une tournée sélectionnée.
+    /// </summary>
+    /// <remarks>
+    /// Cette route est utilisée après sélection d'une tournée dans l'application mobile.
     ///
-    /// Cette route est utilisée après sélection d'une tournée.
+    /// Elle renvoie les informations nécessaires au chargement local de la tournée :
+    /// en-tête de tournée, livreur, informations de chargement et lignes clients.
+    ///
+    /// Paramètres :
+    /// - dateTournee : date de la tournée au format yyyy-MM-dd ;
+    /// - codeLivreur : code du livreur connecté ;
+    /// - codeTournee : code de la tournée sélectionnée ;
+    /// - nomLivreur : paramètre optionnel.
+    ///
+    /// L'API renvoie les données brutes nécessaires à l'application mobile.
+    /// Les règles d'affichage propres à l'interface mobile ne sont pas appliquées ici.
+    ///
+    /// Réponse :
+    /// - 200 : détail complet de la tournée ;
+    /// - 400 : date invalide, code livreur manquant ou code tournée manquant ;
+    /// - 404 : livreur ou tournée introuvable ;
+    /// - 500 : erreur technique côté serveur.
     ///
     /// Exemple :
     /// GET /api/tournees/jour?dateTournee=2026-05-06&amp;codeLivreur=2&amp;codeTournee=3001
-    /// </summary>
+    /// </remarks>
     [HttpGet("jour")]
+    [ProducesResponseType(typeof(TourneeMobileDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TourneeMobileDto>> GetTourneeDuJour(
         [FromQuery] string dateTournee,
         [FromQuery] string codeLivreur,
