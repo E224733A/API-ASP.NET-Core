@@ -1,7 +1,7 @@
 // Controllers/LivreursController.cs
 using Microsoft.AspNetCore.Mvc;
-using API_ASP.NET_Core.Repositories;
 using API_ASP.NET_Core.Models;
+using API_ASP.NET_Core.Repositories;
 
 namespace API_ASP.NET_Core.Controllers;
 
@@ -39,7 +39,7 @@ public class LivreursController : ControllerBase
     /// </remarks>
     [HttpGet]
     [ProducesResponseType(typeof(IEnumerable<LivreurDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<LivreurDto>>> GetAll()
     {
         var livreurs = await _livreursRepository.GetAllAsync();
