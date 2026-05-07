@@ -565,9 +565,463 @@ Le problème observé est un timeout SQL.
 Ce résultat ne remet pas en cause le fonctionnement normal de l’application mobile, car 100 chargements complets simultanés représentent une charge très supérieure au scénario métier attendu.
 
 
-## 10. Analyse générale
+## 10. Test 4 — Envoi du soir avec 10 synchronisations différentes
 
-### 10.1 Route `/api/tournees/disponibles`
+### 10.1 Objectif
+
+Ce test simule plusieurs livreurs qui envoient chacun une tournée différente en même temps en fin de journée.
+
+Route testée :
+
+```text
+POST /api/synchronisations
+```
+
+Contrairement aux tests du matin, cette route écrit en base.
+
+Le test utilise donc :
+
+- une date de test ;
+- des codes tournées de test ;
+- des codes livreurs de test ;
+- des identifiants de synchronisation uniques.
+
+### 10.2 Script PowerShell
+
+```powershell
+$baseUrl = "http://localhost:5120"
+$dateTournee = "2099-01-01"
+$nbRequetes = 10
+$runId = Get-Date -Format "HHmmss"
+
+$requests = @()
+
+for ($i = 1; $i -le $nbRequetes; $i++) {
+    $numero = $i.ToString("000")
+    $codeTournee = "TS$runId$numero"
+    $codeLivreur = "TEST$numero"
+    $idSynchronisation = [guid]::NewGuid().ToString()
+
+    $payload = [PSCustomObject]@{
+        schemaVersion = "1.1"
+        idSynchronisation = $idSynchronisation
+        dateTournee = $dateTournee
+        codeTournee = $codeTournee
+        libelleTournee = "TEST SOIR $numero"
+        livreur = [PSCustomObject]@{
+            codeLivreur = $codeLivreur
+            nomLivreur = "LIVREUR TEST $numero"
+        }
+        mobile = [PSCustomObject]@{
+            nomAppareil = "TEST-POSTE-$numero"
+            versionApplication = "1.0.0"
+            dateChargementMobile = "2099-01-01T07:30:00+02:00"
+            dateEnvoiMobile = "2099-01-01T17:30:00+02:00"
+        }
+        commentaireGlobal = $null
+        lignes = @(
+            [PSCustomObject]@{
+                idLigneSource = "$dateTournee|$codeTournee|$codeLivreur|CLIENT$numero|PDL$numero|1"
+                ordreArret = 1
+                client = [PSCustomObject]@{
+                    numClient = "CLIENT$numero"
+                    nomClient = "CLIENT TEST $numero"
+                    nomAffiche = "CLIENT TEST $numero"
+                }
+                pointLivraison = [PSCustomObject]@{
+                    codePDL = "PDL$numero"
+                    descriptionPDL = "POINT TEST $numero"
+                }
+                saisie = [PSCustomObject]@{
+                    precisionLivreur = $null
+                    statutPassage = "FAIT"
+                    commentaireLivreur = $null
+                    heureValidation = "2099-01-01T12:00:00+02:00"
+                    estValidee = $true
+                    quantites = @(
+                        [PSCustomObject]@{
+                            codeArticle = "ROLLS"
+                            libelle = "Rolls"
+                            quantiteLivree = 1
+                            quantiteRecuperee = 1
+                        },
+                        [PSCustomObject]@{
+                            codeArticle = "TAPIS"
+                            libelle = "Tapis"
+                            quantiteLivree = 2
+                            quantiteRecuperee = 0
+                        },
+                        [PSCustomObject]@{
+                            codeArticle = "SACS"
+                            libelle = "Sacs"
+                            quantiteLivree = 0
+                            quantiteRecuperee = 1
+                        }
+                    )
+                }
+            }
+        )
+    }
+
+    $requests += [PSCustomObject]@{
+        Numero = $i
+        CodeTournee = $codeTournee
+        CodeLivreur = $codeLivreur
+        Body = ($payload | ConvertTo-Json -Depth 20)
+    }
+}
+
+$jobs = @()
+$globalWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+foreach ($request in $requests) {
+    $jobs += Start-Job -ScriptBlock {
+        param($numero, $codeTournee, $codeLivreur, $body, $baseUrl)
+
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        try {
+            $response = Invoke-WebRequest `
+                -Uri "$baseUrl/api/synchronisations" `
+                -Method Post `
+                -Body $body `
+                -ContentType "application/json; charset=utf-8" `
+                -UseBasicParsing `
+                -TimeoutSec 60
+
+            $watch.Stop()
+
+            [PSCustomObject]@{
+                Numero = $numero
+                CodeTournee = $codeTournee
+                CodeLivreur = $codeLivreur
+                Succes = $true
+                StatusCode = [int]$response.StatusCode
+                TempsMs = $watch.ElapsedMilliseconds
+                Erreur = ""
+            }
+        }
+        catch {
+            $watch.Stop()
+
+            $statusCode = 0
+
+            if ($_.Exception.Response -ne $null) {
+                try {
+                    $statusCode = [int]$_.Exception.Response.StatusCode
+                }
+                catch {
+                    $statusCode = 0
+                }
+            }
+
+            [PSCustomObject]@{
+                Numero = $numero
+                CodeTournee = $codeTournee
+                CodeLivreur = $codeLivreur
+                Succes = $false
+                StatusCode = $statusCode
+                TempsMs = $watch.ElapsedMilliseconds
+                Erreur = $_.Exception.Message
+            }
+        }
+    } -ArgumentList $request.Numero, $request.CodeTournee, $request.CodeLivreur, $request.Body, $baseUrl
+}
+
+$results = $jobs | Wait-Job | Receive-Job
+$jobs | Remove-Job
+$globalWatch.Stop()
+
+$success = @($results | Where-Object { $_.Succes -eq $true })
+$failed = @($results | Where-Object { $_.Succes -eq $false })
+$times = @($success | Select-Object -ExpandProperty TempsMs | Sort-Object)
+
+$p95Index = [Math]::Ceiling($times.Count * 0.95) - 1
+if ($p95Index -lt 0) { $p95Index = 0 }
+
+[PSCustomObject]@{
+    Requetes = $results.Count
+    Succes = $success.Count
+    Echecs = $failed.Count
+    TempsTotalMs = $globalWatch.ElapsedMilliseconds
+    TempsMoyenMs = if ($success.Count -gt 0) { [Math]::Round(($success | Measure-Object TempsMs -Average).Average, 2) } else { 0 }
+    TempsMinMs = if ($success.Count -gt 0) { ($success | Measure-Object TempsMs -Minimum).Minimum } else { 0 }
+    TempsMaxMs = if ($success.Count -gt 0) { ($success | Measure-Object TempsMs -Maximum).Maximum } else { 0 }
+    Percentile95Ms = if ($success.Count -gt 0) { $times[$p95Index] } else { 0 }
+} | Format-List
+
+$results | Sort-Object Numero | Format-Table Numero, CodeTournee, CodeLivreur, Succes, StatusCode, TempsMs -AutoSize
+
+if ($failed.Count -gt 0) {
+    Write-Host ""
+    Write-Host "Erreurs détectées :"
+    $failed | Format-Table Numero, CodeTournee, CodeLivreur, StatusCode, Erreur -AutoSize
+}
+```
+
+### 10.3 Résultat obtenu
+
+```text
+Requêtes       : 10
+Succès         : 10
+Échecs         : 0
+Temps total    : 23668 ms
+Temps moyen    : 1387,7 ms
+Temps min      : 284 ms
+Temps max      : 3810 ms
+Percentile 95  : 3810 ms
+```
+
+### 10.4 Détail
+
+```text
+TS142442001 — TEST001 — HTTP 200
+TS142442002 — TEST002 — HTTP 200
+TS142442003 — TEST003 — HTTP 200
+TS142442004 — TEST004 — HTTP 200
+TS142442005 — TEST005 — HTTP 200
+TS142442006 — TEST006 — HTTP 200
+TS142442007 — TEST007 — HTTP 200
+TS142442008 — TEST008 — HTTP 200
+TS142442009 — TEST009 — HTTP 200
+TS142442010 — TEST010 — HTTP 200
+```
+
+### 10.5 Conclusion
+
+L’API supporte 10 envois simultanés différents sur `POST /api/synchronisations`.
+
+Ce résultat est satisfaisant pour le scénario d’envoi du soir.
+
+
+## 11. Test 5 — Anti-doublon sur un envoi identique
+
+### 11.1 Objectif
+
+Ce test vérifie que l’API bloque correctement les doubles envois.
+
+Le même JSON de synchronisation est envoyé 5 fois en parallèle.
+
+Comportement attendu :
+
+```text
+1 requête acceptée en HTTP 200
+4 requêtes refusées en HTTP 409
+```
+
+### 11.2 Script PowerShell
+
+```powershell
+$baseUrl = "http://localhost:5120"
+$dateTournee = "2099-01-02"
+$nbRequetes = 5
+
+$idSynchronisation = [guid]::NewGuid().ToString()
+$codeTournee = "DUPTEST001"
+$codeLivreur = "DUP001"
+
+$payload = [PSCustomObject]@{
+    schemaVersion = "1.1"
+    idSynchronisation = $idSynchronisation
+    dateTournee = $dateTournee
+    codeTournee = $codeTournee
+    libelleTournee = "TEST DOUBLON"
+    livreur = [PSCustomObject]@{
+        codeLivreur = $codeLivreur
+        nomLivreur = "LIVREUR DOUBLON"
+    }
+    mobile = [PSCustomObject]@{
+        nomAppareil = "TEST-DOUBLON"
+        versionApplication = "1.0.0"
+        dateChargementMobile = "2099-01-02T07:30:00+02:00"
+        dateEnvoiMobile = "2099-01-02T17:30:00+02:00"
+    }
+    commentaireGlobal = $null
+    lignes = @(
+        [PSCustomObject]@{
+            idLigneSource = "$dateTournee|$codeTournee|$codeLivreur|CLIENT001|PDL001|1"
+            ordreArret = 1
+            client = [PSCustomObject]@{
+                numClient = "CLIENT001"
+                nomClient = "CLIENT DOUBLON"
+                nomAffiche = "CLIENT DOUBLON"
+            }
+            pointLivraison = [PSCustomObject]@{
+                codePDL = "PDL001"
+                descriptionPDL = "POINT DOUBLON"
+            }
+            saisie = [PSCustomObject]@{
+                precisionLivreur = $null
+                statutPassage = "FAIT"
+                commentaireLivreur = $null
+                heureValidation = "2099-01-02T12:00:00+02:00"
+                estValidee = $true
+                quantites = @(
+                    [PSCustomObject]@{
+                        codeArticle = "ROLLS"
+                        libelle = "Rolls"
+                        quantiteLivree = 1
+                        quantiteRecuperee = 1
+                    }
+                )
+            }
+        }
+    )
+}
+
+$body = $payload | ConvertTo-Json -Depth 20
+
+$jobs = @()
+$globalWatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+for ($i = 1; $i -le $nbRequetes; $i++) {
+    $jobs += Start-Job -ScriptBlock {
+        param($numero, $body, $baseUrl)
+
+        $watch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        try {
+            $response = Invoke-WebRequest `
+                -Uri "$baseUrl/api/synchronisations" `
+                -Method Post `
+                -Body $body `
+                -ContentType "application/json; charset=utf-8" `
+                -UseBasicParsing `
+                -TimeoutSec 60
+
+            $watch.Stop()
+
+            [PSCustomObject]@{
+                Numero = $numero
+                Succes = $true
+                StatusCode = [int]$response.StatusCode
+                TempsMs = $watch.ElapsedMilliseconds
+                Erreur = ""
+            }
+        }
+        catch {
+            $watch.Stop()
+
+            $statusCode = 0
+
+            if ($_.Exception.Response -ne $null) {
+                try {
+                    $statusCode = [int]$_.Exception.Response.StatusCode
+                }
+                catch {
+                    $statusCode = 0
+                }
+            }
+
+            [PSCustomObject]@{
+                Numero = $numero
+                Succes = $false
+                StatusCode = $statusCode
+                TempsMs = $watch.ElapsedMilliseconds
+                Erreur = $_.Exception.Message
+            }
+        }
+    } -ArgumentList $i, $body, $baseUrl
+}
+
+$results = $jobs | Wait-Job | Receive-Job
+$jobs | Remove-Job
+$globalWatch.Stop()
+
+$results | Sort-Object Numero | Format-Table Numero, Succes, StatusCode, TempsMs -AutoSize
+
+$results |
+Group-Object StatusCode |
+Select-Object Name, Count |
+Format-Table -AutoSize
+```
+
+### 11.3 Résultat obtenu
+
+```text
+Numero Succes StatusCode TempsMs
+------ ------ ---------- -------
+1      True   200        3827
+2      False  409        3578
+3      False  409        3054
+4      False  409        2489
+5      False  409        388
+```
+
+Regroupement par code HTTP :
+
+```text
+Name Count
+---- -----
+200      1
+409      4
+```
+
+### 11.4 Interprétation
+
+Une seule synchronisation est enregistrée.
+
+Les autres requêtes sont refusées avec le code HTTP `409 Conflict`.
+
+Dans ce test, PowerShell affiche `Succes = False` pour les réponses `409`, car `Invoke-WebRequest` considère les codes d’erreur HTTP comme des exceptions.
+
+Fonctionnellement, les `409` sont attendus et valident la protection anti-doublon.
+
+### 11.5 Conclusion
+
+La protection anti-doublon fonctionne correctement.
+
+L’API empêche qu’une même synchronisation soit enregistrée plusieurs fois.
+
+
+## 12. Nettoyage des données de test
+
+Les tests sur `POST /api/synchronisations` écrivent en base.
+
+Après les tests, les données de test peuvent être supprimées avec le script SQL suivant.
+
+```sql
+DECLARE @DateDebutTest date = '2099-01-01';
+DECLARE @DateFinTest date = '2099-01-03';
+
+DELETE q
+FROM Mobile_TourneeLigneQuantite q
+INNER JOIN Mobile_TourneeLigne l
+    ON l.IdTourneeLigne = q.IdTourneeLigne
+INNER JOIN Mobile_Tournee t
+    ON t.IdTourneeMobile = l.IdTourneeMobile
+WHERE t.DateTournee >= @DateDebutTest
+  AND t.DateTournee < @DateFinTest;
+
+DELETE l
+FROM Mobile_TourneeLigne l
+INNER JOIN Mobile_Tournee t
+    ON t.IdTourneeMobile = l.IdTourneeMobile
+WHERE t.DateTournee >= @DateDebutTest
+  AND t.DateTournee < @DateFinTest;
+
+DELETE logSync
+FROM Mobile_LogSynchronisation logSync
+INNER JOIN Mobile_Tournee t
+    ON t.IdTourneeMobile = logSync.IdTourneeMobile
+WHERE t.DateTournee >= @DateDebutTest
+  AND t.DateTournee < @DateFinTest;
+
+DELETE
+FROM Mobile_Tournee
+WHERE DateTournee >= @DateDebutTest
+  AND DateTournee < @DateFinTest;
+
+DELETE
+FROM Mobile_Livreur
+WHERE CodeLivreur LIKE 'TEST%'
+   OR CodeLivreur LIKE 'DUP%';
+```
+
+
+## 13. Analyse générale
+
+### 13.1 Route `/api/tournees/disponibles`
 
 Cette route est légère.
 
@@ -575,7 +1029,7 @@ Elle supporte 20 requêtes concurrentes sans erreur.
 
 Elle est adaptée à l’écran de choix de tournée.
 
-### 10.2 Route `/api/tournees/jour`
+### 13.2 Route `/api/tournees/jour`
 
 Cette route est plus lourde.
 
@@ -589,20 +1043,31 @@ Elle supporte :
 100 chargements simultanés : timeout SQL
 ```
 
-### 10.3 Interprétation métier
+### 13.3 Route `/api/synchronisations`
 
-Le résultat le plus important est :
+Cette route écrit en base.
+
+Elle supporte :
 
 ```text
-20 chargements complets simultanés réussis
-0 erreur
-HTTP 200 partout
+10 envois différents simultanés : OK
+5 envois identiques simultanés : 1 succès + 4 conflits 409
 ```
 
-Cela permet de valider que l’API peut gérer un scénario réaliste où plusieurs livreurs chargent leur tournée en même temps au dépôt.
+### 13.4 Interprétation métier
+
+Les résultats les plus importants sont :
+
+```text
+20 chargements complets simultanés réussis le matin
+10 envois différents simultanés réussis le soir
+Protection anti-doublon validée
+```
+
+Cela permet de valider que l’API peut gérer un scénario réaliste où plusieurs livreurs chargent leur tournée au dépôt le matin, puis renvoient leurs données en fin de journée.
 
 
-## 11. Limites du test
+## 14. Limites du test
 
 Ces tests ont été réalisés en environnement de développement local.
 
@@ -612,7 +1077,8 @@ Les temps mesurés sont indicatifs pour plusieurs raisons :
 - les jobs sont lancés dans des processus séparés ;
 - le PC de développement n’est pas un serveur de production ;
 - SQL Server et l’API tournent dans un environnement de test ;
-- les vues ABSSolute peuvent être plus ou moins coûteuses selon la charge.
+- les vues ABSSolute peuvent être plus ou moins coûteuses selon la charge ;
+- les tests POST utilisent des données artificielles.
 
 Le temps total affiché par le script peut être supérieur au temps maximal d’une requête, car il inclut aussi le lancement, l’attente et la récupération des jobs PowerShell.
 

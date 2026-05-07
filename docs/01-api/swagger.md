@@ -27,4 +27,3 @@ cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-
 dotnet run --urls "http://127.0.0.1:5000"
 
 Swagger disponible à cette adresse : http://127.0.0.1:5000/swagger/index.html
-
