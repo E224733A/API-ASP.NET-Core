@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Services;
 
@@ -10,6 +11,7 @@ namespace API_ASP.NET_Core.Controllers;
 /// </summary>
 [ApiController]
 [Route("api/tournees")]
+[Produces("application/json")]
 public class TourneesController : ControllerBase
 {
     private readonly TourneesService _tourneesService;
@@ -43,28 +45,46 @@ public class TourneesController : ControllerBase
     /// </remarks>
     [HttpGet("disponibles")]
     [ProducesResponseType(typeof(IReadOnlyList<TourneeDisponibleDto>), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(string), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiNotFoundResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IReadOnlyList<TourneeDisponibleDto>>> GetTourneesDisponibles(
         [FromQuery] string dateTournee,
         [FromQuery] string codeLivreur)
     {
         if (!DateOnly.TryParse(dateTournee, out var date))
         {
-            return BadRequest("Paramètre dateTournee invalide. Format attendu : YYYY-MM-DD");
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = ApiErrorCodes.ValidationError,
+                Errors = new[]
+                {
+                    "Paramètre dateTournee invalide. Format attendu : yyyy-MM-dd."
+                }
+            });
         }
 
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
-            return BadRequest("Paramètre codeLivreur obligatoire.");
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = ApiErrorCodes.ValidationError,
+                Errors = new[]
+                {
+                    "Paramètre codeLivreur obligatoire."
+                }
+            });
         }
 
         var tournees = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreur);
 
         if (tournees is null)
         {
-            return NotFound($"Livreur introuvable : {codeLivreur}");
+            return NotFound(new ApiNotFoundResponse
+            {
+                Statut = ApiErrorCodes.NotFound,
+                Message = $"Livreur introuvable : {codeLivreur}"
+            });
         }
 
         return Ok(tournees);
@@ -99,9 +119,9 @@ public class TourneesController : ControllerBase
     /// </remarks>
     [HttpGet("jour")]
     [ProducesResponseType(typeof(TourneeMobileDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(string), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    [ProducesResponseType(StatusCodes.Status500InternalServerError)]
+    [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ApiNotFoundResponse), StatusCodes.Status404NotFound)]
+    [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TourneeMobileDto>> GetTourneeDuJour(
         [FromQuery] string dateTournee,
         [FromQuery] string codeLivreur,
@@ -110,23 +130,49 @@ public class TourneesController : ControllerBase
     {
         if (!DateOnly.TryParse(dateTournee, out var date))
         {
-            return BadRequest("Paramètre dateTournee invalide. Format attendu : YYYY-MM-DD");
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = ApiErrorCodes.ValidationError,
+                Errors = new[]
+                {
+                    "Paramètre dateTournee invalide. Format attendu : yyyy-MM-dd."
+                }
+            });
         }
 
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
-            return BadRequest("Paramètre codeLivreur obligatoire.");
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = ApiErrorCodes.ValidationError,
+                Errors = new[]
+                {
+                    "Paramètre codeLivreur obligatoire."
+                }
+            });
         }
 
         if (string.IsNullOrWhiteSpace(codeTournee))
         {
-            return BadRequest("Paramètre codeTournee obligatoire pour charger une tournée complète. Utilisez /api/tournees/disponibles pour obtenir la liste des tournées.");
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = ApiErrorCodes.ValidationError,
+                Errors = new[]
+                {
+                    "Paramètre codeTournee obligatoire pour charger une tournée complète. Utilisez /api/tournees/disponibles pour obtenir la liste des tournées."
+                }
+            });
         }
 
         var tournee = await _tourneesService.GetTourneeAsync(date, codeLivreur, codeTournee, nomLivreur);
-        if (tournee == null)
+
+        if (tournee is null)
         {
-            return NotFound();
+            return NotFound(new ApiNotFoundResponse
+            {
+                Statut = ApiErrorCodes.NotFound,
+                Message = "Livreur ou tournée introuvable."
+            });
         }
 
         return Ok(tournee);
