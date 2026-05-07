@@ -6,6 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>API_ASP.NET_Core</RootNamespace>
     <UserSecretsId>61c9ac4b-9dd5-4966-85fa-b6bbcf1c02e1</UserSecretsId>
+
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

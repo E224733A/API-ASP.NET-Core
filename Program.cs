@@ -5,6 +5,7 @@ using API_ASP.NET_Core.Services;
 using API_ASP.NET_Core.Validators;
 using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,7 +34,33 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerGen(options =>
+{
+    options.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "API Mobile SLI - Tournées livreurs",
+        Version = "v1",
+        Description = """
+        API ASP.NET Core utilisée par l'application mobile des livreurs.
+
+        Elle permet :
+        - de consulter les tournées disponibles ;
+        - de charger le détail d'une tournée ;
+        - de recevoir les synchronisations envoyées par l'application mobile en fin de journée.
+
+        L'API expose uniquement un contrat de données et d'échange.
+        Les règles d'affichage propres à l'interface mobile sont gérées côté application mobile.
+        """
+    });
+
+    var xmlFile = $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml";
+    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+
+    if (File.Exists(xmlPath))
+    {
+        options.IncludeXmlComments(xmlPath);
+    }
+});
 
 builder.Services.AddSingleton<SqlConnectionFactory>();
 

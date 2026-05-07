@@ -22,7 +22,7 @@ public class TourneesController : ControllerBase
     /// Elle ne renvoie pas les lignes clients.
     ///
     /// Exemple :
-    /// GET /api/tournees/disponibles?dateTournee=2026-05-06&codeLivreur=2
+    ///"GET /api/tournees/disponibles?dateTournee=2026-05-06&amp;codeLivreur=2"
     /// </summary>
     [HttpGet("disponibles")]
     public async Task<ActionResult<IReadOnlyList<TourneeDisponibleDto>>> GetTourneesDisponibles(
@@ -55,7 +55,7 @@ public class TourneesController : ControllerBase
     /// Cette route est utilisée après sélection d'une tournée.
     ///
     /// Exemple :
-    /// GET /api/tournees/jour?dateTournee=2026-05-06&codeLivreur=2&codeTournee=3001
+    /// GET /api/tournees/jour?dateTournee=2026-05-06&amp;codeLivreur=2&amp;codeTournee=3001
     /// </summary>
     [HttpGet("jour")]
     public async Task<ActionResult<TourneeMobileDto>> GetTourneeDuJour(
