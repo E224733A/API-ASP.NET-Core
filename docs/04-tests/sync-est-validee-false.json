@@ -1,43 +1,75 @@
-﻿{
-  "schemaVersion": "1.1",
-  "idSynchronisation": "77777777-7777-7777-7777-777777777777",
-  "dateTournee": "2026-05-03",
-  "codeTournee": "2006",
+{
+  "schemaVersion": "1.2",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000007",
+  "dateTournee": "2026-06-09",
+  "codeTournee": "4014",
   "libelleTournee": "TEST EST VALIDEE FALSE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
   },
   "mobile": {
-    "nomAppareil": "Samsung A15",
+    "nomAppareil": "Postman Test",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-03T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-03T16:45:00+02:00"
+    "dateChargementMobile": "2026-06-09T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-09T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-03|2006|2|1058|1|1",
+      "idLigneSource": "2026-06-09|4014|2|333|341|1",
       "ordreArret": 1,
+      "horaire": 1,
       "client": {
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+        "numClient": "333",
+        "nomClient": "HOTEL LE MARTINET",
+        "nomAffiche": "HOTEL LE MARTINET"
       },
       "pointLivraison": {
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+        "codePDL": "341",
+        "descriptionPDL": "HOTEL LE MARTINET",
+        "adresseLigne1": "PLACE DU GENERALE CHARRETTE",
+        "adresseLigne2": null,
+        "adresseLigne3": "SARL HOTEL LE MARTINET",
+        "ville": "BOUIN",
+        "codePostal": "85230"
+      },
+      "tournee": {
+        "codeTournee": "4014",
+        "libelleTournee": "TEST EST VALIDEE FALSE",
+        "jourTournee": 2,
+        "jourLibelle": "Mardi",
+        "schemaLivraison": "1W1"
+      },
+      "retour": {
+        "jourTourneeRetour": 2,
+        "jourRetourLibelle": "Mardi",
+        "codeTourneeRetour": "4014",
+        "libelleTourneeRetour": "TEST EST VALIDEE FALSE"
+      },
+      "infosLivreur": {
+        "instructions": "CODE 8578 *",
+        "commentaireExceptionnel": null,
+        "zoneDechargement": null,
+        "zoneDechargementAffichee": "2",
+        "zone": null,
+        "precision": null,
+        "cle": null,
+        "estFerme": false,
+        "dateFermeture": null,
+        "motifFermeture": null
       },
       "saisie": {
-        "precisionLivreur": null,
+        "precisionLivreur": "Test API v1.2",
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": "2026-05-03T09:12:00+02:00",
+        "heureValidation": "2026-06-09T09:12:00+02:00",
         "estValidee": false,
         "quantites": [
           {
             "codeArticle": "ROLLS",
             "libelle": "Rolls",
+            "quantiteLivreePrevue": null,
             "quantiteLivree": 1,
             "quantiteRecuperee": 0
           }

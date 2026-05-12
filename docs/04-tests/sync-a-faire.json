@@ -1,32 +1,63 @@
-﻿{
-  "schemaVersion": "1.1",
-  "idSynchronisation": "88888888-8888-8888-8888-888888888888",
-  "dateTournee": "2026-05-04",
-  "codeTournee": "2007",
+{
+  "schemaVersion": "1.2",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000008",
+  "dateTournee": "2026-06-10",
+  "codeTournee": "4015",
   "libelleTournee": "TEST A FAIRE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
   },
   "mobile": {
-    "nomAppareil": "Samsung A15",
+    "nomAppareil": "Postman Test",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-04T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-04T16:45:00+02:00"
+    "dateChargementMobile": "2026-06-10T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-10T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-04|2007|2|1058|1|1",
+      "idLigneSource": "2026-06-10|4015|3|333|341|1",
       "ordreArret": 1,
+      "horaire": 1,
       "client": {
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+        "numClient": "333",
+        "nomClient": "HOTEL LE MARTINET",
+        "nomAffiche": "HOTEL LE MARTINET"
       },
       "pointLivraison": {
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+        "codePDL": "341",
+        "descriptionPDL": "HOTEL LE MARTINET",
+        "adresseLigne1": "PLACE DU GENERALE CHARRETTE",
+        "adresseLigne2": null,
+        "adresseLigne3": "SARL HOTEL LE MARTINET",
+        "ville": "BOUIN",
+        "codePostal": "85230"
+      },
+      "tournee": {
+        "codeTournee": "4015",
+        "libelleTournee": "TEST A FAIRE",
+        "jourTournee": 3,
+        "jourLibelle": "Mercredi",
+        "schemaLivraison": "1W1"
+      },
+      "retour": {
+        "jourTourneeRetour": 3,
+        "jourRetourLibelle": "Mercredi",
+        "codeTourneeRetour": "4015",
+        "libelleTourneeRetour": "TEST A FAIRE"
+      },
+      "infosLivreur": {
+        "instructions": "CODE 8578 *",
+        "commentaireExceptionnel": null,
+        "zoneDechargement": null,
+        "zoneDechargementAffichee": "3",
+        "zone": null,
+        "precision": null,
+        "cle": null,
+        "estFerme": false,
+        "dateFermeture": null,
+        "motifFermeture": null
       },
       "saisie": {
         "precisionLivreur": null,
@@ -38,6 +69,7 @@
           {
             "codeArticle": "ROLLS",
             "libelle": "Rolls",
+            "quantiteLivreePrevue": null,
             "quantiteLivree": 0,
             "quantiteRecuperee": 0
           }

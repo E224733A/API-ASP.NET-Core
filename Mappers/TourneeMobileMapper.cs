@@ -9,7 +9,10 @@ public sealed class TourneeMobileMapper
     public TourneeMobileDto Map(
         DateOnly dateTournee,
         LivreurRecord livreur,
-        IReadOnlyList<TourneeLigneRecord> lignes)
+        IReadOnlyList<TourneeLigneRecord> lignes,
+        IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables,
+        IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
     {
         if (lignes.Count == 0)
         {
@@ -17,10 +20,15 @@ public sealed class TourneeMobileMapper
         }
 
         var premiereLigne = lignes[0];
-        var articlesSaisissables = BuildArticlesSaisissables();
+        var articles = BuildArticlesSaisissables(articlesSaisissables);
 
         var lignesDto = lignes
-            .Select(ligne => MapLigne(dateTournee, ligne, articlesSaisissables))
+            .Select(ligne => MapLigne(
+                dateTournee,
+                ligne,
+                articles,
+                commentairesExceptionnels,
+                preRemplissages))
             .ToList();
 
         return new TourneeMobileDto
@@ -51,7 +59,7 @@ public sealed class TourneeMobileMapper
                 NombrePointsEnvoyes = lignesDto.Count
             },
 
-            ArticlesSaisissables = articlesSaisissables,
+            ArticlesSaisissables = articles,
             Lignes = lignesDto
         };
     }
@@ -59,11 +67,17 @@ public sealed class TourneeMobileMapper
     private static TourneeLigneMobileDto MapLigne(
         DateOnly dateTournee,
         TourneeLigneRecord ligne,
-        IReadOnlyList<ArticleSaisissableDto> articlesSaisissables)
+        IReadOnlyList<ArticleSaisissableDto> articlesSaisissables,
+        IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
     {
+        var idLigneSource = BuildIdLigneSource(dateTournee, ligne);
+        var commentaireExceptionnel = FindCommentaireExceptionnel(ligne, commentairesExceptionnels);
+        var zoneDechargement = NormalizeNullable(ligne.ZoneDechargement);
+
         return new TourneeLigneMobileDto
         {
-            IdLigneSource = BuildIdLigneSource(dateTournee, ligne),
+            IdLigneSource = idLigneSource,
             OrdreArret = ligne.OrdreArret,
             Horaire = ligne.Horaire,
 
@@ -90,6 +104,7 @@ public sealed class TourneeMobileMapper
                 CodeTournee = ligne.CodeTournee,
                 LibelleTournee = ligne.LibelleTournee,
                 JourTournee = ligne.JourTournee,
+                JourLibelle = GetJourLibelle(ligne.JourTournee),
                 SchemaLivraison = ligne.SchemaLivraison
             },
 
@@ -104,8 +119,11 @@ public sealed class TourneeMobileMapper
             InfosLivreur = new InfosLivreurDto
             {
                 Instructions = NormalizeNullable(ligne.Instructions),
-                CommentaireFiche = NormalizeNullable(ligne.CommentaireFiche),
-                ZoneDechargement = NormalizeNullable(ligne.ZoneDechargement),
+                CommentaireExceptionnel = commentaireExceptionnel,
+                ZoneDechargement = zoneDechargement,
+                ZoneDechargementAffichee = BuildZoneDechargementAffichee(
+                    ligne.JourTourneeRetour,
+                    zoneDechargement),
                 Zone = NormalizeNullable(ligne.Zone),
                 Precision = NormalizeNullable(ligne.Precision),
                 Cle = NormalizeNullable(ligne.Cle),
@@ -124,20 +142,91 @@ public sealed class TourneeMobileMapper
                 HeureValidation = null,
                 EstValidee = false,
                 Quantites = articlesSaisissables
-                    .Select(article => new QuantiteSaisieMobileDto
-                    {
-                        CodeArticle = article.CodeArticle,
-                        Libelle = article.Libelle,
-                        QuantiteLivree = 0,
-                        QuantiteRecuperee = 0
-                    })
+                    .Select(article => MapQuantiteInitiale(article, ligne, idLigneSource, preRemplissages))
                     .ToList()
             }
         };
     }
 
-    private static List<ArticleSaisissableDto> BuildArticlesSaisissables()
+    private static QuantiteSaisieMobileDto MapQuantiteInitiale(
+        ArticleSaisissableDto article,
+        TourneeLigneRecord ligne,
+        string idLigneSource,
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
     {
+        var preRemplissage = FindPreRemplissage(
+            article.CodeArticle,
+            ligne,
+            idLigneSource,
+            preRemplissages);
+
+        return new QuantiteSaisieMobileDto
+        {
+            CodeArticle = article.CodeArticle,
+            Libelle = preRemplissage?.LibelleArticle ?? article.Libelle,
+            QuantiteLivreePrevue = preRemplissage?.QuantiteLivreePrevue,
+            QuantiteLivree = preRemplissage?.QuantiteLivreePrevue ?? 0,
+            QuantiteRecuperee = 0
+        };
+    }
+
+    private static PreRemplissageQuantiteRecord? FindPreRemplissage(
+        string codeArticle,
+        TourneeLigneRecord ligne,
+        string idLigneSource,
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
+    {
+        var byIdLigneSource = preRemplissages.FirstOrDefault(preRemplissage =>
+            string.Equals(preRemplissage.IdLigneSource, idLigneSource, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(preRemplissage.CodeArticle, codeArticle, StringComparison.OrdinalIgnoreCase));
+
+        if (byIdLigneSource is not null)
+        {
+            return byIdLigneSource;
+        }
+
+        return preRemplissages.FirstOrDefault(preRemplissage =>
+            string.Equals(preRemplissage.NumClient, ligne.NumClient, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(NormalizeIdPart(preRemplissage.CodePDL), NormalizeIdPart(ligne.CodePDL), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(preRemplissage.CodeArticle, codeArticle, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string? FindCommentaireExceptionnel(
+        TourneeLigneRecord ligne,
+        IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels)
+    {
+        var commentaireExact = commentairesExceptionnels.FirstOrDefault(commentaire =>
+            string.Equals(commentaire.NumClient, ligne.NumClient, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(NormalizeIdPart(commentaire.CodePDL), NormalizeIdPart(ligne.CodePDL), StringComparison.OrdinalIgnoreCase));
+
+        if (commentaireExact is not null)
+        {
+            return NormalizeNullable(commentaireExact.Commentaire);
+        }
+
+        var commentaireClient = commentairesExceptionnels.FirstOrDefault(commentaire =>
+            string.Equals(commentaire.NumClient, ligne.NumClient, StringComparison.OrdinalIgnoreCase)
+            && string.IsNullOrWhiteSpace(commentaire.CodePDL));
+
+        return NormalizeNullable(commentaireClient?.Commentaire);
+    }
+
+    private static List<ArticleSaisissableDto> BuildArticlesSaisissables(
+        IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables)
+    {
+        if (articlesSaisissables.Count > 0)
+        {
+            return articlesSaisissables
+                .OrderBy(article => article.OrdreAffichage)
+                .ThenBy(article => article.CodeArticle)
+                .Select(article => new ArticleSaisissableDto
+                {
+                    CodeArticle = article.CodeArticle.Trim().ToUpperInvariant(),
+                    Libelle = article.LibelleArticle
+                })
+                .ToList();
+        }
+
         return ArticlesSaisissables.ActifsV1
             .Select(article => new ArticleSaisissableDto
             {
@@ -157,6 +246,28 @@ public sealed class TourneeMobileMapper
         var ordreArret = ligne.OrdreArret?.ToString() ?? "0";
 
         return $"{date}|{codeTournee}|{jour}|{numClient}|{codePdl}|{ordreArret}";
+    }
+
+    private static string? BuildZoneDechargementAffichee(
+        int? jourTourneeRetour,
+        string? zoneDechargement)
+    {
+        var jourRetour = jourTourneeRetour?.ToString();
+        var zone = NormalizeNullable(zoneDechargement);
+
+        if (zone is null)
+        {
+            return jourRetour;
+        }
+
+        if (zone.StartsWith("+", StringComparison.Ordinal))
+        {
+            return string.IsNullOrWhiteSpace(jourRetour)
+                ? zone.Trim()
+                : $"{jourRetour} {zone.Trim()}";
+        }
+
+        return zone;
     }
 
     private static string NormalizeIdPart(string? value)

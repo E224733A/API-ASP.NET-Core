@@ -1,3 +1,4 @@
+using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Mappers;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Repositories;
@@ -17,7 +18,7 @@ public sealed class TourneesService
         _mapper = mapper;
     }
 
-    public async Task<IReadOnlyList<TourneeDisponibleDto>?> GetTourneesDisponiblesAsync(
+    public async Task<TourneesDisponiblesResponseDto?> GetTourneesDisponiblesAsync(
         DateOnly dateTournee,
         string codeLivreur)
     {
@@ -33,22 +34,33 @@ public sealed class TourneesService
         }
 
         var records = await _repository.GetTourneesDisponiblesAsync(dateTournee);
-        var jourTournee = GetJourTournee(dateTournee);
-        var jourLibelle = GetJourLibelle(dateTournee);
 
-        return records
+        var tournees = records
             .Where(tournee => !string.IsNullOrWhiteSpace(tournee.CodeTournee))
             .Select(tournee => new TourneeDisponibleDto
             {
-                DateTournee = dateTournee.ToString("yyyy-MM-dd"),
-                JourTournee = jourTournee,
-                JourLibelle = jourLibelle,
                 CodeTournee = tournee.CodeTournee,
-                LibelleTournee = tournee.LibelleTournee ?? string.Empty
+                LibelleTournee = tournee.LibelleTournee ?? string.Empty,
+                NombrePoints = tournee.NombrePoints
             })
             .OrderBy(tournee => TryParseInt(tournee.CodeTournee))
             .ThenBy(tournee => tournee.LibelleTournee)
             .ToList();
+
+        return new TourneesDisponiblesResponseDto
+        {
+            SchemaVersion = SchemaVersions.SynchronisationActuelle,
+            DateTournee = dateTournee.ToString("yyyy-MM-dd"),
+            DateModifiable = false,
+            Livreur = new LivreurDto
+            {
+                CodeLivreur = livreur.CodeLivreur,
+                NomLivreur = string.IsNullOrWhiteSpace(livreur.NomLivreur)
+                    ? "Inconnu"
+                    : livreur.NomLivreur
+            },
+            Tournees = tournees
+        };
     }
 
     public async Task<TourneeMobileDto?> GetTourneeAsync(
@@ -84,37 +96,27 @@ public sealed class TourneesService
             return null;
         }
 
-        return _mapper.Map(dateTournee, livreur, lignes);
-    }
+        var articlesSaisissables = await _repository.GetArticlesSaisissablesAsync();
+        var commentairesExceptionnels = await _repository.GetCommentairesExceptionnelsAsync(dateTournee);
+        var preRemplissages = await _repository.GetPreRemplissagesAsync(dateTournee, codeTournee);
 
-    private static int GetJourTournee(DateOnly dateTournee)
-    {
-        return dateTournee.DayOfWeek switch
-        {
-            DayOfWeek.Monday => 1,
-            DayOfWeek.Tuesday => 2,
-            DayOfWeek.Wednesday => 3,
-            DayOfWeek.Thursday => 4,
-            DayOfWeek.Friday => 5,
-            DayOfWeek.Saturday => 6,
-            DayOfWeek.Sunday => 7,
-            _ => throw new ArgumentOutOfRangeException(nameof(dateTournee))
-        };
-    }
+        var tournee = _mapper.Map(
+            dateTournee,
+            livreur,
+            lignes,
+            articlesSaisissables,
+            commentairesExceptionnels,
+            preRemplissages);
 
-    private static string GetJourLibelle(DateOnly dateTournee)
-    {
-        return dateTournee.DayOfWeek switch
-        {
-            DayOfWeek.Monday => "Lundi",
-            DayOfWeek.Tuesday => "Mardi",
-            DayOfWeek.Wednesday => "Mercredi",
-            DayOfWeek.Thursday => "Jeudi",
-            DayOfWeek.Friday => "Vendredi",
-            DayOfWeek.Saturday => "Samedi",
-            DayOfWeek.Sunday => "Dimanche",
-            _ => string.Empty
-        };
+        await _repository.SaveChargementTourneeAsync(
+            dateTournee,
+            SchemaVersions.SynchronisationActuelle,
+            livreur,
+            tournee.CodeTournee,
+            tournee.LibelleTournee,
+            tournee.Chargement?.NombrePointsEnvoyes ?? lignes.Count);
+
+        return tournee;
     }
 
     private static int TryParseInt(string? value)

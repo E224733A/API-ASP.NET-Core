@@ -21,34 +21,12 @@ public class TourneesController : ControllerBase
         _tourneesService = service;
     }
 
-    /// <summary>
-    /// Renvoie la liste des tournées disponibles pour une date et un livreur.
-    /// </summary>
-    /// <remarks>
-    /// Cette route est utilisée par l'écran mobile "Choix de tournée".
-    ///
-    /// Elle permet à l'application mobile de récupérer les tournées disponibles
-    /// avant de charger le détail complet d'une tournée.
-    ///
-    /// Paramètres :
-    /// - dateTournee : date de la tournée au format yyyy-MM-dd ;
-    /// - codeLivreur : code du livreur connecté.
-    ///
-    /// Réponse :
-    /// - 200 : liste des tournées disponibles. La liste peut être vide si aucune tournée n'est trouvée ;
-    /// - 400 : date invalide ou code livreur manquant ;
-    /// - 404 : livreur introuvable ;
-    /// - 500 : erreur technique côté serveur.
-    ///
-    /// Exemple :
-    /// GET /api/tournees/disponibles?dateTournee=2026-05-06&amp;codeLivreur=2
-    /// </remarks>
     [HttpGet("disponibles")]
-    [ProducesResponseType(typeof(IReadOnlyList<TourneeDisponibleDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(TourneesDisponiblesResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiNotFoundResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
-    public async Task<ActionResult<IReadOnlyList<TourneeDisponibleDto>>> GetTourneesDisponibles(
+    public async Task<ActionResult<TourneesDisponiblesResponseDto>> GetTourneesDisponibles(
         [FromQuery] string dateTournee,
         [FromQuery] string codeLivreur)
     {
@@ -76,9 +54,9 @@ public class TourneesController : ControllerBase
             });
         }
 
-        var tournees = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreur);
+        var response = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreur);
 
-        if (tournees is null)
+        if (response is null)
         {
             return NotFound(new ApiNotFoundResponse
             {
@@ -87,36 +65,9 @@ public class TourneesController : ControllerBase
             });
         }
 
-        return Ok(tournees);
+        return Ok(response);
     }
 
-    /// <summary>
-    /// Renvoie le détail complet d'une tournée sélectionnée.
-    /// </summary>
-    /// <remarks>
-    /// Cette route est utilisée après sélection d'une tournée dans l'application mobile.
-    ///
-    /// Elle renvoie les informations nécessaires au chargement local de la tournée :
-    /// en-tête de tournée, livreur, informations de chargement et lignes clients.
-    ///
-    /// Paramètres :
-    /// - dateTournee : date de la tournée au format yyyy-MM-dd ;
-    /// - codeLivreur : code du livreur connecté ;
-    /// - codeTournee : code de la tournée sélectionnée ;
-    /// - nomLivreur : paramètre optionnel.
-    ///
-    /// L'API renvoie les données brutes nécessaires à l'application mobile.
-    /// Les règles d'affichage propres à l'interface mobile ne sont pas appliquées ici.
-    ///
-    /// Réponse :
-    /// - 200 : détail complet de la tournée ;
-    /// - 400 : date invalide, code livreur manquant ou code tournée manquant ;
-    /// - 404 : livreur ou tournée introuvable ;
-    /// - 500 : erreur technique côté serveur.
-    ///
-    /// Exemple :
-    /// GET /api/tournees/jour?dateTournee=2026-05-06&amp;codeLivreur=2&amp;codeTournee=3001
-    /// </remarks>
     [HttpGet("jour")]
     [ProducesResponseType(typeof(TourneeMobileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]

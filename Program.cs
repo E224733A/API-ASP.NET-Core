@@ -16,7 +16,11 @@ builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
-        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull;
+
+        // Important pour le contrat JSON v1.2 :
+        // les champs null doivent apparaître dans les réponses.
+        // Exemple : quantiteLivreePrevue = null signifie que l’expédition n’a rien renseigné.
+        options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
     });
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
@@ -34,6 +38,7 @@ builder.Services.Configure<ApiBehaviorOptions>(options =>
 });
 
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(options =>
 {
     options.SwaggerDoc("v1", new OpenApiInfo

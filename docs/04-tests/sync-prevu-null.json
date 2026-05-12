@@ -1,9 +1,9 @@
 {
   "schemaVersion": "1.2",
-  "idSynchronisation": "10000000-0000-4000-8000-000000000002",
-  "dateTournee": "2026-06-04",
-  "codeTournee": "4006",
-  "libelleTournee": "BOUAYE",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000014",
+  "dateTournee": "2026-06-16",
+  "codeTournee": "4022",
+  "libelleTournee": "TEST PREVU NULL",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
@@ -11,13 +11,13 @@
   "mobile": {
     "nomAppareil": "Postman Test",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-06-04T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-06-04T16:45:00+02:00"
+    "dateChargementMobile": "2026-06-16T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-16T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-06-04|4006|4|333|341|1",
+      "idLigneSource": "2026-06-16|4022|2|333|341|1",
       "ordreArret": 1,
       "horaire": 1,
       "client": {
@@ -35,23 +35,23 @@
         "codePostal": "85230"
       },
       "tournee": {
-        "codeTournee": "4006",
-        "libelleTournee": "BOUAYE",
-        "jourTournee": 4,
-        "jourLibelle": "Jeudi",
+        "codeTournee": "4022",
+        "libelleTournee": "TEST PREVU NULL",
+        "jourTournee": 2,
+        "jourLibelle": "Mardi",
         "schemaLivraison": "1W1"
       },
       "retour": {
-        "jourTourneeRetour": 4,
-        "jourRetourLibelle": "Jeudi",
-        "codeTourneeRetour": "4006",
-        "libelleTourneeRetour": "BOUAYE"
+        "jourTourneeRetour": 2,
+        "jourRetourLibelle": "Mardi",
+        "codeTourneeRetour": "4022",
+        "libelleTourneeRetour": "TEST PREVU NULL"
       },
       "infosLivreur": {
         "instructions": "CODE 8578 *",
         "commentaireExceptionnel": null,
         "zoneDechargement": null,
-        "zoneDechargementAffichee": "4",
+        "zoneDechargementAffichee": "2",
         "zone": null,
         "precision": null,
         "cle": null,
@@ -63,7 +63,7 @@
         "precisionLivreur": "Test API v1.2",
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": "2026-06-04T09:12:00+02:00",
+        "heureValidation": "2026-06-16T09:12:00+02:00",
         "estValidee": true,
         "quantites": [
           {
@@ -71,21 +71,7 @@
             "libelle": "Rolls",
             "quantiteLivreePrevue": null,
             "quantiteLivree": 1,
-            "quantiteRecuperee": 2
-          },
-          {
-            "codeArticle": "TAPIS",
-            "libelle": "Tapis",
-            "quantiteLivreePrevue": 0,
-            "quantiteLivree": 0,
             "quantiteRecuperee": 0
-          },
-          {
-            "codeArticle": "SACS",
-            "libelle": "Sacs",
-            "quantiteLivreePrevue": 2,
-            "quantiteLivree": 3,
-            "quantiteRecuperee": 1
           }
         ]
       }

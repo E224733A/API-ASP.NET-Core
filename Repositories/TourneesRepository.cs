@@ -1,4 +1,5 @@
 using Dapper;
+using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Data;
 using System.Data;
 
@@ -14,6 +15,31 @@ public record TourneeDisponibleRecord
 {
     public string CodeTournee { get; init; } = string.Empty;
     public string? LibelleTournee { get; init; }
+    public int NombrePoints { get; init; }
+}
+
+public record ArticleSaisissableRecord
+{
+    public string CodeArticle { get; init; } = string.Empty;
+    public string LibelleArticle { get; init; } = string.Empty;
+    public int OrdreAffichage { get; init; }
+}
+
+public record CommentaireExceptionnelRecord
+{
+    public string NumClient { get; init; } = string.Empty;
+    public string? CodePDL { get; init; }
+    public string Commentaire { get; init; } = string.Empty;
+}
+
+public record PreRemplissageQuantiteRecord
+{
+    public string IdLigneSource { get; init; } = string.Empty;
+    public string NumClient { get; init; } = string.Empty;
+    public string? CodePDL { get; init; }
+    public string CodeArticle { get; init; } = string.Empty;
+    public string? LibelleArticle { get; init; }
+    public int? QuantiteLivreePrevue { get; init; }
 }
 
 public record TourneeLigneRecord
@@ -46,7 +72,6 @@ public record TourneeLigneRecord
     public string? SchemaLivraison { get; init; }
 
     public string? Instructions { get; init; }
-    public string? CommentaireFiche { get; init; }
     public string? ZoneDechargement { get; init; }
     public string? Zone { get; init; }
     public string? Precision { get; init; }
@@ -100,7 +125,8 @@ public class TourneesRepository
         const string sql = """
             SELECT
                 LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) AS CodeTournee,
-                MAX(t.TOURNEE_DESC) AS LibelleTournee
+                MAX(t.TOURNEE_DESC) AS LibelleTournee,
+                COUNT(1) AS NombrePoints
             FROM v_tournee AS t
             WHERE TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50))))) = @JourTournee
               AND t.TOURNEE IS NOT NULL
@@ -118,6 +144,257 @@ public class TourneesRepository
             {
                 JourTournee = jourTournee
             });
+    }
+
+    public async Task<IReadOnlyList<ArticleSaisissableRecord>> GetArticlesSaisissablesAsync()
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        const string sql = """
+            SELECT
+                CodeArticle,
+                LibelleArticle,
+                OrdreAffichage
+            FROM dbo.Mobile_ArticleSaisissable
+            WHERE EstActif = 1
+              AND EstVisibleMobile = 1
+            ORDER BY
+                OrdreAffichage,
+                CodeArticle;
+            """;
+
+        var articles = await connection.QueryAsync<ArticleSaisissableRecord>(sql);
+        return articles.ToList();
+    }
+
+    public async Task<IReadOnlyList<CommentaireExceptionnelRecord>> GetCommentairesExceptionnelsAsync(
+        DateOnly dateTournee)
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        const string sql = """
+            SELECT
+                LTRIM(RTRIM(NumClient)) AS NumClient,
+                NULLIF(LTRIM(RTRIM(CodePDL)), '') AS CodePDL,
+                Commentaire
+            FROM dbo.Mobile_CommentaireExceptionnel
+            WHERE DateTournee = @DateTournee
+              AND Actif = 1;
+            """;
+
+        var commentaires = await connection.QueryAsync<CommentaireExceptionnelRecord>(
+            sql,
+            new
+            {
+                DateTournee = dateTournee.ToDateTime(TimeOnly.MinValue).Date
+            });
+
+        return commentaires.ToList();
+    }
+
+    public async Task<IReadOnlyList<PreRemplissageQuantiteRecord>> GetPreRemplissagesAsync(
+        DateOnly dateTournee,
+        string codeTournee)
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+
+        const string sql = """
+            SELECT
+                q.IdLigneSource,
+                q.NumClient,
+                q.CodePDL,
+                q.CodeArticle,
+                COALESCE(q.LibelleArticle, a.LibelleArticle) AS LibelleArticle,
+                q.QuantiteLivreePrevue
+            FROM dbo.Mobile_PreRemplissageTournee AS p
+            INNER JOIN dbo.Mobile_PreRemplissageQuantite AS q
+                ON q.IdPreRemplissageTournee = p.IdPreRemplissageTournee
+            LEFT JOIN dbo.Mobile_ArticleSaisissable AS a
+                ON a.CodeArticle = q.CodeArticle
+            WHERE p.DateTournee = @DateTournee
+              AND p.CodeTournee = @CodeTournee
+              AND q.Actif = 1;
+            """;
+
+        var preRemplissages = await connection.QueryAsync<PreRemplissageQuantiteRecord>(
+            sql,
+            new
+            {
+                DateTournee = dateTournee.ToDateTime(TimeOnly.MinValue).Date,
+                CodeTournee = codeTournee.Trim()
+            });
+
+        return preRemplissages.ToList();
+    }
+
+    public async Task SaveChargementTourneeAsync(
+        DateOnly dateTournee,
+        string schemaVersion,
+        LivreurRecord livreur,
+        string codeTournee,
+        string? libelleTournee,
+        int nombrePointsEnvoyes,
+        string? nomAppareil = null,
+        string? versionApplication = null,
+        string? adresseIp = null)
+    {
+        using var connection = _connectionFactory.CreateMobileConnection();
+        await connection.OpenAsync();
+
+        using var transaction = await connection.BeginTransactionAsync();
+        var now = DateTimeOffset.Now;
+        var codeLivreur = livreur.CodeLivreur.Trim();
+        var nomLivreur = string.IsNullOrWhiteSpace(livreur.NomLivreur)
+            ? codeLivreur
+            : livreur.NomLivreur.Trim();
+
+        try
+        {
+            await connection.ExecuteAsync(
+                """
+                MERGE INTO dbo.Mobile_Livreur AS target
+                USING (
+                    SELECT
+                        @CodeLivreur AS CodeLivreur,
+                        @NomLivreur AS NomLivreur
+                ) AS source
+                ON target.CodeLivreur = source.CodeLivreur
+                WHEN MATCHED THEN
+                    UPDATE SET
+                        NomLivreur = source.NomLivreur,
+                        EstActif = 1,
+                        DateModification = @Now
+                WHEN NOT MATCHED THEN
+                    INSERT (
+                        CodeLivreur,
+                        NomLivreur,
+                        EstActif,
+                        DateCreation,
+                        DateModification
+                    )
+                    VALUES (
+                        source.CodeLivreur,
+                        source.NomLivreur,
+                        1,
+                        @Now,
+                        NULL
+                    );
+                """,
+                new
+                {
+                    CodeLivreur = codeLivreur,
+                    NomLivreur = nomLivreur,
+                    Now = now
+                },
+                transaction);
+
+            var idLivreur = await connection.QuerySingleAsync<int>(
+                """
+                SELECT IdLivreur
+                FROM dbo.Mobile_Livreur
+                WHERE CodeLivreur = @CodeLivreur;
+                """,
+                new
+                {
+                    CodeLivreur = codeLivreur
+                },
+                transaction);
+
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO dbo.Mobile_ChargementTournee (
+                    SchemaVersion,
+                    DateTournee,
+                    CodeTournee,
+                    LibelleTournee,
+                    IdLivreur,
+                    DateChargement,
+                    NombrePointsEnvoyes,
+                    NomAppareil,
+                    VersionApplication,
+                    AdresseIP,
+                    DateCreation
+                )
+                VALUES (
+                    @SchemaVersion,
+                    @DateTournee,
+                    @CodeTournee,
+                    @LibelleTournee,
+                    @IdLivreur,
+                    @DateChargement,
+                    @NombrePointsEnvoyes,
+                    @NomAppareil,
+                    @VersionApplication,
+                    @AdresseIP,
+                    @DateCreation
+                );
+                """,
+                new
+                {
+                    SchemaVersion = schemaVersion,
+                    DateTournee = dateTournee.ToDateTime(TimeOnly.MinValue).Date,
+                    CodeTournee = codeTournee.Trim(),
+                    LibelleTournee = libelleTournee,
+                    IdLivreur = idLivreur,
+                    DateChargement = now,
+                    NombrePointsEnvoyes = nombrePointsEnvoyes,
+                    NomAppareil = nomAppareil,
+                    VersionApplication = versionApplication,
+                    AdresseIP = adresseIp,
+                    DateCreation = now
+                },
+                transaction);
+
+            await connection.ExecuteAsync(
+                """
+                INSERT INTO dbo.Mobile_LogSynchronisation (
+                    IdTourneeMobile,
+                    IdLivreur,
+                    IdSynchronisation,
+                    DateEvenement,
+                    TypeEvenement,
+                    Niveau,
+                    Message,
+                    DetailTechnique,
+                    AdresseIP,
+                    NomAppareil,
+                    VersionApplication
+                )
+                VALUES (
+                    NULL,
+                    @IdLivreur,
+                    NULL,
+                    @DateEvenement,
+                    @TypeEvenement,
+                    @Niveau,
+                    @Message,
+                    @DetailTechnique,
+                    @AdresseIP,
+                    @NomAppareil,
+                    @VersionApplication
+                );
+                """,
+                new
+                {
+                    IdLivreur = idLivreur,
+                    DateEvenement = now,
+                    TypeEvenement = "CHARGEMENT_TOURNEE",
+                    Niveau = "INFO",
+                    Message = "Tournée chargée par le mobile.",
+                    DetailTechnique = $"Tournée {codeTournee.Trim()} du {dateTournee:yyyy-MM-dd} chargée avec {nombrePointsEnvoyes} ligne(s).",
+                    AdresseIP = adresseIp,
+                    NomAppareil = nomAppareil,
+                    VersionApplication = versionApplication
+                },
+                transaction);
+
+            await transaction.CommitAsync();
+        }
+        catch
+        {
+            await transaction.RollbackAsync();
+            throw;
+        }
     }
 
     private async Task<string> GetFermetureCustomerColumnAsync(IDbConnection connection)
@@ -215,7 +492,6 @@ public class TourneesRepository
                     t.SCHEMA_LIV AS SchemaLivraison,
 
                     t.INSTRUCTIONS AS Instructions,
-                    CAST(NULL AS NVARCHAR(100)) AS CommentaireFiche,
 
                     t.ZONE_DECH AS ZoneDechargement,
                     CAST(NULL AS NVARCHAR(100)) AS Zone,

@@ -1,121 +1,82 @@
 # Tests de concurrence — API tournées mobile
 
-## 1. Objectif des tests
+## 1. Objectif
 
-Ces tests servent à vérifier le comportement de l’API ASP.NET Core lorsque plusieurs livreurs chargent leur tournée en même temps le matin.
+Ces tests vérifient que l’API reste stable lorsque plusieurs livreurs chargent ou synchronisent leur tournée en même temps.
 
-Dans le fonctionnement prévu de l’application mobile, les livreurs utilisent principalement deux routes au moment du chargement :
+Routes concernées :
 
 ```text
-GET /api/tournees/disponibles
-GET /api/tournees/jour
+GET  /api/tournees/disponibles
+GET  /api/tournees/jour
+POST /api/synchronisations
 ```
 
-La route `GET /api/tournees/disponibles` est utilisée pour afficher la liste des tournées disponibles pour une date et un livreur.
+Le test ne remplace pas un test de production complet. Il valide un scénario réaliste de chargement simultané au dépôt et d’envoi simultané en fin de journée.
 
-La route `GET /api/tournees/jour` est utilisée pour charger le détail complet d’une tournée dans l’application mobile. Elle est plus lourde, car elle récupère les clients, les points de livraison, les informations de retour, les zones, les fermetures, les articles et les données nécessaires à la saisie mobile.
+## 2. Environnement
 
-L’objectif n’est pas de faire un test de production complet, mais de vérifier que l’API reste stable dans un scénario réaliste de chargement simultané.
-
-
-## 2. Environnement de test
-
-Les tests ont été exécutés en environnement de développement local.
-
-API utilisée :
+API testée :
 
 ```text
 http://localhost:5120
 ```
 
-Vérification de disponibilité :
+Disponibilité :
 
 ```powershell
 curl.exe "http://localhost:5120/api/health"
 ```
 
-Réponse obtenue :
-
-```json
-{
-  "service": "API-ASP.NET-Core",
-  "status": "ok",
-  "environment": "Development",
-  "date": "2026-05-07T11:31:03.1368547+02:00"
-}
-```
-
-L’API doit rester lancée dans un terminal avec :
+L’API doit être lancée avec :
 
 ```powershell
 dotnet run
 ```
 
-Le fait que l’API continue de tourner est normal : une API web reste en écoute pour répondre aux requêtes HTTP tant qu’elle n’est pas arrêtée avec `Ctrl + C`.
+Le contrat JSON utilisé est :
 
+```text
+schemaVersion = "1.2"
+```
 
-## 3. Points importants avant de tester
+## 3. Points à vérifier avant les tests
 
-### 3.1 Vérifier le bon port
+### Port
 
-Le port utilisé pendant les tests est :
+Le port utilisé est :
 
 ```text
 5120
 ```
 
-Une erreur de port provoque des échecs de connexion.
-
-Exemple d’erreur rencontrée :
-
-```text
-Impossible de se connecter au serveur distant
-```
-
-Cause observée :
-
-```text
-http://localhost:5012
-```
-
-au lieu de :
-
-```text
-http://localhost:5120
-```
-
-Avant de lancer un test de concurrence, toujours vérifier :
+Vérification :
 
 ```powershell
 curl.exe "http://localhost:5120/api/health"
 ```
 
-### 3.2 Différence entre 404 et 500
-
-Une erreur `404` signifie généralement que la combinaison testée n’existe pas :
+### Codes d’erreur
 
 ```text
-dateTournee + codeTournee + codeLivreur
+404 -> combinaison dateTournee + codeTournee + codeLivreur inexistante
+409 -> conflit attendu pour un doublon
+500 -> erreur technique à analyser, souvent timeout SQL sous forte charge
 ```
-
-Ce n’est pas forcément un problème de concurrence.
-
-Une erreur `500` est plus importante. Dans les tests réalisés, les erreurs `500` observées pendant le stress test venaient de timeouts SQL.
-
 
 ## 4. Test 1 — 20 requêtes concurrentes sur `/api/tournees/disponibles`
 
-### 4.1 Objectif
+### Objectif
 
-Ce test simule plusieurs téléphones qui demandent en même temps la liste des tournées disponibles.
+Simuler plusieurs téléphones qui demandent en même temps la liste des tournées disponibles.
 
-Route testée :
+Route :
 
 ```text
 GET /api/tournees/disponibles?dateTournee=2026-05-07&codeLivreur=2
 ```
 
-### 4.2 Script PowerShell
+### Script PowerShell
 
 ```powershell
 $baseUrl = "http://localhost:5120"
@@ -202,7 +163,7 @@ if ($failed.Count -gt 0) {
 }
 ```
 
-### 4.3 Résultat obtenu
+### Résultat obtenu
 
 ```text
 Requêtes       : 20
@@ -215,51 +176,31 @@ Temps max      : 10662 ms
 Percentile 95  : 9575 ms
 ```
 
-### 4.4 Conclusion
+### Conclusion
 
 La route `GET /api/tournees/disponibles` supporte 20 requêtes concurrentes sans erreur.
 
-Cette route est adaptée à l’écran de choix de tournée.
-
-
 ## 5. Test 2 — Vérification individuelle du chargement complet
 
-### 5.1 Objectif
+### Objectif
 
-Avant de tester la concurrence sur le chargement complet, il faut vérifier que chaque tournée existe bien et répond correctement seule.
+Vérifier que chaque tournée existe avant le test de concurrence.
 
-Route testée :
+Route :
 
 ```text
 GET /api/tournees/jour?dateTournee=2026-05-07&codeTournee=XXXX&codeLivreur=2
 ```
 
-### 5.2 Tournées disponibles trouvées
+### Tournées disponibles testées
 
 ```text
-4001 — POUZAUGES LES HERBIERS
-4002 — MORBIHAN SAINT NAZAIRE
-4003 — ST NAZAIRE
-4004 — LES SABLES PL
-4005 — TOURNEE VTS PL
-4006 — BOUAYE
-4007 — FONTENAY CHATAIGNERAIE
-4011 — LES SABLES
-4012 — MORBIHAN VL 2
-4013 — TOURNEE VETEMENT MONTAIGU
-4014 — MDR VENDEE
-4015 — MORBIHAN VL
-4016 — SABLES VL 2
-4017 — NANTES
-4018 — CHALLANS
-4019 — SAINT GILLES
-4020 — ECOLES NANTES
-4021 — SAINT JEAN
-4022 — MDR CHANTONNAY
-4023 — MOTHE ACHARD
+4001, 4002, 4003, 4004, 4005, 4006, 4007,
+4011, 4012, 4013, 4014, 4015, 4016, 4017,
+4018, 4019, 4020, 4021, 4022, 4023
 ```
 
-### 5.3 Résultat obtenu
+### Résultat obtenu
 
 Chaque tournée testée individuellement a répondu :
 
@@ -267,30 +208,15 @@ Chaque tournée testée individuellement a répondu :
 HTTP 200
 ```
 
-### 5.4 Conclusion
-
-Les tournées existent bien pour la date `2026-05-07` et le livreur `2`.
-
-La route `GET /api/tournees/jour` fonctionne correctement hors surcharge.
-
-
 ## 6. Test 3 — Chargements complets simultanés sur `/api/tournees/jour`
 
-### 6.1 Objectif
+### Objectif
 
-Ce test simule plusieurs livreurs qui chargent chacun une tournée complète en même temps.
+Simuler plusieurs livreurs qui chargent chacun une tournée complète en même temps.
 
-Route testée :
+### Script PowerShell
 
-```text
-GET /api/tournees/jour
-```
-
-Contrairement à `/api/tournees/disponibles`, cette route est plus coûteuse car elle construit tout le JSON nécessaire à l’application mobile.
-
-### 6.2 Script PowerShell
-
-Le script ci-dessous peut être utilisé avec 5, 10 ou 20 tournées en modifiant simplement la variable `$codesTournees`.
+Modifier `$codesTournees` pour tester 5, 10 ou 20 tournées.
 
 ```powershell
 $baseUrl = "http://localhost:5120"
@@ -389,25 +315,7 @@ if ($failed.Count -gt 0) {
 }
 ```
 
-
-## 7. Résultat avec 10 chargements complets simultanés
-
-### 7.1 Tournées testées
-
-```text
-4001
-4002
-4003
-4004
-4005
-4006
-4007
-4011
-4012
-4013
-```
-
-### 7.2 Résultat obtenu
+### Résultat avec 10 chargements simultanés
 
 ```text
 Requêtes       : 10
@@ -420,54 +328,7 @@ Temps max      : 14119 ms
 Percentile 95  : 14119 ms
 ```
 
-### 7.3 Détail
-
-```text
-4001 — HTTP 200
-4002 — HTTP 200
-4003 — HTTP 200
-4004 — HTTP 200
-4005 — HTTP 200
-4006 — HTTP 200
-4007 — HTTP 200
-4011 — HTTP 200
-4012 — HTTP 200
-4013 — HTTP 200
-```
-
-### 7.4 Conclusion
-
-L’API supporte 10 chargements complets simultanés de tournées dans l’environnement de développement.
-
-
-## 8. Résultat avec 20 chargements complets simultanés
-
-### 8.1 Tournées testées
-
-```text
-4001
-4002
-4003
-4004
-4005
-4006
-4007
-4011
-4012
-4013
-4014
-4015
-4016
-4017
-4018
-4019
-4020
-4021
-4022
-4023
-```
-
-### 8.2 Résultat obtenu
+### Résultat avec 20 chargements simultanés
 
 ```text
 Requêtes       : 20
@@ -480,51 +341,15 @@ Temps max      : 22192 ms
 Percentile 95  : 21970 ms
 ```
 
-### 8.3 Détail
+### Conclusion
 
-```text
-4001 — HTTP 200
-4002 — HTTP 200
-4003 — HTTP 200
-4004 — HTTP 200
-4005 — HTTP 200
-4006 — HTTP 200
-4007 — HTTP 200
-4011 — HTTP 200
-4012 — HTTP 200
-4013 — HTTP 200
-4014 — HTTP 200
-4015 — HTTP 200
-4016 — HTTP 200
-4017 — HTTP 200
-4018 — HTTP 200
-4019 — HTTP 200
-4020 — HTTP 200
-4021 — HTTP 200
-4022 — HTTP 200
-4023 — HTTP 200
-```
+L’API supporte 20 chargements complets simultanés dans l’environnement de développement.
 
-### 8.4 Conclusion
+Ce test est représentatif du besoin métier : plusieurs livreurs chargent leur tournée au dépôt.
 
-L’API supporte 20 chargements complets simultanés de tournées dans l’environnement de développement.
+## 7. Stress test à 100 chargements complets simultanés
 
-Ce test est le plus représentatif du besoin métier : plusieurs livreurs chargent leur tournée en même temps au dépôt.
-
-
-## 9. Stress test à 100 chargements complets simultanés
-
-### 9.1 Objectif
-
-Ce test a été lancé pour pousser volontairement l’API au-delà d’un scénario métier classique.
-
-Il a consisté à envoyer 100 chargements complets simultanés sur :
-
-```text
-GET /api/tournees/jour
-```
-
-### 9.2 Résultat obtenu
+### Résultat obtenu
 
 ```text
 Requêtes       : 100
@@ -537,11 +362,7 @@ Temps max      : 73516 ms
 Percentile 95  : 73289 ms
 ```
 
-### 9.3 Erreur observée
-
-Les échecs ont retourné des erreurs HTTP 500.
-
-Erreur côté API :
+### Erreur observée
 
 ```text
 Microsoft.Data.SqlClient.SqlException :
@@ -549,44 +370,34 @@ Le délai d'exécution a expiré.
 Le délai d'attente s'est écoulé avant la fin de l'opération ou le serveur ne répond pas.
 ```
 
-Erreur localisée dans :
+Localisation :
 
 ```text
 TourneesRepository.GetTourneeLinesAsync
 Dapper.QueryAsync
 ```
 
-### 9.4 Interprétation
+### Interprétation
 
-Le stress test à 100 chargements complets simultanés dépasse les capacités actuelles de l’environnement de développement ou des vues SQL utilisées.
+100 chargements complets simultanés dépassent le scénario métier attendu.
 
-Le problème observé est un timeout SQL.
+Le problème observé est un timeout SQL côté chargement complet.
 
-Ce résultat ne remet pas en cause le fonctionnement normal de l’application mobile, car 100 chargements complets simultanés représentent une charge très supérieure au scénario métier attendu.
+Ce résultat ne remet pas en cause le fonctionnement normal de l’application mobile.
 
+## 8. Test 4 — Envoi du soir avec 10 synchronisations différentes
 
-## 10. Test 4 — Envoi du soir avec 10 synchronisations différentes
+### Objectif
 
-### 10.1 Objectif
+Simuler 10 téléphones qui envoient chacun une tournée différente en même temps.
 
-Ce test simule plusieurs livreurs qui envoient chacun une tournée différente en même temps en fin de journée.
-
-Route testée :
+Route :
 
 ```text
 POST /api/synchronisations
 ```
 
-Contrairement aux tests du matin, cette route écrit en base.
-
-Le test utilise donc :
-
-- une date de test ;
-- des codes tournées de test ;
-- des codes livreurs de test ;
-- des identifiants de synchronisation uniques.
-
-### 10.2 Script PowerShell
+### Script PowerShell
 
 ```powershell
 $baseUrl = "http://localhost:5120"
@@ -603,7 +414,7 @@ for ($i = 1; $i -le $nbRequetes; $i++) {
     $idSynchronisation = [guid]::NewGuid().ToString()
 
     $payload = [PSCustomObject]@{
-        schemaVersion = "1.1"
+        schemaVersion = "1.2"
         idSynchronisation = $idSynchronisation
         dateTournee = $dateTournee
         codeTournee = $codeTournee
@@ -623,6 +434,7 @@ for ($i = 1; $i -le $nbRequetes; $i++) {
             [PSCustomObject]@{
                 idLigneSource = "$dateTournee|$codeTournee|$codeLivreur|CLIENT$numero|PDL$numero|1"
                 ordreArret = 1
+                horaire = 1
                 client = [PSCustomObject]@{
                     numClient = "CLIENT$numero"
                     nomClient = "CLIENT TEST $numero"
@@ -631,6 +443,31 @@ for ($i = 1; $i -le $nbRequetes; $i++) {
                 pointLivraison = [PSCustomObject]@{
                     codePDL = "PDL$numero"
                     descriptionPDL = "POINT TEST $numero"
+                }
+                tournee = [PSCustomObject]@{
+                    codeTournee = $codeTournee
+                    libelleTournee = "TEST SOIR $numero"
+                    jourTournee = 1
+                    jourLibelle = "Lundi"
+                    schemaLivraison = "TEST"
+                }
+                retour = [PSCustomObject]@{
+                    jourTourneeRetour = 1
+                    jourRetourLibelle = "Lundi"
+                    codeTourneeRetour = $codeTournee
+                    libelleTourneeRetour = "TEST SOIR $numero"
+                }
+                infosLivreur = [PSCustomObject]@{
+                    instructions = $null
+                    commentaireExceptionnel = $null
+                    zoneDechargement = $null
+                    zoneDechargementAffichee = $null
+                    zone = $null
+                    precision = $null
+                    cle = $null
+                    estFerme = $false
+                    dateFermeture = $null
+                    motifFermeture = $null
                 }
                 saisie = [PSCustomObject]@{
                     precisionLivreur = $null
@@ -642,18 +479,21 @@ for ($i = 1; $i -le $nbRequetes; $i++) {
                         [PSCustomObject]@{
                             codeArticle = "ROLLS"
                             libelle = "Rolls"
+                            quantiteLivreePrevue = $null
                             quantiteLivree = 1
                             quantiteRecuperee = 1
                         },
                         [PSCustomObject]@{
                             codeArticle = "TAPIS"
                             libelle = "Tapis"
+                            quantiteLivreePrevue = 0
                             quantiteLivree = 2
                             quantiteRecuperee = 0
                         },
                         [PSCustomObject]@{
                             codeArticle = "SACS"
                             libelle = "Sacs"
+                            quantiteLivreePrevue = 0
                             quantiteLivree = 0
                             quantiteRecuperee = 1
                         }
@@ -759,7 +599,7 @@ if ($failed.Count -gt 0) {
 }
 ```
 
-### 10.3 Résultat obtenu
+### Résultat obtenu
 
 ```text
 Requêtes       : 10
@@ -772,35 +612,15 @@ Temps max      : 3810 ms
 Percentile 95  : 3810 ms
 ```
 
-### 10.4 Détail
-
-```text
-TS142442001 — TEST001 — HTTP 200
-TS142442002 — TEST002 — HTTP 200
-TS142442003 — TEST003 — HTTP 200
-TS142442004 — TEST004 — HTTP 200
-TS142442005 — TEST005 — HTTP 200
-TS142442006 — TEST006 — HTTP 200
-TS142442007 — TEST007 — HTTP 200
-TS142442008 — TEST008 — HTTP 200
-TS142442009 — TEST009 — HTTP 200
-TS142442010 — TEST010 — HTTP 200
-```
-
-### 10.5 Conclusion
+### Conclusion
 
 L’API supporte 10 envois simultanés différents sur `POST /api/synchronisations`.
 
-Ce résultat est satisfaisant pour le scénario d’envoi du soir.
+## 9. Test 5 — Anti-doublon sur un envoi identique
 
+### Objectif
 
-## 11. Test 5 — Anti-doublon sur un envoi identique
-
-### 11.1 Objectif
-
-Ce test vérifie que l’API bloque correctement les doubles envois.
-
-Le même JSON de synchronisation est envoyé 5 fois en parallèle.
+Envoyer le même JSON de synchronisation 5 fois en parallèle.
 
 Comportement attendu :
 
@@ -809,7 +629,7 @@ Comportement attendu :
 4 requêtes refusées en HTTP 409
 ```
 
-### 11.2 Script PowerShell
+### Script PowerShell
 
 ```powershell
 $baseUrl = "http://localhost:5120"
@@ -821,7 +641,7 @@ $codeTournee = "DUPTEST001"
 $codeLivreur = "DUP001"
 
 $payload = [PSCustomObject]@{
-    schemaVersion = "1.1"
+    schemaVersion = "1.2"
     idSynchronisation = $idSynchronisation
     dateTournee = $dateTournee
     codeTournee = $codeTournee
@@ -841,6 +661,7 @@ $payload = [PSCustomObject]@{
         [PSCustomObject]@{
             idLigneSource = "$dateTournee|$codeTournee|$codeLivreur|CLIENT001|PDL001|1"
             ordreArret = 1
+            horaire = 1
             client = [PSCustomObject]@{
                 numClient = "CLIENT001"
                 nomClient = "CLIENT DOUBLON"
@@ -849,6 +670,31 @@ $payload = [PSCustomObject]@{
             pointLivraison = [PSCustomObject]@{
                 codePDL = "PDL001"
                 descriptionPDL = "POINT DOUBLON"
+            }
+            tournee = [PSCustomObject]@{
+                codeTournee = $codeTournee
+                libelleTournee = "TEST DOUBLON"
+                jourTournee = 1
+                jourLibelle = "Lundi"
+                schemaLivraison = "TEST"
+            }
+            retour = [PSCustomObject]@{
+                jourTourneeRetour = 1
+                jourRetourLibelle = "Lundi"
+                codeTourneeRetour = $codeTournee
+                libelleTourneeRetour = "TEST DOUBLON"
+            }
+            infosLivreur = [PSCustomObject]@{
+                instructions = $null
+                commentaireExceptionnel = $null
+                zoneDechargement = $null
+                zoneDechargementAffichee = $null
+                zone = $null
+                precision = $null
+                cle = $null
+                estFerme = $false
+                dateFermeture = $null
+                motifFermeture = $null
             }
             saisie = [PSCustomObject]@{
                 precisionLivreur = $null
@@ -860,6 +706,7 @@ $payload = [PSCustomObject]@{
                     [PSCustomObject]@{
                         codeArticle = "ROLLS"
                         libelle = "Rolls"
+                        quantiteLivreePrevue = $null
                         quantiteLivree = 1
                         quantiteRecuperee = 1
                     }
@@ -936,7 +783,7 @@ Select-Object Name, Count |
 Format-Table -AutoSize
 ```
 
-### 11.3 Résultat obtenu
+### Résultat obtenu
 
 ```text
 Numero Succes StatusCode TempsMs
@@ -948,7 +795,7 @@ Numero Succes StatusCode TempsMs
 5      False  409        388
 ```
 
-Regroupement par code HTTP :
+Regroupement :
 
 ```text
 Name Count
@@ -957,28 +804,19 @@ Name Count
 409      4
 ```
 
-### 11.4 Interprétation
-
-Une seule synchronisation est enregistrée.
-
-Les autres requêtes sont refusées avec le code HTTP `409 Conflict`.
-
-Dans ce test, PowerShell affiche `Succes = False` pour les réponses `409`, car `Invoke-WebRequest` considère les codes d’erreur HTTP comme des exceptions.
-
-Fonctionnellement, les `409` sont attendus et valident la protection anti-doublon.
-
-### 11.5 Conclusion
+### Conclusion
 
 La protection anti-doublon fonctionne correctement.
 
-L’API empêche qu’une même synchronisation soit enregistrée plusieurs fois.
+Une seule synchronisation est enregistrée.
 
+Les autres requêtes sont refusées en `409 Conflict`.
 
-## 12. Nettoyage des données de test
+## 10. Nettoyage des données de test
 
-Les tests sur `POST /api/synchronisations` écrivent en base.
+Les tests `POST /api/synchronisations` écrivent en base.
 
-Après les tests, les données de test peuvent être supprimées avec le script SQL suivant.
+Nettoyage des données artificielles :
 
 ```sql
 DECLARE @DateDebutTest date = '2099-01-01';
@@ -1018,10 +856,9 @@ WHERE CodeLivreur LIKE 'TEST%'
    OR CodeLivreur LIKE 'DUP%';
 ```
 
+## 11. Analyse générale
 
-## 13. Analyse générale
-
-### 13.1 Route `/api/tournees/disponibles`
+### GET `/api/tournees/disponibles`
 
 Cette route est légère.
 
@@ -1029,32 +866,30 @@ Elle supporte 20 requêtes concurrentes sans erreur.
 
 Elle est adaptée à l’écran de choix de tournée.
 
-### 13.2 Route `/api/tournees/jour`
+### GET `/api/tournees/jour`
 
 Cette route est plus lourde.
-
-Elle charge une tournée complète et construit le JSON utilisé par l’application mobile.
 
 Elle supporte :
 
 ```text
-10 chargements simultanés : OK
-20 chargements simultanés : OK
-100 chargements simultanés : timeout SQL
+10 chargements simultanés  -> OK
+20 chargements simultanés  -> OK
+100 chargements simultanés -> timeout SQL
 ```
 
-### 13.3 Route `/api/synchronisations`
+### POST `/api/synchronisations`
 
 Cette route écrit en base.
 
 Elle supporte :
 
 ```text
-10 envois différents simultanés : OK
-5 envois identiques simultanés : 1 succès + 4 conflits 409
+10 envois différents simultanés -> OK
+5 envois identiques simultanés  -> 1 succès + 4 conflits 409
 ```
 
-### 13.4 Interprétation métier
+### Interprétation métier
 
 Les résultats les plus importants sont :
 
@@ -1064,56 +899,45 @@ Les résultats les plus importants sont :
 Protection anti-doublon validée
 ```
 
-Cela permet de valider que l’API peut gérer un scénario réaliste où plusieurs livreurs chargent leur tournée au dépôt le matin, puis renvoient leurs données en fin de journée.
+Cela valide un scénario réaliste de dépôt.
 
-
-## 14. Limites du test
+## 12. Limites
 
 Ces tests ont été réalisés en environnement de développement local.
 
-Les temps mesurés sont indicatifs pour plusieurs raisons :
+Les temps sont indicatifs :
 
 - PowerShell `Start-Job` ajoute du coût ;
-- les jobs sont lancés dans des processus séparés ;
 - le PC de développement n’est pas un serveur de production ;
 - SQL Server et l’API tournent dans un environnement de test ;
-- les vues ABSSolute peuvent être plus ou moins coûteuses selon la charge ;
+- les vues ABSSolute peuvent être coûteuses selon la charge ;
 - les tests POST utilisent des données artificielles.
 
-Le temps total affiché par le script peut être supérieur au temps maximal d’une requête, car il inclut aussi le lancement, l’attente et la récupération des jobs PowerShell.
+## 13. Conclusion finale
 
-
-## 12. Conclusion finale
-
-Les tests de concurrence montrent que l’API est fonctionnelle et stable pour un scénario réaliste de chargement simultané.
-
+L’API est fonctionnelle et stable pour un scénario réaliste de chargement simultané.
 
 ```text
-L’API supporte 20 chargements complets simultanés de tournées dans l’environnement de développement.
-Ce résultat est satisfaisant pour une première version destinée aux livreurs, si le nombre réel de chargements simultanés reste proche de cet ordre de grandeur.
+20 chargements complets simultanés : OK
+10 envois différents simultanés   : OK
+anti-doublon concurrent           : OK
 ```
 
+## 14. Améliorations possibles
 
-## 13. Améliorations possibles
-
-Pour améliorer encore la robustesse sous forte charge, plusieurs pistes peuvent être étudiées plus tard :
+Pistes à étudier plus tard :
 
 - optimiser la requête SQL de chargement complet ;
 - analyser les performances des vues ABSSolute ;
 - vérifier les index sur les colonnes utilisées pour les jointures ;
-- mesurer les temps directement côté SQL Server ;
-- ajouter une gestion propre des timeouts SQL côté API ;
-- retourner un message JSON lisible au lieu d’une exception non gérée ;
-- tester sur une VM ou un serveur plus proche de l’environnement final ;
-- éviter que tous les téléphones chargent exactement au même instant si l’entreprise a beaucoup de livreurs ;
-- envisager une mise en cache courte des données de tournée si le besoin apparaît.
+- mesurer les temps côté SQL Server ;
+- gérer proprement les timeouts SQL côté API ;
+- retourner un message JSON lisible au lieu d’une exception non contrôlée ;
+- tester sur une VM proche de l’environnement final ;
+- éviter que tous les téléphones chargent exactement au même instant si le nombre de livreurs augmente ;
+- envisager une mise en cache courte si le besoin apparaît.
 
-
-## 14. Exemple d’erreur à gérer plus proprement plus tard
-
-Actuellement, un timeout SQL peut provoquer une erreur HTTP 500 non contrôlée.
-
-À terme, l’API pourrait retourner une réponse plus lisible :
+Exemple de réponse plus propre en cas de timeout SQL :
 
 ```json
 {
@@ -1122,5 +946,3 @@ Actuellement, un timeout SQL peut provoquer une erreur HTTP 500 non contrôlée.
   "message": "Le chargement de la tournée a pris trop de temps. Veuillez réessayer."
 }
 ```
-
-Cela permettrait à l’application mobile d’afficher un message compréhensible pour le livreur.

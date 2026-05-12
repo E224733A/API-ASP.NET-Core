@@ -1,53 +1,55 @@
 namespace API_ASP.NET_Core.Models;
 
 /// <summary>
-/// Tournée disponible pour une date donnée.
+/// Réponse de la route GET /api/tournees/disponibles.
 /// </summary>
-/// <remarks>
-/// Ce modèle est renvoyé par GET /api/tournees/disponibles.
-/// Il sert à alimenter l'écran mobile de choix de tournée.
-/// </remarks>
-public sealed class TourneeDisponibleDto
+public sealed class TourneesDisponiblesResponseDto
 {
     /// <summary>
-    /// Date de la tournée.
+    /// Version du contrat JSON.
     /// </summary>
-    /// <remarks>
+    public string SchemaVersion { get; set; } = "1.2";
+
+    /// <summary>
+    /// Date de tournée concernée.
     /// Format : yyyy-MM-dd.
-    ///
-    /// Exemple : 2026-05-06
-    /// </remarks>
+    /// </summary>
     public string DateTournee { get; set; } = string.Empty;
 
     /// <summary>
-    /// Numéro du jour de tournée.
+    /// La date est affichée en lecture seule côté mobile.
     /// </summary>
-    /// <remarks>
-    /// Exemple : 1 pour lundi, 2 pour mardi, etc.
-    /// </remarks>
-    public int JourTournee { get; set; }
+    public bool DateModifiable { get; set; } = false;
 
     /// <summary>
-    /// Libellé du jour de tournée.
+    /// Livreur connecté.
     /// </summary>
-    /// <remarks>
-    /// Exemple : Mardi
-    /// </remarks>
-    public string JourLibelle { get; set; } = string.Empty;
+    public LivreurDto Livreur { get; set; } = default!;
 
+    /// <summary>
+    /// Tournées disponibles pour cette date.
+    /// </summary>
+    public IList<TourneeDisponibleDto> Tournees { get; set; } = new List<TourneeDisponibleDto>();
+}
+
+/// <summary>
+/// Tournée disponible pour une date donnée.
+/// </summary>
+public sealed class TourneeDisponibleDto
+{
     /// <summary>
     /// Code de la tournée disponible.
+    /// Exemple : 4006.
     /// </summary>
-    /// <remarks>
-    /// Exemple : 2001
-    /// </remarks>
     public string CodeTournee { get; set; } = string.Empty;
 
     /// <summary>
     /// Libellé lisible de la tournée.
     /// </summary>
-    /// <remarks>
-    /// Exemple : MDR VENDEE
-    /// </remarks>
     public string LibelleTournee { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Nombre de points de livraison trouvés pour cette tournée.
+    /// </summary>
+    public int NombrePoints { get; set; }
 }

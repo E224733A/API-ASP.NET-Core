@@ -16,8 +16,9 @@ namespace API_ASP.NET_Core.Repositories;
 /// - Mobile_LogSynchronisation
 ///
 /// Contrat JSON officiel :
-/// - schemaVersion = 1.1
+/// - schemaVersion = 1.2
 /// - saisie.quantites[]
+/// - quantiteLivreePrevue nullable
 /// - quantiteLivree
 /// - quantiteRecuperee
 /// </summary>
@@ -30,10 +31,6 @@ public sealed class SynchronisationsRepository
         _connectionFactory = connectionFactory;
     }
 
-    /// <summary>
-    /// Vérifie si une synchronisation existe déjà dans Mobile_Tournee.
-    /// Anti-doublon technique : un même paquet mobile ne doit pas être enregistré deux fois.
-    /// </summary>
     public async Task<bool> SynchronisationExistsAsync(string idSynchronisation)
     {
         if (!Guid.TryParse(idSynchronisation, out var guid))
@@ -46,7 +43,7 @@ public sealed class SynchronisationsRepository
         var exists = await connection.QueryFirstOrDefaultAsync<int?>(
             """
             SELECT 1
-            FROM Mobile_Tournee
+            FROM dbo.Mobile_Tournee
             WHERE IdSynchronisation = @IdSynchronisation;
             """,
             new
@@ -57,14 +54,6 @@ public sealed class SynchronisationsRepository
         return exists.HasValue;
     }
 
-    /// <summary>
-    /// Consulte les synchronisations envoyées.
-    ///
-    /// Filtres possibles :
-    /// - dateTournee
-    /// - codeTournee
-    /// - codeLivreur
-    /// </summary>
     public async Task<List<SynchronisationResumeDto>> GetSynchronisationsAsync(
         DateTime? dateTournee,
         string? codeTournee,
@@ -76,6 +65,7 @@ public sealed class SynchronisationsRepository
             """
             SELECT
                 t.IdTourneeMobile,
+                t.SchemaVersion,
                 t.IdSynchronisation,
                 t.DateTournee,
                 t.CodeTournee,
@@ -96,16 +86,17 @@ public sealed class SynchronisationsRepository
                 SUM(CASE WHEN tl.StatutPassage = @StatutFait THEN 1 ELSE 0 END) AS NombreFaits,
                 SUM(CASE WHEN tl.StatutPassage = @StatutNonFait THEN 1 ELSE 0 END) AS NombreNonFaits,
                 SUM(CASE WHEN tl.StatutPassage = @StatutAnomalie THEN 1 ELSE 0 END) AS NombreAnomalies
-            FROM Mobile_Tournee t
-            LEFT JOIN Mobile_Livreur l
+            FROM dbo.Mobile_Tournee t
+            LEFT JOIN dbo.Mobile_Livreur l
                 ON l.IdLivreur = t.IdLivreur
-            LEFT JOIN Mobile_TourneeLigne tl
+            LEFT JOIN dbo.Mobile_TourneeLigne tl
                 ON tl.IdTourneeMobile = t.IdTourneeMobile
             WHERE (@DateTournee IS NULL OR t.DateTournee = @DateTournee)
               AND (@CodeTournee IS NULL OR t.CodeTournee = @CodeTournee)
               AND (@CodeLivreur IS NULL OR l.CodeLivreur = @CodeLivreur)
             GROUP BY
                 t.IdTourneeMobile,
+                t.SchemaVersion,
                 t.IdSynchronisation,
                 t.DateTournee,
                 t.CodeTournee,
@@ -140,15 +131,6 @@ public sealed class SynchronisationsRepository
         return result.ToList();
     }
 
-    /// <summary>
-    /// Consulte le détail complet d'une synchronisation envoyée.
-    ///
-    /// Inclut :
-    /// - l'en-tête de tournée ;
-    /// - les lignes saisies ;
-    /// - les quantités détaillées ;
-    /// - les logs associés.
-    /// </summary>
     public async Task<SynchronisationDetailDto?> GetSynchronisationByIdAsync(long idTourneeMobile)
     {
         using var connection = _connectionFactory.CreateMobileConnection();
@@ -157,6 +139,7 @@ public sealed class SynchronisationsRepository
             """
             SELECT
                 t.IdTourneeMobile,
+                t.SchemaVersion,
                 t.IdSynchronisation,
                 t.DateTournee,
                 t.CodeTournee,
@@ -176,24 +159,24 @@ public sealed class SynchronisationsRepository
                 t.VersionApplication,
                 (
                     SELECT COUNT(1)
-                    FROM Mobile_TourneeLigne x
+                    FROM dbo.Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
                       AND x.StatutPassage = @StatutFait
                 ) AS NombreFaits,
                 (
                     SELECT COUNT(1)
-                    FROM Mobile_TourneeLigne x
+                    FROM dbo.Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
                       AND x.StatutPassage = @StatutNonFait
                 ) AS NombreNonFaits,
                 (
                     SELECT COUNT(1)
-                    FROM Mobile_TourneeLigne x
+                    FROM dbo.Mobile_TourneeLigne x
                     WHERE x.IdTourneeMobile = t.IdTourneeMobile
                       AND x.StatutPassage = @StatutAnomalie
                 ) AS NombreAnomalies
-            FROM Mobile_Tournee t
-            LEFT JOIN Mobile_Livreur l
+            FROM dbo.Mobile_Tournee t
+            LEFT JOIN dbo.Mobile_Livreur l
                 ON l.IdLivreur = t.IdLivreur
             WHERE t.IdTourneeMobile = @IdTourneeMobile;
             """,
@@ -217,6 +200,7 @@ public sealed class SynchronisationsRepository
                 IdTourneeMobile,
                 IdLigneSource,
                 OrdreArret,
+                Horaire,
                 NumClient,
                 NomClient,
                 NomAffiche,
@@ -228,15 +212,21 @@ public sealed class SynchronisationsRepository
                 Ville,
                 CodePostal,
                 JourTournee,
+                JourLibelle,
                 SchemaLivraison,
                 CodeTournee,
                 LibelleTournee,
                 JourTourneeRetour,
+                JourRetourLibelle,
                 CodeTourneeRetour,
                 LibelleTourneeRetour,
                 Instructions,
+                CommentaireExceptionnel,
                 ZoneDechargement,
+                ZoneDechargementAffichee,
                 Zone,
+                PrecisionInfo,
+                Cle,
                 TypeLinge,
                 EstFerme,
                 DateFermeture,
@@ -250,7 +240,7 @@ public sealed class SynchronisationsRepository
                 EstValidee,
                 DateCreation,
                 DateModification
-            FROM Mobile_TourneeLigne
+            FROM dbo.Mobile_TourneeLigne
             WHERE IdTourneeMobile = @IdTourneeMobile
             ORDER BY
                 OrdreArret,
@@ -268,12 +258,13 @@ public sealed class SynchronisationsRepository
                 q.IdTourneeLigne,
                 q.CodeArticle,
                 q.LibelleArticle,
+                q.QuantiteLivreePrevue,
                 q.QuantiteLivree,
                 q.QuantiteRecuperee,
                 q.DateCreation,
                 q.DateModification
-            FROM Mobile_TourneeLigneQuantite q
-            INNER JOIN Mobile_TourneeLigne l
+            FROM dbo.Mobile_TourneeLigneQuantite q
+            INNER JOIN dbo.Mobile_TourneeLigne l
                 ON l.IdTourneeLigne = q.IdTourneeLigne
             WHERE l.IdTourneeMobile = @IdTourneeMobile
             ORDER BY
@@ -300,7 +291,7 @@ public sealed class SynchronisationsRepository
                 AdresseIP,
                 NomAppareil,
                 VersionApplication
-            FROM Mobile_LogSynchronisation
+            FROM dbo.Mobile_LogSynchronisation
             WHERE IdTourneeMobile = @IdTourneeMobile
             ORDER BY
                 DateEvenement DESC,
@@ -320,17 +311,6 @@ public sealed class SynchronisationsRepository
         };
     }
 
-    /// <summary>
-    /// Enregistre une synchronisation de tournée complète.
-    ///
-    /// Le repository lit uniquement :
-    /// - saisie.quantites[]
-    /// - quantiteLivree
-    /// - quantiteRecuperee
-    ///
-    /// Les totaux de compatibilité QuantiteLivree et QuantiteReprise
-    /// sont recalculés depuis le tableau des quantités.
-    /// </summary>
     public async Task SaveSynchronisationAsync(SynchronisationTourneeRequest request)
     {
         using var connection = _connectionFactory.CreateMobileConnection();
@@ -341,7 +321,7 @@ public sealed class SynchronisationsRepository
 
         try
         {
-            var now = DateTime.Now;
+            var now = DateTimeOffset.Now;
 
             var idSynchronisationGuid = ParseRequiredGuid(
                 request.IdSynchronisation,
@@ -363,12 +343,12 @@ public sealed class SynchronisationsRepository
                 request.CodeTournee,
                 "CodeTournee est obligatoire.");
 
-            var dateChargementMobile = ParseOptionalDateTime(request.Mobile?.DateChargementMobile);
-            var dateEnvoiMobile = ParseOptionalDateTime(request.Mobile?.DateEnvoiMobile);
+            var dateChargementMobile = ParseOptionalDateTimeOffset(request.Mobile?.DateChargementMobile);
+            var dateEnvoiMobile = ParseOptionalDateTimeOffset(request.Mobile?.DateEnvoiMobile);
 
             await connection.ExecuteAsync(
                 """
-                MERGE INTO Mobile_Livreur AS target
+                MERGE INTO dbo.Mobile_Livreur AS target
                 USING (
                     SELECT
                         @CodeLivreur AS CodeLivreur,
@@ -407,7 +387,7 @@ public sealed class SynchronisationsRepository
             var idLivreur = await connection.QuerySingleAsync<int>(
                 """
                 SELECT IdLivreur
-                FROM Mobile_Livreur
+                FROM dbo.Mobile_Livreur
                 WHERE CodeLivreur = @CodeLivreur;
                 """,
                 new
@@ -418,7 +398,8 @@ public sealed class SynchronisationsRepository
 
             var idTourneeMobile = await connection.QuerySingleAsync<long>(
                 """
-                INSERT INTO Mobile_Tournee (
+                INSERT INTO dbo.Mobile_Tournee (
+                    SchemaVersion,
                     IdSynchronisation,
                     DateTournee,
                     CodeTournee,
@@ -440,6 +421,7 @@ public sealed class SynchronisationsRepository
                 )
                 OUTPUT INSERTED.IdTourneeMobile
                 VALUES (
+                    @SchemaVersion,
                     @IdSynchronisation,
                     @DateTournee,
                     @CodeTournee,
@@ -462,10 +444,11 @@ public sealed class SynchronisationsRepository
                 """,
                 new
                 {
+                    SchemaVersion = RequiredTrimmed(request.SchemaVersion, "SchemaVersion est obligatoire."),
                     IdSynchronisation = idSynchronisationGuid,
                     DateTournee = dateTournee.Date,
                     CodeTournee = codeTournee,
-                    LibelleTournee = request.LibelleTournee,
+                    LibelleTournee = EmptyToNull(request.LibelleTournee),
                     IdLivreur = idLivreur,
                     StatutSynchronisation = StatutsSynchronisation.Envoyee,
                     DateChargementMobile = dateChargementMobile,
@@ -473,9 +456,9 @@ public sealed class SynchronisationsRepository
                     DateEnvoi = dateEnvoiMobile ?? now,
                     NombrePointsPrevus = request.Lignes.Count,
                     NombrePointsSaisis = request.Lignes.Count,
-                    CommentaireGlobal = request.CommentaireGlobal,
-                    NomAppareil = request.Mobile?.NomAppareil,
-                    VersionApplication = request.Mobile?.VersionApplication,
+                    CommentaireGlobal = EmptyToNull(request.CommentaireGlobal),
+                    NomAppareil = EmptyToNull(request.Mobile?.NomAppareil),
+                    VersionApplication = EmptyToNull(request.Mobile?.VersionApplication),
                     Now = now
                 },
                 transaction);
@@ -502,11 +485,6 @@ public sealed class SynchronisationsRepository
                 var nbVetements = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Vetements);
                 var nbTapis = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Tapis);
                 var nbSacs = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Sacs);
-
-                /*
-                 * NbRecuperes reste une colonne de compatibilité.
-                 * Le détail officiel est stocké dans Mobile_TourneeLigneQuantite.
-                 */
                 var nbRecuperes = quantiteReprise;
 
                 var heureValidation = ParseHeureValidation(
@@ -529,26 +507,54 @@ public sealed class SynchronisationsRepository
                     ligne.Client?.NomClient,
                     "Client.NomClient est obligatoire.");
 
+                var jourTournee = ligne.Tournee?.JourTournee;
+                var jourTourneeRetour = ligne.Retour?.JourTourneeRetour;
+
                 var idTourneeLigne = await connection.QuerySingleAsync<long>(
                     """
-                    INSERT INTO Mobile_TourneeLigne (
+                    INSERT INTO dbo.Mobile_TourneeLigne (
                         IdTourneeMobile,
                         IdLigneSource,
-                        CodeTournee,
-                        OrdreArret,
                         NumClient,
                         NomClient,
                         NomAffiche,
                         CodePDL,
                         DescriptionPDL,
+                        AdresseLigne1,
+                        AdresseLigne2,
+                        AdresseLigne3,
+                        Ville,
+                        CodePostal,
+                        CodeTournee,
+                        LibelleTournee,
+                        JourTournee,
+                        JourLibelle,
+                        SchemaLivraison,
+                        OrdreArret,
+                        Horaire,
+                        JourTourneeRetour,
+                        JourRetourLibelle,
+                        CodeTourneeRetour,
+                        LibelleTourneeRetour,
+                        Instructions,
+                        CommentaireExceptionnel,
+                        ZoneDechargement,
+                        ZoneDechargementAffichee,
+                        Zone,
+                        PrecisionInfo,
+                        Cle,
+                        TypeLinge,
+                        EstFerme,
+                        DateFermeture,
+                        MotifFermeture,
+                        QuantiteLivree,
+                        QuantiteReprise,
                         NbExpes,
                         NbRolls,
                         NbVetements,
                         NbTapis,
                         NbSacs,
                         NbRecuperes,
-                        QuantiteLivree,
-                        QuantiteReprise,
                         PrecisionLivreur,
                         StatutPassage,
                         CommentaireLivreur,
@@ -561,21 +567,46 @@ public sealed class SynchronisationsRepository
                     VALUES (
                         @IdTourneeMobile,
                         @IdLigneSource,
-                        @CodeTournee,
-                        @OrdreArret,
                         @NumClient,
                         @NomClient,
                         @NomAffiche,
                         @CodePDL,
                         @DescriptionPDL,
+                        @AdresseLigne1,
+                        @AdresseLigne2,
+                        @AdresseLigne3,
+                        @Ville,
+                        @CodePostal,
+                        @CodeTournee,
+                        @LibelleTournee,
+                        @JourTournee,
+                        @JourLibelle,
+                        @SchemaLivraison,
+                        @OrdreArret,
+                        @Horaire,
+                        @JourTourneeRetour,
+                        @JourRetourLibelle,
+                        @CodeTourneeRetour,
+                        @LibelleTourneeRetour,
+                        @Instructions,
+                        @CommentaireExceptionnel,
+                        @ZoneDechargement,
+                        @ZoneDechargementAffichee,
+                        @Zone,
+                        @PrecisionInfo,
+                        @Cle,
+                        NULL,
+                        @EstFerme,
+                        @DateFermeture,
+                        @MotifFermeture,
+                        @QuantiteLivree,
+                        @QuantiteReprise,
                         @NbExpes,
                         @NbRolls,
                         @NbVetements,
                         @NbTapis,
                         @NbSacs,
                         @NbRecuperes,
-                        @QuantiteLivree,
-                        @QuantiteReprise,
                         @PrecisionLivreur,
                         @StatutPassage,
                         @CommentaireLivreur,
@@ -589,21 +620,45 @@ public sealed class SynchronisationsRepository
                     {
                         IdTourneeMobile = idTourneeMobile,
                         IdLigneSource = idLigneSource,
-                        CodeTournee = codeTournee,
-                        OrdreArret = ligne.OrdreArret,
                         NumClient = numClient,
                         NomClient = nomClient,
                         NomAffiche = EmptyToNull(ligne.Client?.NomAffiche),
                         CodePDL = EmptyToNull(ligne.PointLivraison?.CodePDL),
                         DescriptionPDL = EmptyToNull(ligne.PointLivraison?.DescriptionPDL),
+                        AdresseLigne1 = EmptyToNull(ligne.PointLivraison?.AdresseLigne1),
+                        AdresseLigne2 = EmptyToNull(ligne.PointLivraison?.AdresseLigne2),
+                        AdresseLigne3 = EmptyToNull(ligne.PointLivraison?.AdresseLigne3),
+                        Ville = EmptyToNull(ligne.PointLivraison?.Ville),
+                        CodePostal = EmptyToNull(ligne.PointLivraison?.CodePostal),
+                        CodeTournee = codeTournee,
+                        LibelleTournee = EmptyToNull(ligne.Tournee?.LibelleTournee) ?? EmptyToNull(request.LibelleTournee),
+                        JourTournee = jourTournee,
+                        JourLibelle = EmptyToNull(ligne.Tournee?.JourLibelle) ?? GetJourLibelle(jourTournee),
+                        SchemaLivraison = EmptyToNull(ligne.Tournee?.SchemaLivraison),
+                        OrdreArret = ligne.OrdreArret,
+                        Horaire = ligne.Horaire?.ToString(),
+                        JourTourneeRetour = jourTourneeRetour,
+                        JourRetourLibelle = EmptyToNull(ligne.Retour?.JourRetourLibelle) ?? GetJourLibelle(jourTourneeRetour),
+                        CodeTourneeRetour = EmptyToNull(ligne.Retour?.CodeTourneeRetour),
+                        LibelleTourneeRetour = EmptyToNull(ligne.Retour?.LibelleTourneeRetour),
+                        Instructions = EmptyToNull(ligne.InfosLivreur?.Instructions),
+                        CommentaireExceptionnel = EmptyToNull(ligne.InfosLivreur?.CommentaireExceptionnel),
+                        ZoneDechargement = EmptyToNull(ligne.InfosLivreur?.ZoneDechargement),
+                        ZoneDechargementAffichee = EmptyToNull(ligne.InfosLivreur?.ZoneDechargementAffichee),
+                        Zone = EmptyToNull(ligne.InfosLivreur?.Zone),
+                        PrecisionInfo = EmptyToNull(ligne.InfosLivreur?.Precision),
+                        Cle = EmptyToNull(ligne.InfosLivreur?.Cle),
+                        EstFerme = ligne.InfosLivreur?.EstFerme ?? false,
+                        DateFermeture = ligne.InfosLivreur?.DateFermeture?.ToDateTime(TimeOnly.MinValue).Date,
+                        MotifFermeture = EmptyToNull(ligne.InfosLivreur?.MotifFermeture),
+                        QuantiteLivree = quantiteLivree,
+                        QuantiteReprise = quantiteReprise,
                         NbExpes = nbExpes,
                         NbRolls = nbRolls,
                         NbVetements = nbVetements,
                         NbTapis = nbTapis,
                         NbSacs = nbSacs,
                         NbRecuperes = nbRecuperes,
-                        QuantiteLivree = quantiteLivree,
-                        QuantiteReprise = quantiteReprise,
                         PrecisionLivreur = EmptyToNull(ligne.Saisie.PrecisionLivreur),
                         StatutPassage = statutPassage,
                         CommentaireLivreur = EmptyToNull(ligne.Saisie.CommentaireLivreur),
@@ -617,10 +672,11 @@ public sealed class SynchronisationsRepository
                 {
                     await connection.ExecuteAsync(
                         """
-                        INSERT INTO Mobile_TourneeLigneQuantite (
+                        INSERT INTO dbo.Mobile_TourneeLigneQuantite (
                             IdTourneeLigne,
                             CodeArticle,
                             LibelleArticle,
+                            QuantiteLivreePrevue,
                             QuantiteLivree,
                             QuantiteRecuperee,
                             DateCreation,
@@ -630,6 +686,7 @@ public sealed class SynchronisationsRepository
                             @IdTourneeLigne,
                             @CodeArticle,
                             @LibelleArticle,
+                            @QuantiteLivreePrevue,
                             @QuantiteLivree,
                             @QuantiteRecuperee,
                             @Now,
@@ -641,6 +698,7 @@ public sealed class SynchronisationsRepository
                             IdTourneeLigne = idTourneeLigne,
                             CodeArticle = quantite.CodeArticle,
                             LibelleArticle = quantite.Libelle,
+                            QuantiteLivreePrevue = quantite.QuantiteLivreePrevue,
                             QuantiteLivree = quantite.QuantiteLivree,
                             QuantiteRecuperee = quantite.QuantiteRecuperee,
                             Now = now
@@ -651,7 +709,7 @@ public sealed class SynchronisationsRepository
 
             await connection.ExecuteAsync(
                 """
-                INSERT INTO Mobile_LogSynchronisation (
+                INSERT INTO dbo.Mobile_LogSynchronisation (
                     IdTourneeMobile,
                     IdLivreur,
                     IdSynchronisation,
@@ -689,8 +747,8 @@ public sealed class SynchronisationsRepository
                     Message = "Synchronisation enregistrée avec succès.",
                     DetailTechnique = $"Tournée {codeTournee} du {dateTournee:yyyy-MM-dd} synchronisée avec {request.Lignes.Count} ligne(s).",
                     AdresseIP = (string?)null,
-                    NomAppareil = request.Mobile?.NomAppareil,
-                    VersionApplication = request.Mobile?.VersionApplication
+                    NomAppareil = EmptyToNull(request.Mobile?.NomAppareil),
+                    VersionApplication = EmptyToNull(request.Mobile?.VersionApplication)
                 },
                 transaction);
 
@@ -723,7 +781,7 @@ public sealed class SynchronisationsRepository
         return date.Date;
     }
 
-    private static DateTime? ParseOptionalDateTime(string? value)
+    private static DateTimeOffset? ParseOptionalDateTimeOffset(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -732,18 +790,18 @@ public sealed class SynchronisationsRepository
 
         if (DateTimeOffset.TryParse(value, out var dateTimeOffset))
         {
-            return dateTimeOffset.DateTime;
+            return dateTimeOffset;
         }
 
         if (DateTime.TryParse(value, out var dateTime))
         {
-            return dateTime;
+            return new DateTimeOffset(dateTime);
         }
 
         return null;
     }
 
-    private static DateTime? ParseHeureValidation(string? value, DateTime dateTournee)
+    private static DateTimeOffset? ParseHeureValidation(string? value, DateTime dateTournee)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -752,17 +810,17 @@ public sealed class SynchronisationsRepository
 
         if (TimeSpan.TryParse(value, out var heureSimple))
         {
-            return dateTournee.Date.Add(heureSimple);
+            return new DateTimeOffset(dateTournee.Date.Add(heureSimple), DateTimeOffset.Now.Offset);
         }
 
         if (DateTimeOffset.TryParse(value, out var dateTimeOffset))
         {
-            return dateTimeOffset.DateTime;
+            return dateTimeOffset;
         }
 
         if (DateTime.TryParse(value, out var dateTime))
         {
-            return dateTime;
+            return new DateTimeOffset(dateTime);
         }
 
         return null;
@@ -799,6 +857,7 @@ public sealed class SynchronisationsRepository
             {
                 CodeArticle = q.CodeArticle.Trim().ToUpperInvariant(),
                 Libelle = EmptyToNull(q.Libelle),
+                QuantiteLivreePrevue = q.QuantiteLivreePrevue,
                 QuantiteLivree = q.QuantiteLivree,
                 QuantiteRecuperee = q.QuantiteRecuperee
             })
@@ -816,5 +875,20 @@ public sealed class SynchronisationsRepository
                 codeArticle,
                 StringComparison.OrdinalIgnoreCase))
             .Sum(q => q.QuantiteLivree);
+    }
+
+    private static string? GetJourLibelle(int? jour)
+    {
+        return jour switch
+        {
+            1 => "Lundi",
+            2 => "Mardi",
+            3 => "Mercredi",
+            4 => "Jeudi",
+            5 => "Vendredi",
+            6 => "Samedi",
+            7 => "Dimanche",
+            _ => null
+        };
     }
 }

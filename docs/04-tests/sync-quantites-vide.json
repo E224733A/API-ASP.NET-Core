@@ -1,38 +1,69 @@
 {
-  "schemaVersion": "1.1",
-  "idSynchronisation": "cccccccc-cccc-cccc-cccc-cccccccccccc",
-  "dateTournee": "2026-05-08",
-  "codeTournee": "2011",
+  "schemaVersion": "1.2",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000012",
+  "dateTournee": "2026-06-14",
+  "codeTournee": "4019",
   "libelleTournee": "TEST QUANTITES VIDE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
   },
   "mobile": {
-    "nomAppareil": "Samsung A15",
+    "nomAppareil": "Postman Test",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-04-28T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-04-28T16:45:00+02:00"
+    "dateChargementMobile": "2026-06-14T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-14T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-08|2011|2|1058|1|1",
+      "idLigneSource": "2026-06-14|4019|7|333|341|1",
       "ordreArret": 1,
+      "horaire": 1,
       "client": {
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+        "numClient": "333",
+        "nomClient": "HOTEL LE MARTINET",
+        "nomAffiche": "HOTEL LE MARTINET"
       },
       "pointLivraison": {
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+        "codePDL": "341",
+        "descriptionPDL": "HOTEL LE MARTINET",
+        "adresseLigne1": "PLACE DU GENERALE CHARRETTE",
+        "adresseLigne2": null,
+        "adresseLigne3": "SARL HOTEL LE MARTINET",
+        "ville": "BOUIN",
+        "codePostal": "85230"
+      },
+      "tournee": {
+        "codeTournee": "4019",
+        "libelleTournee": "TEST QUANTITES VIDE",
+        "jourTournee": 7,
+        "jourLibelle": "Dimanche",
+        "schemaLivraison": "1W1"
+      },
+      "retour": {
+        "jourTourneeRetour": 7,
+        "jourRetourLibelle": "Dimanche",
+        "codeTourneeRetour": "4019",
+        "libelleTourneeRetour": "TEST QUANTITES VIDE"
+      },
+      "infosLivreur": {
+        "instructions": "CODE 8578 *",
+        "commentaireExceptionnel": null,
+        "zoneDechargement": null,
+        "zoneDechargementAffichee": "7",
+        "zone": null,
+        "precision": null,
+        "cle": null,
+        "estFerme": false,
+        "dateFermeture": null,
+        "motifFermeture": null
       },
       "saisie": {
-        "precisionLivreur": "2 rolls repris au local arrière",
+        "precisionLivreur": "Test API v1.2",
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
-        "heureValidation": "2026-04-28T09:12:00+02:00",
+        "heureValidation": "2026-06-14T09:12:00+02:00",
         "estValidee": true,
         "quantites": []
       }

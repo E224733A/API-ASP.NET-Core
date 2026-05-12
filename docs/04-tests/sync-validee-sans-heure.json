@@ -1,35 +1,66 @@
-﻿{
-  "schemaVersion": "1.1",
-  "idSynchronisation": "66666666-6666-6666-6666-666666666666",
-  "dateTournee": "2026-05-02",
-  "codeTournee": "2005",
+{
+  "schemaVersion": "1.2",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000006",
+  "dateTournee": "2026-06-08",
+  "codeTournee": "4013",
   "libelleTournee": "TEST VALIDEE SANS HEURE",
   "livreur": {
     "codeLivreur": "2",
     "nomLivreur": "DAVID LEBAS"
   },
   "mobile": {
-    "nomAppareil": "Samsung A15",
+    "nomAppareil": "Postman Test",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-02T07:30:00+02:00",
-    "dateEnvoiMobile": "2026-05-02T16:45:00+02:00"
+    "dateChargementMobile": "2026-06-08T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-08T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": [
     {
-      "idLigneSource": "2026-05-02|2005|2|1058|1|1",
+      "idLigneSource": "2026-06-08|4013|1|333|341|1",
       "ordreArret": 1,
+      "horaire": 1,
       "client": {
-        "numClient": "1058",
-        "nomClient": "EHPAD L EQUAIZIERE",
-        "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+        "numClient": "333",
+        "nomClient": "HOTEL LE MARTINET",
+        "nomAffiche": "HOTEL LE MARTINET"
       },
       "pointLivraison": {
-        "codePDL": "1",
-        "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+        "codePDL": "341",
+        "descriptionPDL": "HOTEL LE MARTINET",
+        "adresseLigne1": "PLACE DU GENERALE CHARRETTE",
+        "adresseLigne2": null,
+        "adresseLigne3": "SARL HOTEL LE MARTINET",
+        "ville": "BOUIN",
+        "codePostal": "85230"
+      },
+      "tournee": {
+        "codeTournee": "4013",
+        "libelleTournee": "TEST VALIDEE SANS HEURE",
+        "jourTournee": 1,
+        "jourLibelle": "Lundi",
+        "schemaLivraison": "1W1"
+      },
+      "retour": {
+        "jourTourneeRetour": 1,
+        "jourRetourLibelle": "Lundi",
+        "codeTourneeRetour": "4013",
+        "libelleTourneeRetour": "TEST VALIDEE SANS HEURE"
+      },
+      "infosLivreur": {
+        "instructions": "CODE 8578 *",
+        "commentaireExceptionnel": null,
+        "zoneDechargement": null,
+        "zoneDechargementAffichee": "1",
+        "zone": null,
+        "precision": null,
+        "cle": null,
+        "estFerme": false,
+        "dateFermeture": null,
+        "motifFermeture": null
       },
       "saisie": {
-        "precisionLivreur": null,
+        "precisionLivreur": "Test API v1.2",
         "statutPassage": "FAIT",
         "commentaireLivreur": null,
         "heureValidation": null,
@@ -38,6 +69,7 @@
           {
             "codeArticle": "ROLLS",
             "libelle": "Rolls",
+            "quantiteLivreePrevue": null,
             "quantiteLivree": 1,
             "quantiteRecuperee": 0
           }

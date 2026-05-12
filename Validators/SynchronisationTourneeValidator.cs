@@ -109,7 +109,7 @@ public sealed class SynchronisationTourneeValidator
         }
         else if (!IsValidDateTime(mobile.DateChargementMobile))
         {
-            errors.Add("Mobile.DateChargementMobile est invalide.");
+            errors.Add("Mobile.DateChargementMobile est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
         }
 
         if (string.IsNullOrWhiteSpace(mobile.DateEnvoiMobile))
@@ -118,7 +118,7 @@ public sealed class SynchronisationTourneeValidator
         }
         else if (!IsValidDateTime(mobile.DateEnvoiMobile))
         {
-            errors.Add("Mobile.DateEnvoiMobile est invalide.");
+            errors.Add("Mobile.DateEnvoiMobile est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
         }
     }
 
@@ -172,6 +172,11 @@ public sealed class SynchronisationTourneeValidator
         if (ligne.OrdreArret < 0)
         {
             errors.Add($"Ligne {numeroLigne} : OrdreArret ne peut pas être négatif.");
+        }
+
+        if (ligne.Horaire.HasValue && ligne.Horaire.Value < 0)
+        {
+            errors.Add($"Ligne {numeroLigne} : Horaire ne peut pas être négatif.");
         }
 
         ValidateClient(ligne.Client, numeroLigne, errors);
@@ -257,7 +262,7 @@ public sealed class SynchronisationTourneeValidator
         if (!string.IsNullOrWhiteSpace(saisie.HeureValidation)
             && !IsValidDateTimeOrTime(saisie.HeureValidation))
         {
-            errors.Add($"Ligne {numeroLigne} : HeureValidation est invalide.");
+            errors.Add($"Ligne {numeroLigne} : HeureValidation est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
         }
 
         if ((string.Equals(statut, StatutsPassage.NonFait, StringComparison.OrdinalIgnoreCase)
@@ -294,13 +299,15 @@ public sealed class SynchronisationTourneeValidator
                 continue;
             }
 
+            var codeArticle = string.Empty;
+
             if (string.IsNullOrWhiteSpace(quantite.CodeArticle))
             {
                 errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : CodeArticle est obligatoire.");
             }
             else
             {
-                var codeArticle = quantite.CodeArticle.Trim().ToUpperInvariant();
+                codeArticle = quantite.CodeArticle.Trim().ToUpperInvariant();
 
                 if (!codesArticles.Add(codeArticle))
                 {
@@ -308,16 +315,28 @@ public sealed class SynchronisationTourneeValidator
                 }
             }
 
+            if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
+            {
+                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteLivreePrevue ne peut pas être négative.");
+            }
+
             if (quantite.QuantiteLivree < 0)
             {
-                errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : QuantiteLivree ne peut pas être négative.");
+                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteLivree ne peut pas être négative.");
             }
 
             if (quantite.QuantiteRecuperee < 0)
             {
-                errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : QuantiteRecuperee ne peut pas être négative.");
+                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteRecuperee ne peut pas être négative.");
             }
         }
+    }
+
+    private static string DisplayArticle(int numeroArticle, string codeArticle)
+    {
+        return string.IsNullOrWhiteSpace(codeArticle)
+            ? numeroArticle.ToString(CultureInfo.InvariantCulture)
+            : codeArticle;
     }
 
     private static bool IsValidDateTime(string value)

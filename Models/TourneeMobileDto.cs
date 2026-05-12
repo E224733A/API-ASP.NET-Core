@@ -1,12 +1,13 @@
-﻿namespace API_ASP.NET_Core.Models;
+namespace API_ASP.NET_Core.Models;
 
 /// <summary>
 /// Détail complet d'une tournée chargée par l'application mobile.
 /// </summary>
 /// <remarks>
 /// Ce modèle est renvoyé par GET /api/tournees/jour.
-/// Il représente le contrat de chargement du matin : en-tête de tournée, livreur,
-/// informations de chargement, articles saisissables et lignes clients.
+/// Il représente le contrat JSON v1.2 de chargement du matin : en-tête de tournée,
+/// livreur, informations de chargement, articles saisissables, lignes clients,
+/// commentaires exceptionnels et quantités pré-remplies.
 /// </remarks>
 public class TourneeMobileDto
 {
@@ -14,66 +15,51 @@ public class TourneeMobileDto
     /// Version du schéma JSON de chargement.
     /// </summary>
     /// <remarks>
-    /// Exemple : 1.1
+    /// Exemple : 1.2
     /// </remarks>
-    public string SchemaVersion { get; init; } = "1.1";
+    public string SchemaVersion { get; init; } = "1.2";
 
     /// <summary>
     /// Date de la tournée chargée.
     /// </summary>
     /// <remarks>
     /// Format : yyyy-MM-dd.
-    ///
-    /// Exemple : 2026-04-28
+    /// Exemple : 2026-05-07
     /// </remarks>
     public string DateTournee { get; init; } = default!;
 
     /// <summary>
     /// Indique si la date peut être modifiée côté application mobile.
-    /// </summary>
-    /// <remarks>
     /// Pour le fonctionnement prévu, la date est affichée en lecture seule.
-    /// </remarks>
+    /// </summary>
     public bool DateModifiable { get; init; } = false;
 
     /// <summary>
     /// Numéro du jour de tournée.
+    /// Exemple : 4 pour jeudi.
     /// </summary>
-    /// <remarks>
-    /// Exemple : 2 pour mardi.
-    /// </remarks>
     public int? JourTournee { get; init; }
 
     /// <summary>
     /// Libellé du jour de tournée.
+    /// Exemple : Jeudi.
     /// </summary>
-    /// <remarks>
-    /// Exemple : Mardi
-    /// </remarks>
     public string? JourLibelle { get; init; }
 
     /// <summary>
     /// Code de la tournée chargée.
     /// </summary>
-    /// <remarks>
-    /// Exemple : 2001
-    /// </remarks>
     public string CodeTournee { get; init; } = default!;
 
     /// <summary>
     /// Libellé lisible de la tournée.
     /// </summary>
-    /// <remarks>
-    /// Exemple : MDR VENDEE
-    /// </remarks>
     public string? LibelleTournee { get; init; }
 
     /// <summary>
     /// Statut de synchronisation initial de la tournée côté mobile.
-    /// </summary>
-    /// <remarks>
     /// Au chargement du matin, la valeur par défaut est NON_ENVOYEE.
-    /// </remarks>
+    /// </summary>
     public string StatutSynchronisation { get; init; } = "NON_ENVOYEE";
 
     /// <summary>
@@ -89,10 +75,6 @@ public class TourneeMobileDto
     /// <summary>
     /// Liste des articles que le livreur peut saisir dans l'application mobile.
     /// </summary>
-    /// <remarks>
-    /// Cette liste permet au mobile de construire les champs de quantités sans coder
-    /// directement les articles dans l'application.
-    /// </remarks>
     public IList<ArticleSaisissableDto> ArticlesSaisissables { get; init; }
         = new List<ArticleSaisissableDto>();
 
@@ -126,38 +108,29 @@ public class ArticleSaisissableDto
 {
     /// <summary>
     /// Code technique de l'article.
+    /// Exemples : ROLLS, TAPIS, SACS.
     /// </summary>
-    /// <remarks>
-    /// Exemples : ROLLS, TAPIS, SACS, VETEMENTS, EXPES.
-    /// </remarks>
     public string CodeArticle { get; init; } = default!;
 
     /// <summary>
     /// Libellé lisible de l'article.
-    /// </summary>
-    /// <remarks>
     /// Exemples : Rolls, Tapis, Sacs.
-    /// </remarks>
+    /// </summary>
     public string Libelle { get; init; } = default!;
 }
 
 /// <summary>
 /// Ligne de tournée envoyée au mobile.
-/// </summary>
-/// <remarks>
 /// Une ligne correspond à un arrêt de tournée, généralement lié à un client
 /// et à un point de livraison.
-/// </remarks>
+/// </summary>
 public class TourneeLigneMobileDto
 {
     /// <summary>
     /// Identifiant métier stable de la ligne source.
-    /// </summary>
-    /// <remarks>
     /// Cet identifiant est renvoyé par le mobile lors de la synchronisation du soir.
-    ///
-    /// Exemple : 2026-04-28|2001|2|1058|1|1
-    /// </remarks>
+    /// Exemple : 2026-05-07|4006|4|1058|1|1.
+    /// </summary>
     public string IdLigneSource { get; init; } = default!;
 
     /// <summary>
@@ -198,10 +171,6 @@ public class TourneeLigneMobileDto
     /// <summary>
     /// Valeurs initiales de saisie côté mobile.
     /// </summary>
-    /// <remarks>
-    /// Au chargement du matin, une ligne est généralement initialisée avec le statut A_FAIRE
-    /// et estValidee à false.
-    /// </remarks>
     public SaisieMobileDto Saisie { get; init; } = new();
 }
 
@@ -288,6 +257,11 @@ public class TourneeInfoDto
     public int? JourTournee { get; init; }
 
     /// <summary>
+    /// Libellé du jour de tournée.
+    /// </summary>
+    public string? JourLibelle { get; init; }
+
+    /// <summary>
     /// Schéma de livraison issu des données métier, lorsqu'il existe.
     /// </summary>
     public string? SchemaLivraison { get; init; }
@@ -301,10 +275,6 @@ public class RetourInfoDto
     /// <summary>
     /// Numéro de jour de tournée retour.
     /// </summary>
-    /// <remarks>
-    /// Donnée brute fournie par l'API.
-    /// Les règles d'affichage propres à l'application mobile sont appliquées côté mobile.
-    /// </remarks>
     public int? JourTourneeRetour { get; init; }
 
     /// <summary>
@@ -329,23 +299,25 @@ public class RetourInfoDto
 public class InfosLivreurDto
 {
     /// <summary>
-    /// Instructions spécifiques à afficher au livreur.
+    /// Instructions permanentes issues des vues ABSSolute.
     /// </summary>
     public string? Instructions { get; init; }
 
     /// <summary>
-    /// Commentaire issu de la fiche de tournée.
+    /// Commentaire exceptionnel propre au projet mobile.
+    /// Il est stocké dans la base mobile, par date et par client/point de livraison.
     /// </summary>
-    public string? CommentaireFiche { get; init; }
+    public string? CommentaireExceptionnel { get; init; }
 
     /// <summary>
     /// Zone de déchargement brute issue des données métier.
     /// </summary>
-    /// <remarks>
-    /// L'API fournit cette valeur brute.
-    /// Toute règle d'affichage spécifique à l'écran mobile reste gérée côté application mobile.
-    /// </remarks>
     public string? ZoneDechargement { get; init; }
+
+    /// <summary>
+    /// Zone de déchargement prête à afficher selon la règle métier connue par l'API.
+    /// </summary>
+    public string? ZoneDechargementAffichee { get; init; }
 
     /// <summary>
     /// Zone ou information complémentaire issue des données métier.
@@ -385,42 +357,32 @@ public class SaisieMobileDto
 {
     /// <summary>
     /// Précision saisie par le livreur.
+    /// Au chargement du matin, ce champ est vide.
     /// </summary>
-    /// <remarks>
-    /// Au chargement du matin, ce champ est généralement vide.
-    /// </remarks>
     public string? PrecisionLivreur { get; init; }
 
     /// <summary>
     /// Statut de passage de la ligne.
-    /// </summary>
-    /// <remarks>
     /// Au chargement du matin, la valeur par défaut est A_FAIRE.
-    /// </remarks>
+    /// </summary>
     public string StatutPassage { get; init; } = "A_FAIRE";
 
     /// <summary>
     /// Commentaire saisi par le livreur.
+    /// Au chargement du matin, ce champ est vide.
     /// </summary>
-    /// <remarks>
-    /// Au chargement du matin, ce champ est généralement vide.
-    /// </remarks>
     public string? CommentaireLivreur { get; init; }
 
     /// <summary>
     /// Heure de validation de la ligne.
+    /// Au chargement du matin, ce champ est vide.
     /// </summary>
-    /// <remarks>
-    /// Au chargement du matin, ce champ est généralement vide.
-    /// </remarks>
     public DateTimeOffset? HeureValidation { get; init; }
 
     /// <summary>
     /// Indique si la ligne a été validée.
-    /// </summary>
-    /// <remarks>
     /// Au chargement du matin, la valeur par défaut est false.
-    /// </remarks>
+    /// </summary>
     public bool EstValidee { get; init; } = false;
 
     /// <summary>
@@ -446,12 +408,19 @@ public class QuantiteSaisieMobileDto
     public string Libelle { get; init; } = default!;
 
     /// <summary>
-    /// Quantité livrée prévue ou saisie pour cet article.
+    /// Quantité livrée prévue par l'expédition.
+    /// null = non renseigné ; 0 = zéro prévu volontairement.
+    /// </summary>
+    public int? QuantiteLivreePrevue { get; init; }
+
+    /// <summary>
+    /// Quantité livrée initialisée côté mobile.
+    /// Elle reprend la valeur prévue lorsqu'elle existe, sinon 0.
     /// </summary>
     public int QuantiteLivree { get; init; }
 
     /// <summary>
-    /// Quantité récupérée prévue ou saisie pour cet article.
+    /// Quantité récupérée initialisée côté mobile.
     /// </summary>
     public int QuantiteRecuperee { get; init; }
 }
