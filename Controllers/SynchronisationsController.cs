@@ -1,217 +1,78 @@
-using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
-using API_ASP.NET_Core.Repositories;
-using API_ASP.NET_Core.Validators;
+using API_ASP.NET_Core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 
 namespace API_ASP.NET_Core.Controllers;
 
 /// <summary>
-/// Contrôleur utilisé pour consulter et enregistrer les synchronisations envoyées
-/// par l'application mobile des livreurs.
+/// Contrôleur utilisé pour enregistrer les synchronisations envoyées par l'application mobile des livreurs.
 /// </summary>
 /// <remarks>
-/// Ce contrôleur concerne principalement la fin de journée, lorsque l'application mobile
-/// renvoie à l'API les données saisies hors connexion par le livreur.
+/// Ce contrôleur concerne principalement l'envoi du soir.
+///
+/// L'application mobile travaille hors connexion pendant la tournée, puis renvoie toutes les données
+/// saisies lorsque le livreur revient au dépôt et retrouve le réseau interne.
+///
+/// La route principale exposée ici est :
+/// POST /api/synchronisations
+///
+/// Elle reçoit le contrat JSON MobileSLI en schemaVersion 1.2.
 /// </remarks>
 [ApiController]
 [Route("api/synchronisations")]
 [Produces("application/json")]
 public sealed class SynchronisationsController : ControllerBase
 {
-    private readonly SynchronisationsRepository _repository;
-    private readonly SynchronisationTourneeValidator _validator;
+    private readonly SynchronisationService _synchronisationService;
     private readonly ILogger<SynchronisationsController> _logger;
-    private readonly IWebHostEnvironment _environment;
 
     public SynchronisationsController(
-        SynchronisationsRepository repository,
-        SynchronisationTourneeValidator validator,
-        ILogger<SynchronisationsController> logger,
-        IWebHostEnvironment environment)
+        SynchronisationService synchronisationService,
+        ILogger<SynchronisationsController> logger)
     {
-        _repository = repository;
-        _validator = validator;
+        _synchronisationService = synchronisationService;
         _logger = logger;
-        _environment = environment;
     }
 
     /// <summary>
-    /// Consulte les synchronisations déjà envoyées.
+    /// Enregistre l'envoi final d'une tournée mobile.
     /// </summary>
     /// <remarks>
-    /// Cette route permet de consulter les synchronisations reçues par l'API.
+    /// Cette route est appelée en fin de journée par l'application mobile MobileSLI.
     ///
-    /// Elle est surtout utile pour les tests, le contrôle technique et le suivi des envois.
+    /// Elle reçoit la tournée réalisée par le livreur après le travail hors connexion :
+    /// informations générales de tournée, livreur, appareil mobile, lignes de tournée,
+    /// statuts de passage, commentaires terrain et quantités par article.
     ///
-    /// Paramètres optionnels :
-    /// - dateTournee : filtre sur la date de tournée au format yyyy-MM-dd ;
-    /// - codeTournee : filtre sur le code tournée ;
-    /// - codeLivreur : filtre sur le code livreur.
-    ///
-    /// Réponses :
-    /// - 200 : liste des synchronisations trouvées ;
-    /// - 400 : dateTournee invalide ;
-    /// - 500 : erreur technique côté serveur.
-    ///
-    /// Exemple :
-    /// GET /api/synchronisations?dateTournee=2026-04-28&amp;codeTournee=2001&amp;codeLivreur=2
-    /// </remarks>
-    [HttpGet]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> GetSynchronisations(
-        [FromQuery] string? dateTournee,
-        [FromQuery] string? codeTournee,
-        [FromQuery] string? codeLivreur)
-    {
-        DateTime? parsedDateTournee = null;
-
-        if (!string.IsNullOrWhiteSpace(dateTournee))
-        {
-            if (!DateTime.TryParse(dateTournee, out var date))
-            {
-                return BadRequest(new
-                {
-                    statut = ApiErrorCodes.ValidationError,
-                    errors = new[]
-                    {
-                        "Le paramètre dateTournee est invalide. Format attendu : yyyy-MM-dd."
-                    }
-                });
-            }
-
-            parsedDateTournee = date.Date;
-        }
-
-        var synchronisations = await _repository.GetSynchronisationsAsync(
-            parsedDateTournee,
-            codeTournee,
-            codeLivreur);
-
-        return Ok(new
-        {
-            statut = ApiErrorCodes.Success,
-            count = synchronisations.Count,
-            synchronisations
-        });
-    }
-
-    /// <summary>
-    /// Consulte le détail complet d'une synchronisation envoyée.
-    /// </summary>
-    /// <remarks>
-    /// Cette route permet de retrouver le détail complet d'une synchronisation déjà enregistrée.
-    ///
-    /// Elle est utile pour vérifier ce que l'application mobile a réellement transmis :
-    /// en-tête de tournée, livreur, informations mobile, lignes validées, quantités et commentaires.
-    ///
-    /// Paramètre :
-    /// - idTourneeMobile : identifiant technique de la tournée mobile enregistrée.
-    ///
-    /// Réponses :
-    /// - 200 : synchronisation trouvée ;
-    /// - 400 : idTourneeMobile invalide ;
-    /// - 404 : synchronisation introuvable ;
-    /// - 500 : erreur technique côté serveur.
-    ///
-    /// Exemple :
-    /// GET /api/synchronisations/1
-    /// </remarks>
-    [HttpGet("{idTourneeMobile:long}")]
-    [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(object), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> GetSynchronisationById(long idTourneeMobile)
-    {
-        if (idTourneeMobile <= 0)
-        {
-            return BadRequest(new
-            {
-                statut = ApiErrorCodes.ValidationError,
-                errors = new[]
-                {
-                    "IdTourneeMobile doit être supérieur à 0."
-                }
-            });
-        }
-
-        var synchronisation = await _repository.GetSynchronisationByIdAsync(idTourneeMobile);
-
-        if (synchronisation is null)
-        {
-            return NotFound(new
-            {
-                statut = ApiErrorCodes.NotFound,
-                message = $"Aucune synchronisation trouvée avec l'ID {idTourneeMobile}."
-            });
-        }
-
-        return Ok(new
-        {
-            statut = ApiErrorCodes.Success,
-            synchronisation
-        });
-    }
-
-    /// <summary>
-    /// Enregistre une synchronisation de tournée envoyée par l'application mobile.
-    /// </summary>
-    /// <remarks>
-    /// Cette route est appelée en fin de journée lorsque le livreur renvoie les données saisies
-    /// depuis l'application mobile.
-    ///
-    /// Elle reçoit le résultat de la tournée après le travail hors connexion :
-    /// informations de tournée, livreur, appareil mobile, lignes validées, statuts de passage,
-    /// commentaires et quantités livrées ou récupérées.
-    ///
-    /// Règles métier principales :
+    /// Règles métier principales attendues :
     /// - le corps JSON est obligatoire ;
-    /// - schemaVersion est obligatoire et doit correspondre à la version supportée par l'API ;
-    /// - idSynchronisation est obligatoire, doit être un UUID valide et ne doit pas déjà exister ;
-    /// - dateTournee est obligatoire au format yyyy-MM-dd ;
-    /// - codeTournee est obligatoire ;
-    /// - livreur.codeLivreur est obligatoire ;
-    /// - livreur.nomLivreur est obligatoire ;
-    /// - mobile.nomAppareil est obligatoire ;
-    /// - mobile.versionApplication est obligatoire ;
-    /// - mobile.dateChargementMobile est obligatoire ;
-    /// - mobile.dateEnvoiMobile est obligatoire ;
-    /// - la liste lignes ne doit pas être vide ;
-    /// - chaque idLigneSource est obligatoire ;
-    /// - chaque idLigneSource doit être unique dans la requête ;
-    /// - ordreArret ne peut pas être négatif ;
-    /// - client.numClient est obligatoire ;
-    /// - client.nomClient est obligatoire ;
-    /// - pointLivraison.codePDL est obligatoire ;
-    /// - saisie.statutPassage est obligatoire ;
-    /// - le statut A_FAIRE est interdit dans l'envoi final ;
-    /// - saisie.estValidee doit être true pour chaque ligne envoyée ;
-    /// - saisie.heureValidation est obligatoire pour une ligne validée ;
-    /// - un statut NON_FAIT nécessite un commentaire livreur ;
-    /// - un statut ANOMALIE nécessite un commentaire livreur ;
-    /// - chaque quantité doit avoir un codeArticle ;
-    /// - les codes articles ne doivent pas être dupliqués dans une même ligne ;
-    /// - quantiteLivree ne peut pas être négative ;
-    /// - quantiteRecuperee ne peut pas être négative.
-    ///
-    /// Réponses :
-    /// - 200 : synchronisation enregistrée ;
-    /// - 400 : données invalides ou règles métier non respectées ;
-    /// - 409 : synchronisation déjà reçue ou tournée déjà envoyée ;
-    /// - 500 : erreur technique côté serveur.
+    /// - schemaVersion doit valoir "1.2" ;
+    /// - idSynchronisation doit être renseigné et unique ;
+    /// - dateTournee doit être renseignée ;
+    /// - codeTournee doit être renseigné ;
+    /// - livreur.codeLivreur doit être renseigné ;
+    /// - mobile.nomAppareil et mobile.versionApplication doivent être renseignés ;
+    /// - lignes[] ne doit pas être vide ;
+    /// - idLigneSource doit être renseigné pour chaque ligne ;
+    /// - idLigneSource doit être unique dans l'envoi ;
+    /// - A_FAIRE est interdit dans l'envoi final ;
+    /// - NON_FAIT et ANOMALIE nécessitent un commentaireLivreur ;
+    /// - estValidee doit être true pour chaque ligne envoyée ;
+    /// - heureValidation doit être renseignée pour chaque ligne validée ;
+    /// - saisie.quantites[] doit contenir au moins un article ;
+    /// - codeArticle doit être renseigné et unique dans une même ligne ;
+    /// - quantiteLivreePrevue peut être null, mais ne peut pas être négative si elle est renseignée ;
+    /// - quantiteLivree et quantiteRecuperee doivent être positives ou nulles.
     ///
     /// Exemple de corps JSON valide :
     ///
     /// {
-    ///   "schemaVersion": "1.1",
+    ///   "schemaVersion": "1.2",
     ///   "idSynchronisation": "11111111-1111-1111-1111-111111111111",
-    ///   "dateTournee": "2026-04-28",
-    ///   "codeTournee": "2001",
-    ///   "libelleTournee": "MDR VENDEE",
+    ///   "dateTournee": "2026-05-07",
+    ///   "codeTournee": "4006",
+    ///   "libelleTournee": "BOUAYE",
     ///   "livreur": {
     ///     "codeLivreur": "2",
     ///     "nomLivreur": "DAVID LEBAS"
@@ -219,140 +80,221 @@ public sealed class SynchronisationsController : ControllerBase
     ///   "mobile": {
     ///     "nomAppareil": "Samsung A15",
     ///     "versionApplication": "1.0.0",
-    ///     "dateChargementMobile": "2026-04-28T07:30:00+02:00",
-    ///     "dateEnvoiMobile": "2026-04-28T16:45:00+02:00"
+    ///     "dateChargementMobile": "2026-05-07T07:30:00+02:00",
+    ///     "dateEnvoiMobile": "2026-05-07T16:45:00+02:00"
     ///   },
     ///   "commentaireGlobal": null,
     ///   "lignes": [
     ///     {
-    ///       "idLigneSource": "2026-04-28|2001|2|1058|1|1",
+    ///       "idLigneSource": "2026-05-07|4006|4|333|341|1",
     ///       "ordreArret": 1,
+    ///       "horaire": 1,
     ///       "client": {
-    ///         "numClient": "1058",
-    ///         "nomClient": "EHPAD L EQUAIZIERE",
-    ///         "nomAffiche": "EHPAD EQUAIZIERE GARNACHE"
+    ///         "numClient": "333",
+    ///         "nomClient": "HOTEL LE MARTINET",
+    ///         "nomAffiche": "HOTEL LE MARTINET"
     ///       },
     ///       "pointLivraison": {
-    ///         "codePDL": "1",
-    ///         "descriptionPDL": "EHPAD EQUAIZIERE GARNACHE"
+    ///         "codePDL": "341",
+    ///         "descriptionPDL": "HOTEL LE MARTINET",
+    ///         "adresseLigne1": "PLACE DU GENERAL CHARRETTE",
+    ///         "adresseLigne2": null,
+    ///         "adresseLigne3": "SARL HOTEL LE MARTINET",
+    ///         "ville": "BOUIN",
+    ///         "codePostal": "85230"
+    ///       },
+    ///       "tournee": {
+    ///         "codeTournee": "4006",
+    ///         "libelleTournee": "BOUAYE",
+    ///         "jourTournee": 4,
+    ///         "jourLibelle": "Jeudi",
+    ///         "schemaLivraison": "1W1"
+    ///       },
+    ///       "retour": {
+    ///         "jourTourneeRetour": 4,
+    ///         "jourRetourLibelle": "Jeudi",
+    ///         "codeTourneeRetour": "4006",
+    ///         "libelleTourneeRetour": "BOUAYE"
+    ///       },
+    ///       "infosLivreur": {
+    ///         "instructions": "CODE 8578 *",
+    ///         "commentaireExceptionnel": null,
+    ///         "zoneDechargement": null,
+    ///         "zoneDechargementAffichee": "4",
+    ///         "zone": null,
+    ///         "precision": null,
+    ///         "cle": null,
+    ///         "estFerme": false,
+    ///         "dateFermeture": null,
+    ///         "motifFermeture": null
     ///       },
     ///       "saisie": {
-    ///         "precisionLivreur": "2 rolls repris au local arrière",
+    ///         "precisionLivreur": "Test API v1.2",
     ///         "statutPassage": "FAIT",
     ///         "commentaireLivreur": null,
-    ///         "heureValidation": "2026-04-28T09:12:00+02:00",
+    ///         "heureValidation": "2026-05-07T09:12:00+02:00",
     ///         "estValidee": true,
     ///         "quantites": [
     ///           {
     ///             "codeArticle": "ROLLS",
     ///             "libelle": "Rolls",
-    ///             "quantiteLivree": 3,
+    ///             "quantiteLivreePrevue": null,
+    ///             "quantiteLivree": 1,
     ///             "quantiteRecuperee": 2
     ///           },
     ///           {
     ///             "codeArticle": "TAPIS",
     ///             "libelle": "Tapis",
-    ///             "quantiteLivree": 1,
+    ///             "quantiteLivreePrevue": 0,
+    ///             "quantiteLivree": 0,
     ///             "quantiteRecuperee": 0
     ///           },
     ///           {
     ///             "codeArticle": "SACS",
     ///             "libelle": "Sacs",
-    ///             "quantiteLivree": 0,
-    ///             "quantiteRecuperee": 0
+    ///             "quantiteLivreePrevue": 2,
+    ///             "quantiteLivree": 3,
+    ///             "quantiteRecuperee": 1
     ///           }
     ///         ]
     ///       }
     ///     }
     ///   ]
     /// }
+    ///
+    /// Réponse possible en cas de succès :
+    ///
+    /// {
+    ///   "code": "SUCCESS",
+    ///   "message": "Synchronisation enregistrée avec succès."
+    /// }
+    ///
+    /// Réponse possible en cas de validation invalide :
+    ///
+    /// {
+    ///   "code": "VALIDATION_ERROR",
+    ///   "message": "Certaines données sont invalides.",
+    ///   "erreurs": [
+    ///     {
+    ///       "champ": "lignes[0].saisie.statutPassage",
+    ///       "message": "Le statut A_FAIRE est interdit dans l'envoi final."
+    ///     }
+    ///   ]
+    /// }
+    ///
+    /// Réponse possible en cas de double envoi :
+    ///
+    /// {
+    ///   "code": "TOURNEE_ALREADY_SENT",
+    ///   "message": "Cette tournée a déjà été envoyée pour cette date.",
+    ///   "dateTournee": "2026-05-07",
+    ///   "codeTournee": "4006"
+    /// }
     /// </remarks>
+    /// <param name="request">Corps JSON de synchronisation finale envoyé par l'application mobile.</param>
+    /// <param name="cancellationToken">Jeton d'annulation transmis par ASP.NET Core si la requête est interrompue.</param>
+    /// <returns>Résultat de l'enregistrement de la synchronisation.</returns>
     [HttpPost]
+    [Consumes("application/json")]
     [ProducesResponseType(typeof(object), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(object), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(object), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(object), StatusCodes.Status500InternalServerError)]
-    public async Task<IActionResult> PostSynchronisation([FromBody] SynchronisationTourneeRequest request)
+    public async Task<IActionResult> PostSynchronisation(
+        [FromBody] SynchronisationTourneeRequest? request,
+        CancellationToken cancellationToken)
     {
-        var errors = _validator.Validate(request);
-
-        if (errors.Count > 0)
+        if (request is null)
         {
             return BadRequest(new
             {
-                statut = ApiErrorCodes.ValidationError,
-                errors
-            });
-        }
-
-        try
-        {
-            if (await _repository.SynchronisationExistsAsync(request.IdSynchronisation))
-            {
-                return Conflict(new
+                code = "VALIDATION_ERROR",
+                message = "Le corps JSON de la synchronisation est obligatoire.",
+                erreurs = new[]
                 {
-                    statut = ApiErrorCodes.Conflict,
-                    code = ApiErrorCodes.SynchronisationAlreadyExists,
-                    message = "Cette synchronisation a déjà été reçue."
-                });
-            }
-
-            await _repository.SaveSynchronisationAsync(request);
-
-            return Ok(new
-            {
-                statut = ApiErrorCodes.Success,
-                message = "Synchronisation enregistrée avec succès."
-            });
-        }
-        catch (SqlException ex) when (ex.Number is 2601 or 2627)
-        {
-            _logger.LogWarning(
-                ex,
-                "Conflit SQL pendant la synchronisation. IdSynchronisation={IdSynchronisation}, DateTournee={DateTournee}, CodeTournee={CodeTournee}, CodeLivreur={CodeLivreur}",
-                request.IdSynchronisation,
-                request.DateTournee,
-                request.CodeTournee,
-                request.Livreur?.CodeLivreur);
-
-            return Conflict(new
-            {
-                statut = ApiErrorCodes.Conflict,
-                code = ApiErrorCodes.TourneeAlreadySent,
-                message = "Cette tournée a déjà été envoyée pour ce livreur et cette date."
-            });
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new
-            {
-                statut = ApiErrorCodes.ValidationError,
-                errors = new[]
-                {
-                    ex.Message
+                    new
+                    {
+                        champ = "body",
+                        message = "Le corps de la requête est vide ou invalide."
+                    }
                 }
             });
         }
-        catch (Exception ex)
+
+        var adresseIp = HttpContext.Connection.RemoteIpAddress?.ToString();
+
+        try
         {
-            _logger.LogError(
-                ex,
-                "Erreur technique pendant la synchronisation. IdSynchronisation={IdSynchronisation}, DateTournee={DateTournee}, CodeTournee={CodeTournee}, CodeLivreur={CodeLivreur}",
-                request.IdSynchronisation,
-                request.DateTournee,
-                request.CodeTournee,
-                request.Livreur?.CodeLivreur);
+            var result = await _synchronisationService.EnregistrerSynchronisationAsync(
+                request,
+                adresseIp,
+                cancellationToken);
 
-            var message = _environment.IsDevelopment()
-                ? $"Erreur technique lors de la synchronisation : {ex.Message}"
-                : "Erreur technique lors de la synchronisation.";
-
-            return StatusCode(500, new
+            return result.StatusCode switch
             {
-                statut = ApiErrorCodes.Error,
-                code = ApiErrorCodes.TechnicalError,
-                message
+                StatusCodes.Status200OK => Ok(result.Body),
+                StatusCodes.Status400BadRequest => BadRequest(result.Body),
+                StatusCodes.Status409Conflict => Conflict(result.Body),
+                _ => StatusCode(result.StatusCode, result.Body)
+            };
+        }
+        catch (SqlException exception) when (exception.Number is 2601 or 2627)
+        {
+            /*
+             * Sécurité finale contre les doubles envois.
+             *
+             * Même si le service contrôle avant insertion, deux requêtes peuvent
+             * arriver presque en même temps. La contrainte SQL unique filtrée
+             * reste donc la protection définitive :
+             *
+             * UX_Mobile_Tournee_EnvoiUnique
+             * DateTournee + CodeTournee
+             * WHERE StatutSynchronisation = 'ENVOYEE'
+             */
+            _logger.LogWarning(
+                exception,
+                "Double envoi détecté par la contrainte SQL pour la tournée {CodeTournee} du {DateTournee}.",
+                request.CodeTournee,
+                request.DateTournee);
+
+            return Conflict(new
+            {
+                code = "TOURNEE_ALREADY_SENT",
+                message = "Cette tournée a déjà été envoyée pour cette date.",
+                dateTournee = FormatDateTournee(request.DateTournee),
+                codeTournee = request.CodeTournee
             });
         }
+        catch (Exception exception)
+        {
+            _logger.LogError(
+                exception,
+                "Erreur technique lors de la synchronisation de la tournée {CodeTournee} du {DateTournee}.",
+                request.CodeTournee,
+                request.DateTournee);
+
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new
+                {
+                    code = "SERVER_ERROR",
+                    message = "Une erreur technique est survenue pendant le traitement de la synchronisation."
+                });
+        }
+    }
+
+    private static string FormatDateTournee(object? dateTournee)
+    {
+        if (dateTournee is DateTime dateTime)
+        {
+            return dateTime.ToString("yyyy-MM-dd");
+        }
+
+        if (DateTime.TryParse(Convert.ToString(dateTournee), out var parsedDate))
+        {
+            return parsedDate.ToString("yyyy-MM-dd");
+        }
+
+        return Convert.ToString(dateTournee) ?? string.Empty;
     }
 }

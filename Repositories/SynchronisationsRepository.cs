@@ -1,894 +1,792 @@
-using Dapper;
-using API_ASP.NET_Core.Constants;
-using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Models;
+using API_ASP.NET_Core.Validators;
+using Microsoft.Data.SqlClient;
+using System.Data;
 
 namespace API_ASP.NET_Core.Repositories;
 
-/// <summary>
-/// Repository pour l'enregistrement, la vérification et la consultation des synchronisations.
-///
-/// Tables utilisées :
-/// - Mobile_Livreur
-/// - Mobile_Tournee
-/// - Mobile_TourneeLigne
-/// - Mobile_TourneeLigneQuantite
-/// - Mobile_LogSynchronisation
-///
-/// Contrat JSON officiel :
-/// - schemaVersion = 1.2
-/// - saisie.quantites[]
-/// - quantiteLivreePrevue nullable
-/// - quantiteLivree
-/// - quantiteRecuperee
-/// </summary>
 public sealed class SynchronisationsRepository
 {
-    private readonly SqlConnectionFactory _connectionFactory;
+    private readonly string _connectionString;
 
-    public SynchronisationsRepository(SqlConnectionFactory connectionFactory)
+    public SynchronisationsRepository(IConfiguration configuration)
     {
-        _connectionFactory = connectionFactory;
+        _connectionString =
+            configuration.GetConnectionString("MobileConnection")
+            ?? configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException("La chaîne de connexion MobileConnection est introuvable.");
     }
 
-    public async Task<bool> SynchronisationExistsAsync(string idSynchronisation)
+    public async Task<TourneeDejaEnvoyeeDto?> GetTourneeDejaEnvoyeeAsync(
+        DateTime dateTournee,
+        string codeTournee,
+        CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(idSynchronisation, out var guid))
-        {
-            return false;
-        }
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
 
-        using var connection = _connectionFactory.CreateMobileConnection();
+        const string sql = @"
+SELECT TOP (1)
+    t.IdTourneeMobile,
+    t.DateTournee,
+    t.CodeTournee,
+    t.LibelleTournee,
+    l.CodeLivreur,
+    l.NomLivreur,
+    t.DateEnvoi,
+    t.DateReceptionApi
+FROM dbo.Mobile_Tournee t
+INNER JOIN dbo.Mobile_Livreur l
+    ON l.IdLivreur = t.IdLivreur
+WHERE t.DateTournee = @DateTournee
+  AND t.CodeTournee = @CodeTournee
+  AND t.StatutSynchronisation = N'ENVOYEE'
+ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
+";
 
-        var exists = await connection.QueryFirstOrDefaultAsync<int?>(
-            """
-            SELECT 1
-            FROM dbo.Mobile_Tournee
-            WHERE IdSynchronisation = @IdSynchronisation;
-            """,
-            new
-            {
-                IdSynchronisation = guid
-            });
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@DateTournee", SqlDbType.Date).Value = dateTournee.Date;
+        command.Parameters.Add("@CodeTournee", SqlDbType.NVarChar, 50).Value = codeTournee.Trim();
 
-        return exists.HasValue;
-    }
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
-    public async Task<List<SynchronisationResumeDto>> GetSynchronisationsAsync(
-        DateTime? dateTournee,
-        string? codeTournee,
-        string? codeLivreur)
-    {
-        using var connection = _connectionFactory.CreateMobileConnection();
-
-        var result = await connection.QueryAsync<SynchronisationResumeDto>(
-            """
-            SELECT
-                t.IdTourneeMobile,
-                t.SchemaVersion,
-                t.IdSynchronisation,
-                t.DateTournee,
-                t.CodeTournee,
-                t.LibelleTournee,
-                t.IdLivreur,
-                l.CodeLivreur,
-                l.NomLivreur,
-                t.StatutSynchronisation,
-                t.DateChargementMobile,
-                t.DateReceptionApi,
-                t.DateEnvoi,
-                t.EstVerrouillee,
-                t.NombrePointsPrevus,
-                t.NombrePointsSaisis,
-                t.CommentaireGlobal,
-                t.NomAppareil,
-                t.VersionApplication,
-                SUM(CASE WHEN tl.StatutPassage = @StatutFait THEN 1 ELSE 0 END) AS NombreFaits,
-                SUM(CASE WHEN tl.StatutPassage = @StatutNonFait THEN 1 ELSE 0 END) AS NombreNonFaits,
-                SUM(CASE WHEN tl.StatutPassage = @StatutAnomalie THEN 1 ELSE 0 END) AS NombreAnomalies
-            FROM dbo.Mobile_Tournee t
-            LEFT JOIN dbo.Mobile_Livreur l
-                ON l.IdLivreur = t.IdLivreur
-            LEFT JOIN dbo.Mobile_TourneeLigne tl
-                ON tl.IdTourneeMobile = t.IdTourneeMobile
-            WHERE (@DateTournee IS NULL OR t.DateTournee = @DateTournee)
-              AND (@CodeTournee IS NULL OR t.CodeTournee = @CodeTournee)
-              AND (@CodeLivreur IS NULL OR l.CodeLivreur = @CodeLivreur)
-            GROUP BY
-                t.IdTourneeMobile,
-                t.SchemaVersion,
-                t.IdSynchronisation,
-                t.DateTournee,
-                t.CodeTournee,
-                t.LibelleTournee,
-                t.IdLivreur,
-                l.CodeLivreur,
-                l.NomLivreur,
-                t.StatutSynchronisation,
-                t.DateChargementMobile,
-                t.DateReceptionApi,
-                t.DateEnvoi,
-                t.EstVerrouillee,
-                t.NombrePointsPrevus,
-                t.NombrePointsSaisis,
-                t.CommentaireGlobal,
-                t.NomAppareil,
-                t.VersionApplication
-            ORDER BY
-                t.DateReceptionApi DESC,
-                t.IdTourneeMobile DESC;
-            """,
-            new
-            {
-                DateTournee = dateTournee?.Date,
-                CodeTournee = EmptyToNull(codeTournee),
-                CodeLivreur = EmptyToNull(codeLivreur),
-                StatutFait = StatutsPassage.Fait,
-                StatutNonFait = StatutsPassage.NonFait,
-                StatutAnomalie = StatutsPassage.Anomalie
-            });
-
-        return result.ToList();
-    }
-
-    public async Task<SynchronisationDetailDto?> GetSynchronisationByIdAsync(long idTourneeMobile)
-    {
-        using var connection = _connectionFactory.CreateMobileConnection();
-
-        var entete = await connection.QuerySingleOrDefaultAsync<SynchronisationResumeDto>(
-            """
-            SELECT
-                t.IdTourneeMobile,
-                t.SchemaVersion,
-                t.IdSynchronisation,
-                t.DateTournee,
-                t.CodeTournee,
-                t.LibelleTournee,
-                t.IdLivreur,
-                l.CodeLivreur,
-                l.NomLivreur,
-                t.StatutSynchronisation,
-                t.DateChargementMobile,
-                t.DateReceptionApi,
-                t.DateEnvoi,
-                t.EstVerrouillee,
-                t.NombrePointsPrevus,
-                t.NombrePointsSaisis,
-                t.CommentaireGlobal,
-                t.NomAppareil,
-                t.VersionApplication,
-                (
-                    SELECT COUNT(1)
-                    FROM dbo.Mobile_TourneeLigne x
-                    WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = @StatutFait
-                ) AS NombreFaits,
-                (
-                    SELECT COUNT(1)
-                    FROM dbo.Mobile_TourneeLigne x
-                    WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = @StatutNonFait
-                ) AS NombreNonFaits,
-                (
-                    SELECT COUNT(1)
-                    FROM dbo.Mobile_TourneeLigne x
-                    WHERE x.IdTourneeMobile = t.IdTourneeMobile
-                      AND x.StatutPassage = @StatutAnomalie
-                ) AS NombreAnomalies
-            FROM dbo.Mobile_Tournee t
-            LEFT JOIN dbo.Mobile_Livreur l
-                ON l.IdLivreur = t.IdLivreur
-            WHERE t.IdTourneeMobile = @IdTourneeMobile;
-            """,
-            new
-            {
-                IdTourneeMobile = idTourneeMobile,
-                StatutFait = StatutsPassage.Fait,
-                StatutNonFait = StatutsPassage.NonFait,
-                StatutAnomalie = StatutsPassage.Anomalie
-            });
-
-        if (entete is null)
+        if (!await reader.ReadAsync(cancellationToken))
         {
             return null;
         }
 
-        var lignes = await connection.QueryAsync<SynchronisationLigneDetailDto>(
-            """
-            SELECT
-                IdTourneeLigne,
-                IdTourneeMobile,
-                IdLigneSource,
-                OrdreArret,
-                Horaire,
-                NumClient,
-                NomClient,
-                NomAffiche,
-                CodePDL,
-                DescriptionPDL,
-                AdresseLigne1,
-                AdresseLigne2,
-                AdresseLigne3,
-                Ville,
-                CodePostal,
-                JourTournee,
-                JourLibelle,
-                SchemaLivraison,
-                CodeTournee,
-                LibelleTournee,
-                JourTourneeRetour,
-                JourRetourLibelle,
-                CodeTourneeRetour,
-                LibelleTourneeRetour,
-                Instructions,
-                CommentaireExceptionnel,
-                ZoneDechargement,
-                ZoneDechargementAffichee,
-                Zone,
-                PrecisionInfo,
-                Cle,
-                TypeLinge,
-                EstFerme,
-                DateFermeture,
-                MotifFermeture,
-                QuantiteLivree,
-                QuantiteReprise,
-                PrecisionLivreur,
-                StatutPassage,
-                CommentaireLivreur,
-                HeureValidation,
-                EstValidee,
-                DateCreation,
-                DateModification
-            FROM dbo.Mobile_TourneeLigne
-            WHERE IdTourneeMobile = @IdTourneeMobile
-            ORDER BY
-                OrdreArret,
-                IdTourneeLigne;
-            """,
-            new
-            {
-                IdTourneeMobile = idTourneeMobile
-            });
-
-        var quantites = await connection.QueryAsync<SynchronisationQuantiteDetailDto>(
-            """
-            SELECT
-                q.IdQuantite,
-                q.IdTourneeLigne,
-                q.CodeArticle,
-                q.LibelleArticle,
-                q.QuantiteLivreePrevue,
-                q.QuantiteLivree,
-                q.QuantiteRecuperee,
-                q.DateCreation,
-                q.DateModification
-            FROM dbo.Mobile_TourneeLigneQuantite q
-            INNER JOIN dbo.Mobile_TourneeLigne l
-                ON l.IdTourneeLigne = q.IdTourneeLigne
-            WHERE l.IdTourneeMobile = @IdTourneeMobile
-            ORDER BY
-                l.OrdreArret,
-                q.CodeArticle;
-            """,
-            new
-            {
-                IdTourneeMobile = idTourneeMobile
-            });
-
-        var logs = await connection.QueryAsync<SynchronisationLogDto>(
-            """
-            SELECT
-                IdLog,
-                IdTourneeMobile,
-                IdLivreur,
-                IdSynchronisation,
-                DateEvenement,
-                TypeEvenement,
-                Niveau,
-                Message,
-                DetailTechnique,
-                AdresseIP,
-                NomAppareil,
-                VersionApplication
-            FROM dbo.Mobile_LogSynchronisation
-            WHERE IdTourneeMobile = @IdTourneeMobile
-            ORDER BY
-                DateEvenement DESC,
-                IdLog DESC;
-            """,
-            new
-            {
-                IdTourneeMobile = idTourneeMobile
-            });
-
-        return new SynchronisationDetailDto
+        return new TourneeDejaEnvoyeeDto
         {
-            Entete = entete,
-            Lignes = lignes.ToList(),
-            Quantites = quantites.ToList(),
-            Logs = logs.ToList()
+            IdTourneeMobile = reader.GetInt64(reader.GetOrdinal("IdTourneeMobile")),
+            DateTournee = reader.GetDateTime(reader.GetOrdinal("DateTournee")),
+            CodeTournee = reader.GetString(reader.GetOrdinal("CodeTournee")),
+            LibelleTournee = ReadNullableString(reader, "LibelleTournee"),
+            CodeLivreur = reader.GetString(reader.GetOrdinal("CodeLivreur")),
+            NomLivreur = ReadNullableString(reader, "NomLivreur"),
+            DateEnvoi = ReadNullableDateTimeOffset(reader, "DateEnvoi"),
+            DateReceptionApi = ReadNullableDateTimeOffset(reader, "DateReceptionApi")
         };
     }
 
-    public async Task SaveSynchronisationAsync(SynchronisationTourneeRequest request)
+    public async Task<SynchronisationEnregistrementResult> EnregistrerSynchronisationAsync(
+        SynchronisationTourneeRequest request,
+        string? adresseIp,
+        CancellationToken cancellationToken = default)
     {
-        using var connection = _connectionFactory.CreateMobileConnection();
+        var dateTournee = SynchronisationTourneeValidator.ParseDateTournee(request.DateTournee);
+        var idSynchronisation = ParseGuid(request.IdSynchronisation);
+        var livreur = request.Livreur
+            ?? throw new InvalidOperationException("Le livreur a été validé mais reste null.");
+        var mobile = request.Mobile
+            ?? throw new InvalidOperationException("Les informations mobile ont été validées mais restent null.");
+        var lignes = request.Lignes
+            ?? throw new InvalidOperationException("Les lignes ont été validées mais restent null.");
+        var dateChargementMobile = ParseDateTimeOffsetOrNull(mobile.DateChargementMobile);
+        var dateEnvoiMobile = ParseDateTimeOffsetOrNull(mobile.DateEnvoiMobile) ?? DateTimeOffset.Now;
 
-        await connection.OpenAsync();
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
 
-        using var transaction = await connection.BeginTransactionAsync();
+        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
         {
-            var now = DateTimeOffset.Now;
+            var idLivreur = await GetOrCreateLivreurAsync(
+                connection,
+                (SqlTransaction)transaction,
+                livreur.CodeLivreur,
+                livreur.NomLivreur,
+                cancellationToken);
 
-            var idSynchronisationGuid = ParseRequiredGuid(
-                request.IdSynchronisation,
-                "IdSynchronisation doit être un GUID valide.");
+            var idTourneeMobile = await InsertTourneeAsync(
+                connection,
+                (SqlTransaction)transaction,
+                request,
+                idSynchronisation,
+                dateTournee,
+                idLivreur,
+                dateChargementMobile,
+                dateEnvoiMobile,
+                adresseIp,
+                cancellationToken);
 
-            var dateTournee = ParseRequiredDate(
-                request.DateTournee,
-                "DateTournee invalide.");
-
-            var codeLivreur = RequiredTrimmed(
-                request.Livreur?.CodeLivreur,
-                "Livreur.CodeLivreur est obligatoire.");
-
-            var nomLivreur = string.IsNullOrWhiteSpace(request.Livreur?.NomLivreur)
-                ? codeLivreur
-                : request.Livreur.NomLivreur.Trim();
-
-            var codeTournee = RequiredTrimmed(
-                request.CodeTournee,
-                "CodeTournee est obligatoire.");
-
-            var dateChargementMobile = ParseOptionalDateTimeOffset(request.Mobile?.DateChargementMobile);
-            var dateEnvoiMobile = ParseOptionalDateTimeOffset(request.Mobile?.DateEnvoiMobile);
-
-            await connection.ExecuteAsync(
-                """
-                MERGE INTO dbo.Mobile_Livreur AS target
-                USING (
-                    SELECT
-                        @CodeLivreur AS CodeLivreur,
-                        @NomLivreur AS NomLivreur
-                ) AS source
-                ON target.CodeLivreur = source.CodeLivreur
-                WHEN MATCHED THEN
-                    UPDATE SET
-                        NomLivreur = source.NomLivreur,
-                        EstActif = 1,
-                        DateModification = @Now
-                WHEN NOT MATCHED THEN
-                    INSERT (
-                        CodeLivreur,
-                        NomLivreur,
-                        EstActif,
-                        DateCreation,
-                        DateModification
-                    )
-                    VALUES (
-                        source.CodeLivreur,
-                        source.NomLivreur,
-                        1,
-                        @Now,
-                        NULL
-                    );
-                """,
-                new
-                {
-                    CodeLivreur = codeLivreur,
-                    NomLivreur = nomLivreur,
-                    Now = now
-                },
-                transaction);
-
-            var idLivreur = await connection.QuerySingleAsync<int>(
-                """
-                SELECT IdLivreur
-                FROM dbo.Mobile_Livreur
-                WHERE CodeLivreur = @CodeLivreur;
-                """,
-                new
-                {
-                    CodeLivreur = codeLivreur
-                },
-                transaction);
-
-            var idTourneeMobile = await connection.QuerySingleAsync<long>(
-                """
-                INSERT INTO dbo.Mobile_Tournee (
-                    SchemaVersion,
-                    IdSynchronisation,
-                    DateTournee,
-                    CodeTournee,
-                    LibelleTournee,
-                    IdLivreur,
-                    StatutSynchronisation,
-                    DateChargementMobile,
-                    DateReceptionApi,
-                    DateEnvoi,
-                    EstVerrouillee,
-                    NombrePointsPrevus,
-                    NombrePointsSaisis,
-                    CommentaireGlobal,
-                    NomAppareil,
-                    VersionApplication,
-                    AdresseIP,
-                    DateCreation,
-                    DateModification
-                )
-                OUTPUT INSERTED.IdTourneeMobile
-                VALUES (
-                    @SchemaVersion,
-                    @IdSynchronisation,
-                    @DateTournee,
-                    @CodeTournee,
-                    @LibelleTournee,
-                    @IdLivreur,
-                    @StatutSynchronisation,
-                    @DateChargementMobile,
-                    @DateReceptionApi,
-                    @DateEnvoi,
-                    1,
-                    @NombrePointsPrevus,
-                    @NombrePointsSaisis,
-                    @CommentaireGlobal,
-                    @NomAppareil,
-                    @VersionApplication,
-                    NULL,
-                    @Now,
-                    NULL
-                );
-                """,
-                new
-                {
-                    SchemaVersion = RequiredTrimmed(request.SchemaVersion, "SchemaVersion est obligatoire."),
-                    IdSynchronisation = idSynchronisationGuid,
-                    DateTournee = dateTournee.Date,
-                    CodeTournee = codeTournee,
-                    LibelleTournee = EmptyToNull(request.LibelleTournee),
-                    IdLivreur = idLivreur,
-                    StatutSynchronisation = StatutsSynchronisation.Envoyee,
-                    DateChargementMobile = dateChargementMobile,
-                    DateReceptionApi = now,
-                    DateEnvoi = dateEnvoiMobile ?? now,
-                    NombrePointsPrevus = request.Lignes.Count,
-                    NombrePointsSaisis = request.Lignes.Count,
-                    CommentaireGlobal = EmptyToNull(request.CommentaireGlobal),
-                    NomAppareil = EmptyToNull(request.Mobile?.NomAppareil),
-                    VersionApplication = EmptyToNull(request.Mobile?.VersionApplication),
-                    Now = now
-                },
-                transaction);
+            var nombreLignes = 0;
+            var nombreQuantites = 0;
 
             foreach (var ligne in request.Lignes)
             {
-                if (ligne.Saisie is null)
+                var idTourneeLigne = await InsertLigneAsync(
+                    connection,
+                    (SqlTransaction)transaction,
+                    request,
+                    ligne,
+                    idTourneeMobile,
+                    cancellationToken);
+
+                nombreLignes++;
+
+                var saisie = ligne.Saisie
+                    ?? throw new InvalidOperationException("La saisie d'une ligne a été validée mais reste null.");
+                var quantitesLigne = saisie.Quantites
+                    ?? throw new InvalidOperationException("Les quantités d'une ligne ont été validées mais restent null.");
+
+                foreach (var quantite in quantitesLigne)
                 {
-                    throw new ArgumentException("Chaque ligne doit contenir une saisie.");
-                }
+                    await EnsureArticleAsync(
+                        connection,
+                        (SqlTransaction)transaction,
+                        quantite.CodeArticle,
+                        quantite.Libelle,
+                        cancellationToken);
 
-                var quantites = NormalizeQuantites(ligne.Saisie.Quantites);
+                    await InsertQuantiteAsync(
+                        connection,
+                        (SqlTransaction)transaction,
+                        idTourneeLigne,
+                        quantite,
+                        cancellationToken);
 
-                if (quantites.Count == 0)
-                {
-                    throw new ArgumentException("Chaque ligne doit contenir au moins une quantité.");
-                }
-
-                var quantiteLivree = quantites.Sum(q => q.QuantiteLivree);
-                var quantiteReprise = quantites.Sum(q => q.QuantiteRecuperee);
-
-                var nbExpes = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Expes);
-                var nbRolls = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Rolls);
-                var nbVetements = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Vetements);
-                var nbTapis = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Tapis);
-                var nbSacs = GetQuantiteLivreePourArticle(quantites, ArticlesSaisissables.Sacs);
-                var nbRecuperes = quantiteReprise;
-
-                var heureValidation = ParseHeureValidation(
-                    ligne.Saisie.HeureValidation,
-                    dateTournee.Date);
-
-                var statutPassage = RequiredTrimmed(
-                    ligne.Saisie.StatutPassage,
-                    "StatutPassage est obligatoire.").ToUpperInvariant();
-
-                var idLigneSource = RequiredTrimmed(
-                    ligne.IdLigneSource,
-                    "IdLigneSource est obligatoire.");
-
-                var numClient = RequiredTrimmed(
-                    ligne.Client?.NumClient,
-                    "Client.NumClient est obligatoire.");
-
-                var nomClient = RequiredTrimmed(
-                    ligne.Client?.NomClient,
-                    "Client.NomClient est obligatoire.");
-
-                var jourTournee = ligne.Tournee?.JourTournee;
-                var jourTourneeRetour = ligne.Retour?.JourTourneeRetour;
-
-                var idTourneeLigne = await connection.QuerySingleAsync<long>(
-                    """
-                    INSERT INTO dbo.Mobile_TourneeLigne (
-                        IdTourneeMobile,
-                        IdLigneSource,
-                        NumClient,
-                        NomClient,
-                        NomAffiche,
-                        CodePDL,
-                        DescriptionPDL,
-                        AdresseLigne1,
-                        AdresseLigne2,
-                        AdresseLigne3,
-                        Ville,
-                        CodePostal,
-                        CodeTournee,
-                        LibelleTournee,
-                        JourTournee,
-                        JourLibelle,
-                        SchemaLivraison,
-                        OrdreArret,
-                        Horaire,
-                        JourTourneeRetour,
-                        JourRetourLibelle,
-                        CodeTourneeRetour,
-                        LibelleTourneeRetour,
-                        Instructions,
-                        CommentaireExceptionnel,
-                        ZoneDechargement,
-                        ZoneDechargementAffichee,
-                        Zone,
-                        PrecisionInfo,
-                        Cle,
-                        TypeLinge,
-                        EstFerme,
-                        DateFermeture,
-                        MotifFermeture,
-                        QuantiteLivree,
-                        QuantiteReprise,
-                        NbExpes,
-                        NbRolls,
-                        NbVetements,
-                        NbTapis,
-                        NbSacs,
-                        NbRecuperes,
-                        PrecisionLivreur,
-                        StatutPassage,
-                        CommentaireLivreur,
-                        HeureValidation,
-                        EstValidee,
-                        DateCreation,
-                        DateModification
-                    )
-                    OUTPUT INSERTED.IdTourneeLigne
-                    VALUES (
-                        @IdTourneeMobile,
-                        @IdLigneSource,
-                        @NumClient,
-                        @NomClient,
-                        @NomAffiche,
-                        @CodePDL,
-                        @DescriptionPDL,
-                        @AdresseLigne1,
-                        @AdresseLigne2,
-                        @AdresseLigne3,
-                        @Ville,
-                        @CodePostal,
-                        @CodeTournee,
-                        @LibelleTournee,
-                        @JourTournee,
-                        @JourLibelle,
-                        @SchemaLivraison,
-                        @OrdreArret,
-                        @Horaire,
-                        @JourTourneeRetour,
-                        @JourRetourLibelle,
-                        @CodeTourneeRetour,
-                        @LibelleTourneeRetour,
-                        @Instructions,
-                        @CommentaireExceptionnel,
-                        @ZoneDechargement,
-                        @ZoneDechargementAffichee,
-                        @Zone,
-                        @PrecisionInfo,
-                        @Cle,
-                        NULL,
-                        @EstFerme,
-                        @DateFermeture,
-                        @MotifFermeture,
-                        @QuantiteLivree,
-                        @QuantiteReprise,
-                        @NbExpes,
-                        @NbRolls,
-                        @NbVetements,
-                        @NbTapis,
-                        @NbSacs,
-                        @NbRecuperes,
-                        @PrecisionLivreur,
-                        @StatutPassage,
-                        @CommentaireLivreur,
-                        @HeureValidation,
-                        @EstValidee,
-                        @Now,
-                        NULL
-                    );
-                    """,
-                    new
-                    {
-                        IdTourneeMobile = idTourneeMobile,
-                        IdLigneSource = idLigneSource,
-                        NumClient = numClient,
-                        NomClient = nomClient,
-                        NomAffiche = EmptyToNull(ligne.Client?.NomAffiche),
-                        CodePDL = EmptyToNull(ligne.PointLivraison?.CodePDL),
-                        DescriptionPDL = EmptyToNull(ligne.PointLivraison?.DescriptionPDL),
-                        AdresseLigne1 = EmptyToNull(ligne.PointLivraison?.AdresseLigne1),
-                        AdresseLigne2 = EmptyToNull(ligne.PointLivraison?.AdresseLigne2),
-                        AdresseLigne3 = EmptyToNull(ligne.PointLivraison?.AdresseLigne3),
-                        Ville = EmptyToNull(ligne.PointLivraison?.Ville),
-                        CodePostal = EmptyToNull(ligne.PointLivraison?.CodePostal),
-                        CodeTournee = codeTournee,
-                        LibelleTournee = EmptyToNull(ligne.Tournee?.LibelleTournee) ?? EmptyToNull(request.LibelleTournee),
-                        JourTournee = jourTournee,
-                        JourLibelle = EmptyToNull(ligne.Tournee?.JourLibelle) ?? GetJourLibelle(jourTournee),
-                        SchemaLivraison = EmptyToNull(ligne.Tournee?.SchemaLivraison),
-                        OrdreArret = ligne.OrdreArret,
-                        Horaire = ligne.Horaire?.ToString(),
-                        JourTourneeRetour = jourTourneeRetour,
-                        JourRetourLibelle = EmptyToNull(ligne.Retour?.JourRetourLibelle) ?? GetJourLibelle(jourTourneeRetour),
-                        CodeTourneeRetour = EmptyToNull(ligne.Retour?.CodeTourneeRetour),
-                        LibelleTourneeRetour = EmptyToNull(ligne.Retour?.LibelleTourneeRetour),
-                        Instructions = EmptyToNull(ligne.InfosLivreur?.Instructions),
-                        CommentaireExceptionnel = EmptyToNull(ligne.InfosLivreur?.CommentaireExceptionnel),
-                        ZoneDechargement = EmptyToNull(ligne.InfosLivreur?.ZoneDechargement),
-                        ZoneDechargementAffichee = EmptyToNull(ligne.InfosLivreur?.ZoneDechargementAffichee),
-                        Zone = EmptyToNull(ligne.InfosLivreur?.Zone),
-                        PrecisionInfo = EmptyToNull(ligne.InfosLivreur?.Precision),
-                        Cle = EmptyToNull(ligne.InfosLivreur?.Cle),
-                        EstFerme = ligne.InfosLivreur?.EstFerme ?? false,
-                        DateFermeture = ligne.InfosLivreur?.DateFermeture?.ToDateTime(TimeOnly.MinValue).Date,
-                        MotifFermeture = EmptyToNull(ligne.InfosLivreur?.MotifFermeture),
-                        QuantiteLivree = quantiteLivree,
-                        QuantiteReprise = quantiteReprise,
-                        NbExpes = nbExpes,
-                        NbRolls = nbRolls,
-                        NbVetements = nbVetements,
-                        NbTapis = nbTapis,
-                        NbSacs = nbSacs,
-                        NbRecuperes = nbRecuperes,
-                        PrecisionLivreur = EmptyToNull(ligne.Saisie.PrecisionLivreur),
-                        StatutPassage = statutPassage,
-                        CommentaireLivreur = EmptyToNull(ligne.Saisie.CommentaireLivreur),
-                        HeureValidation = heureValidation,
-                        EstValidee = ligne.Saisie.EstValidee,
-                        Now = now
-                    },
-                    transaction);
-
-                foreach (var quantite in quantites)
-                {
-                    await connection.ExecuteAsync(
-                        """
-                        INSERT INTO dbo.Mobile_TourneeLigneQuantite (
-                            IdTourneeLigne,
-                            CodeArticle,
-                            LibelleArticle,
-                            QuantiteLivreePrevue,
-                            QuantiteLivree,
-                            QuantiteRecuperee,
-                            DateCreation,
-                            DateModification
-                        )
-                        VALUES (
-                            @IdTourneeLigne,
-                            @CodeArticle,
-                            @LibelleArticle,
-                            @QuantiteLivreePrevue,
-                            @QuantiteLivree,
-                            @QuantiteRecuperee,
-                            @Now,
-                            NULL
-                        );
-                        """,
-                        new
-                        {
-                            IdTourneeLigne = idTourneeLigne,
-                            CodeArticle = quantite.CodeArticle,
-                            LibelleArticle = quantite.Libelle,
-                            QuantiteLivreePrevue = quantite.QuantiteLivreePrevue,
-                            QuantiteLivree = quantite.QuantiteLivree,
-                            QuantiteRecuperee = quantite.QuantiteRecuperee,
-                            Now = now
-                        },
-                        transaction);
+                    nombreQuantites++;
                 }
             }
 
-            await connection.ExecuteAsync(
-                """
-                INSERT INTO dbo.Mobile_LogSynchronisation (
-                    IdTourneeMobile,
-                    IdLivreur,
-                    IdSynchronisation,
-                    DateEvenement,
-                    TypeEvenement,
-                    Niveau,
-                    Message,
-                    DetailTechnique,
-                    AdresseIP,
-                    NomAppareil,
-                    VersionApplication
-                )
-                VALUES (
-                    @IdTourneeMobile,
-                    @IdLivreur,
-                    @IdSynchronisation,
-                    @DateEvenement,
-                    @TypeEvenement,
-                    @Niveau,
-                    @Message,
-                    @DetailTechnique,
-                    @AdresseIP,
-                    @NomAppareil,
-                    @VersionApplication
-                );
-                """,
-                new
-                {
-                    IdTourneeMobile = idTourneeMobile,
-                    IdLivreur = idLivreur,
-                    IdSynchronisation = idSynchronisationGuid,
-                    DateEvenement = now,
-                    TypeEvenement = "ENVOI_REUSSI",
-                    Niveau = "INFO",
-                    Message = "Synchronisation enregistrée avec succès.",
-                    DetailTechnique = $"Tournée {codeTournee} du {dateTournee:yyyy-MM-dd} synchronisée avec {request.Lignes.Count} ligne(s).",
-                    AdresseIP = (string?)null,
-                    NomAppareil = EmptyToNull(request.Mobile?.NomAppareil),
-                    VersionApplication = EmptyToNull(request.Mobile?.VersionApplication)
-                },
-                transaction);
+            await InsertLogAsync(
+                connection,
+                (SqlTransaction)transaction,
+                idTourneeMobile,
+                idLivreur,
+                idSynchronisation,
+                "ENVOI_REUSSI",
+                "INFO",
+                "Synchronisation enregistrée avec succès.",
+                null,
+                adresseIp,
+                request.Mobile?.NomAppareil,
+                request.Mobile?.VersionApplication,
+                cancellationToken);
 
-            await transaction.CommitAsync();
+            await transaction.CommitAsync(cancellationToken);
+
+            return new SynchronisationEnregistrementResult
+            {
+                IdTourneeMobile = idTourneeMobile,
+                IdSynchronisation = idSynchronisation,
+                DateReceptionApi = DateTimeOffset.Now,
+                NombreLignesRecues = nombreLignes,
+                NombreQuantitesRecues = nombreQuantites
+            };
         }
         catch
         {
-            await transaction.RollbackAsync();
+            await transaction.RollbackAsync(cancellationToken);
             throw;
         }
     }
 
-    private static Guid ParseRequiredGuid(string? value, string errorMessage)
+    public async Task EcrireLogDoubleEnvoiAsync(
+        SynchronisationTourneeRequest request,
+        TourneeDejaEnvoyeeDto tourneeExistante,
+        string? adresseIp,
+        CancellationToken cancellationToken = default)
     {
-        if (!Guid.TryParse(value, out var guid))
-        {
-            throw new ArgumentException(errorMessage);
-        }
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
 
-        return guid;
+        var idLivreur = await GetLivreurIdOrNullAsync(
+            connection,
+            request.Livreur?.CodeLivreur,
+            cancellationToken);
+
+        var idSynchronisation = SynchronisationTourneeValidator.TryParseGuid(
+            request.IdSynchronisation,
+            out var parsedGuid)
+            ? parsedGuid
+            : (Guid?)null;
+
+        const string sql = @"
+INSERT INTO dbo.Mobile_LogSynchronisation
+    (
+        IdTourneeMobile,
+        IdLivreur,
+        IdSynchronisation,
+        TypeEvenement,
+        Niveau,
+        Message,
+        DetailTechnique,
+        AdresseIP,
+        NomAppareil,
+        VersionApplication
+    )
+VALUES
+    (
+        @IdTourneeMobile,
+        @IdLivreur,
+        @IdSynchronisation,
+        N'DOUBLE_ENVOI',
+        N'WARNING',
+        @Message,
+        @DetailTechnique,
+        @AdresseIP,
+        @NomAppareil,
+        @VersionApplication
+    );
+";
+
+        var detailTechnique =
+            $"Tentative de double envoi pour DateTournee={request.DateTournee}, CodeTournee={request.CodeTournee}. " +
+            $"Tournee existante IdTourneeMobile={tourneeExistante.IdTourneeMobile}, CodeLivreur={tourneeExistante.CodeLivreur}.";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@IdTourneeMobile", SqlDbType.BigInt).Value = tourneeExistante.IdTourneeMobile;
+        command.Parameters.Add("@IdLivreur", SqlDbType.Int).Value = ToDbValue(idLivreur);
+        command.Parameters.Add("@IdSynchronisation", SqlDbType.UniqueIdentifier).Value = ToDbValue(idSynchronisation);
+        command.Parameters.Add("@Message", SqlDbType.NVarChar, 1000).Value = "Double envoi bloqué : tournée déjà envoyée pour cette date.";
+        command.Parameters.Add("@DetailTechnique", SqlDbType.NVarChar).Value = detailTechnique;
+        command.Parameters.Add("@AdresseIP", SqlDbType.NVarChar, 50).Value = ToDbValue(adresseIp);
+        command.Parameters.Add("@NomAppareil", SqlDbType.NVarChar, 100).Value = ToDbValue(request.Mobile?.NomAppareil);
+        command.Parameters.Add("@VersionApplication", SqlDbType.NVarChar, 50).Value = ToDbValue(request.Mobile?.VersionApplication);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static DateTime ParseRequiredDate(string? value, string errorMessage)
+    private async Task<int> GetOrCreateLivreurAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string codeLivreur,
+        string? nomLivreur,
+        CancellationToken cancellationToken)
     {
-        if (!DateTime.TryParse(value, out var date))
-        {
-            throw new ArgumentException(errorMessage);
-        }
+        const string sql = @"
+DECLARE @IdLivreur INT;
 
-        return date.Date;
+SELECT @IdLivreur = IdLivreur
+FROM dbo.Mobile_Livreur WITH (UPDLOCK, HOLDLOCK)
+WHERE CodeLivreur = @CodeLivreur;
+
+IF @IdLivreur IS NULL
+BEGIN
+    INSERT INTO dbo.Mobile_Livreur
+        (CodeLivreur, NomLivreur)
+    VALUES
+        (@CodeLivreur, @NomLivreur);
+
+    SET @IdLivreur = CONVERT(INT, SCOPE_IDENTITY());
+END
+ELSE
+BEGIN
+    UPDATE dbo.Mobile_Livreur
+    SET
+        NomLivreur = @NomLivreur,
+        EstActif = 1,
+        DateModification = SYSDATETIMEOFFSET()
+    WHERE IdLivreur = @IdLivreur;
+END
+
+SELECT @IdLivreur;
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@CodeLivreur", SqlDbType.NVarChar, 50).Value = codeLivreur.Trim();
+        command.Parameters.Add("@NomLivreur", SqlDbType.NVarChar, 100).Value =
+            string.IsNullOrWhiteSpace(nomLivreur) ? codeLivreur.Trim() : nomLivreur.Trim();
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result);
     }
 
-    private static DateTimeOffset? ParseOptionalDateTimeOffset(string? value)
+    private async Task<int?> GetLivreurIdOrNullAsync(
+        SqlConnection connection,
+        string? codeLivreur,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(codeLivreur))
         {
             return null;
         }
 
-        if (DateTimeOffset.TryParse(value, out var dateTimeOffset))
-        {
-            return dateTimeOffset;
-        }
+        const string sql = @"
+SELECT TOP (1) IdLivreur
+FROM dbo.Mobile_Livreur
+WHERE CodeLivreur = @CodeLivreur;
+";
 
-        if (DateTime.TryParse(value, out var dateTime))
-        {
-            return new DateTimeOffset(dateTime);
-        }
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@CodeLivreur", SqlDbType.NVarChar, 50).Value = codeLivreur.Trim();
 
-        return null;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return result is null || result == DBNull.Value ? null : Convert.ToInt32(result);
     }
 
-    private static DateTimeOffset? ParseHeureValidation(string? value, DateTime dateTournee)
+    private async Task<long> InsertTourneeAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        SynchronisationTourneeRequest request,
+        Guid idSynchronisation,
+        DateTime dateTournee,
+        int idLivreur,
+        DateTimeOffset? dateChargementMobile,
+        DateTimeOffset dateEnvoiMobile,
+        string? adresseIp,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return null;
-        }
+        const string sql = @"
+INSERT INTO dbo.Mobile_Tournee
+    (
+        SchemaVersion,
+        IdSynchronisation,
+        DateTournee,
+        CodeTournee,
+        LibelleTournee,
+        IdLivreur,
+        StatutSynchronisation,
+        DateChargementMobile,
+        DateEnvoi,
+        EstVerrouillee,
+        NombrePointsPrevus,
+        NombrePointsSaisis,
+        CommentaireGlobal,
+        NomAppareil,
+        VersionApplication,
+        AdresseIP
+    )
+OUTPUT INSERTED.IdTourneeMobile
+VALUES
+    (
+        @SchemaVersion,
+        @IdSynchronisation,
+        @DateTournee,
+        @CodeTournee,
+        @LibelleTournee,
+        @IdLivreur,
+        N'ENVOYEE',
+        @DateChargementMobile,
+        @DateEnvoi,
+        1,
+        @NombrePointsPrevus,
+        @NombrePointsSaisis,
+        @CommentaireGlobal,
+        @NomAppareil,
+        @VersionApplication,
+        @AdresseIP
+    );
+";
 
-        if (TimeSpan.TryParse(value, out var heureSimple))
-        {
-            return new DateTimeOffset(dateTournee.Date.Add(heureSimple), DateTimeOffset.Now.Offset);
-        }
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@SchemaVersion", SqlDbType.NVarChar, 20).Value = request.SchemaVersion.Trim();
+        command.Parameters.Add("@IdSynchronisation", SqlDbType.UniqueIdentifier).Value = idSynchronisation;
+        command.Parameters.Add("@DateTournee", SqlDbType.Date).Value = dateTournee.Date;
+        command.Parameters.Add("@CodeTournee", SqlDbType.NVarChar, 50).Value = request.CodeTournee.Trim();
+        command.Parameters.Add("@LibelleTournee", SqlDbType.NVarChar, 255).Value = ToDbValue(request.LibelleTournee);
+        command.Parameters.Add("@IdLivreur", SqlDbType.Int).Value = idLivreur;
+        command.Parameters.Add("@DateChargementMobile", SqlDbType.DateTimeOffset).Value = ToDbValue(dateChargementMobile);
+        command.Parameters.Add("@DateEnvoi", SqlDbType.DateTimeOffset).Value = dateEnvoiMobile;
+        var nombreLignes = request.Lignes?.Count ?? 0;
+        command.Parameters.Add("@NombrePointsPrevus", SqlDbType.Int).Value = nombreLignes;
+        command.Parameters.Add("@NombrePointsSaisis", SqlDbType.Int).Value = nombreLignes;
+        command.Parameters.Add("@CommentaireGlobal", SqlDbType.NVarChar, 1000).Value = ToDbValue(request.CommentaireGlobal);
+        command.Parameters.Add("@NomAppareil", SqlDbType.NVarChar, 100).Value = ToDbValue(request.Mobile?.NomAppareil);
+        command.Parameters.Add("@VersionApplication", SqlDbType.NVarChar, 50).Value = ToDbValue(request.Mobile?.VersionApplication);
+        command.Parameters.Add("@AdresseIP", SqlDbType.NVarChar, 50).Value = ToDbValue(adresseIp);
 
-        if (DateTimeOffset.TryParse(value, out var dateTimeOffset))
-        {
-            return dateTimeOffset;
-        }
-
-        if (DateTime.TryParse(value, out var dateTime))
-        {
-            return new DateTimeOffset(dateTime);
-        }
-
-        return null;
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(result);
     }
 
-    private static string RequiredTrimmed(string? value, string errorMessage)
+    private async Task<long> InsertLigneAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        SynchronisationTourneeRequest request,
+        SynchronisationLigneRequest ligne,
+        long idTourneeMobile,
+        CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        var quantites = ligne.Saisie?.Quantites ?? new List<SynchronisationQuantiteRequest>();
+        var totalLivre = quantites.Sum(q => q.QuantiteLivree);
+        var totalRecupere = quantites.Sum(q => q.QuantiteRecuperee);
+        var nbRolls = GetQuantiteLivreeArticle(quantites, "ROLLS");
+        var nbTapis = GetQuantiteLivreeArticle(quantites, "TAPIS");
+        var nbSacs = GetQuantiteLivreeArticle(quantites, "SACS");
+
+        const string sql = @"
+INSERT INTO dbo.Mobile_TourneeLigne
+    (
+        IdTourneeMobile,
+        IdLigneSource,
+        NumClient,
+        NomClient,
+        NomAffiche,
+        CodePDL,
+        DescriptionPDL,
+        AdresseLigne1,
+        AdresseLigne2,
+        AdresseLigne3,
+        Ville,
+        CodePostal,
+        CodeTournee,
+        LibelleTournee,
+        JourTournee,
+        JourLibelle,
+        SchemaLivraison,
+        OrdreArret,
+        Horaire,
+        JourTourneeRetour,
+        JourRetourLibelle,
+        CodeTourneeRetour,
+        LibelleTourneeRetour,
+        Instructions,
+        CommentaireExceptionnel,
+        ZoneDechargement,
+        ZoneDechargementAffichee,
+        Zone,
+        PrecisionInfo,
+        Cle,
+        EstFerme,
+        DateFermeture,
+        MotifFermeture,
+        QuantiteLivree,
+        QuantiteReprise,
+        NbRolls,
+        NbTapis,
+        NbSacs,
+        NbRecuperes,
+        PrecisionLivreur,
+        StatutPassage,
+        CommentaireLivreur,
+        HeureValidation,
+        EstValidee
+    )
+OUTPUT INSERTED.IdTourneeLigne
+VALUES
+    (
+        @IdTourneeMobile,
+        @IdLigneSource,
+        @NumClient,
+        @NomClient,
+        @NomAffiche,
+        @CodePDL,
+        @DescriptionPDL,
+        @AdresseLigne1,
+        @AdresseLigne2,
+        @AdresseLigne3,
+        @Ville,
+        @CodePostal,
+        @CodeTournee,
+        @LibelleTournee,
+        @JourTournee,
+        @JourLibelle,
+        @SchemaLivraison,
+        @OrdreArret,
+        @Horaire,
+        @JourTourneeRetour,
+        @JourRetourLibelle,
+        @CodeTourneeRetour,
+        @LibelleTourneeRetour,
+        @Instructions,
+        @CommentaireExceptionnel,
+        @ZoneDechargement,
+        @ZoneDechargementAffichee,
+        @Zone,
+        @PrecisionInfo,
+        @Cle,
+        @EstFerme,
+        @DateFermeture,
+        @MotifFermeture,
+        @QuantiteLivree,
+        @QuantiteReprise,
+        @NbRolls,
+        @NbTapis,
+        @NbSacs,
+        @NbRecuperes,
+        @PrecisionLivreur,
+        @StatutPassage,
+        @CommentaireLivreur,
+        @HeureValidation,
+        @EstValidee
+    );
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@IdTourneeMobile", SqlDbType.BigInt).Value = idTourneeMobile;
+        command.Parameters.Add("@IdLigneSource", SqlDbType.NVarChar, 300).Value = ligne.IdLigneSource.Trim();
+
+        command.Parameters.Add("@NumClient", SqlDbType.NVarChar, 50).Value = ligne.Client?.NumClient?.Trim() ?? string.Empty;
+        command.Parameters.Add("@NomClient", SqlDbType.NVarChar, 255).Value = ligne.Client?.NomClient?.Trim() ?? string.Empty;
+        command.Parameters.Add("@NomAffiche", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.Client?.NomAffiche);
+
+        command.Parameters.Add("@CodePDL", SqlDbType.NVarChar, 50).Value = ToDbValue(ligne.PointLivraison?.CodePDL);
+        command.Parameters.Add("@DescriptionPDL", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.PointLivraison?.DescriptionPDL);
+        command.Parameters.Add("@AdresseLigne1", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.PointLivraison?.AdresseLigne1);
+        command.Parameters.Add("@AdresseLigne2", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.PointLivraison?.AdresseLigne2);
+        command.Parameters.Add("@AdresseLigne3", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.PointLivraison?.AdresseLigne3);
+        command.Parameters.Add("@Ville", SqlDbType.NVarChar, 100).Value = ToDbValue(ligne.PointLivraison?.Ville);
+        command.Parameters.Add("@CodePostal", SqlDbType.NVarChar, 20).Value = ToDbValue(ligne.PointLivraison?.CodePostal);
+
+        command.Parameters.Add("@CodeTournee", SqlDbType.NVarChar, 50).Value = string.IsNullOrWhiteSpace(ligne.Tournee?.CodeTournee)
+            ? request.CodeTournee.Trim()
+            : ligne.Tournee.CodeTournee.Trim();
+        command.Parameters.Add("@LibelleTournee", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.Tournee?.LibelleTournee ?? request.LibelleTournee);
+        command.Parameters.Add("@JourTournee", SqlDbType.Int).Value = ToDbValue(ligne.Tournee?.JourTournee);
+        command.Parameters.Add("@JourLibelle", SqlDbType.NVarChar, 30).Value = ToDbValue(ligne.Tournee?.JourLibelle);
+        command.Parameters.Add("@SchemaLivraison", SqlDbType.NVarChar, 100).Value = ToDbValue(ligne.Tournee?.SchemaLivraison);
+        command.Parameters.Add("@OrdreArret", SqlDbType.Int).Value = ToDbValue(ligne.OrdreArret);
+        command.Parameters.Add("@Horaire", SqlDbType.NVarChar, 50).Value = ToDbValue(ligne.Horaire);
+
+        command.Parameters.Add("@JourTourneeRetour", SqlDbType.Int).Value = ToDbValue(ligne.Retour?.JourTourneeRetour);
+        command.Parameters.Add("@JourRetourLibelle", SqlDbType.NVarChar, 30).Value = ToDbValue(ligne.Retour?.JourRetourLibelle);
+        command.Parameters.Add("@CodeTourneeRetour", SqlDbType.NVarChar, 50).Value = ToDbValue(ligne.Retour?.CodeTourneeRetour);
+        command.Parameters.Add("@LibelleTourneeRetour", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.Retour?.LibelleTourneeRetour);
+
+        command.Parameters.Add("@Instructions", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.InfosLivreur?.Instructions);
+        command.Parameters.Add("@CommentaireExceptionnel", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.InfosLivreur?.CommentaireExceptionnel);
+        command.Parameters.Add("@ZoneDechargement", SqlDbType.NVarChar, 100).Value = ToDbValue(ligne.InfosLivreur?.ZoneDechargement);
+        command.Parameters.Add("@ZoneDechargementAffichee", SqlDbType.NVarChar, 150).Value = ToDbValue(ligne.InfosLivreur?.ZoneDechargementAffichee);
+        command.Parameters.Add("@Zone", SqlDbType.NVarChar, 100).Value = ToDbValue(ligne.InfosLivreur?.Zone);
+        command.Parameters.Add("@PrecisionInfo", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.InfosLivreur?.Precision);
+        command.Parameters.Add("@Cle", SqlDbType.NVarChar, 100).Value = ToDbValue(ligne.InfosLivreur?.Cle);
+        command.Parameters.Add("@EstFerme", SqlDbType.Bit).Value = ligne.InfosLivreur?.EstFerme ?? false;
+        command.Parameters.Add("@DateFermeture", SqlDbType.Date).Value = ToDbValue(ligne.InfosLivreur?.DateFermeture);
+        command.Parameters.Add("@MotifFermeture", SqlDbType.NVarChar, 255).Value = ToDbValue(ligne.InfosLivreur?.MotifFermeture);
+
+        command.Parameters.Add("@QuantiteLivree", SqlDbType.Int).Value = totalLivre;
+        command.Parameters.Add("@QuantiteReprise", SqlDbType.Int).Value = totalRecupere;
+        command.Parameters.Add("@NbRolls", SqlDbType.Int).Value = nbRolls;
+        command.Parameters.Add("@NbTapis", SqlDbType.Int).Value = nbTapis;
+        command.Parameters.Add("@NbSacs", SqlDbType.Int).Value = nbSacs;
+        command.Parameters.Add("@NbRecuperes", SqlDbType.Int).Value = totalRecupere;
+
+        command.Parameters.Add("@PrecisionLivreur", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.Saisie?.PrecisionLivreur);
+        command.Parameters.Add("@StatutPassage", SqlDbType.NVarChar, 30).Value = ligne.Saisie?.StatutPassage?.Trim() ?? "FAIT";
+        command.Parameters.Add("@CommentaireLivreur", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.Saisie?.CommentaireLivreur);
+        command.Parameters.Add("@HeureValidation", SqlDbType.DateTimeOffset).Value = ToDbValue(ParseDateTimeOffsetOrNull(ligne.Saisie?.HeureValidation));
+        command.Parameters.Add("@EstValidee", SqlDbType.Bit).Value = ligne.Saisie?.EstValidee ?? false;
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt64(result);
+    }
+
+    private async Task EnsureArticleAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        string codeArticle,
+        string? libelle,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+IF NOT EXISTS (
+    SELECT 1
+    FROM dbo.Mobile_ArticleSaisissable WITH (UPDLOCK, HOLDLOCK)
+    WHERE CodeArticle = @CodeArticle
+)
+BEGIN
+    INSERT INTO dbo.Mobile_ArticleSaisissable
+        (CodeArticle, LibelleArticle, OrdreAffichage, EstActif, EstVisibleMobile)
+    VALUES
+        (@CodeArticle, @LibelleArticle, 999, 1, 1);
+END
+ELSE
+BEGIN
+    UPDATE dbo.Mobile_ArticleSaisissable
+    SET
+        LibelleArticle = @LibelleArticle,
+        EstActif = 1,
+        EstVisibleMobile = 1,
+        DateModification = SYSDATETIMEOFFSET()
+    WHERE CodeArticle = @CodeArticle
+      AND (
+            LibelleArticle IS NULL
+            OR LibelleArticle <> @LibelleArticle
+          );
+END
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = codeArticle.Trim();
+        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value =
+            string.IsNullOrWhiteSpace(libelle) ? codeArticle.Trim() : libelle.Trim();
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task InsertQuantiteAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        long idTourneeLigne,
+        SynchronisationQuantiteRequest quantite,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+INSERT INTO dbo.Mobile_TourneeLigneQuantite
+    (
+        IdTourneeLigne,
+        CodeArticle,
+        LibelleArticle,
+        QuantiteLivreePrevue,
+        QuantiteLivree,
+        QuantiteRecuperee
+    )
+VALUES
+    (
+        @IdTourneeLigne,
+        @CodeArticle,
+        @LibelleArticle,
+        @QuantiteLivreePrevue,
+        @QuantiteLivree,
+        @QuantiteRecuperee
+    );
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@IdTourneeLigne", SqlDbType.BigInt).Value = idTourneeLigne;
+        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = quantite.CodeArticle.Trim();
+        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value = ToDbValue(quantite.Libelle);
+        command.Parameters.Add("@QuantiteLivreePrevue", SqlDbType.Int).Value = ToDbValue(quantite.QuantiteLivreePrevue);
+        command.Parameters.Add("@QuantiteLivree", SqlDbType.Int).Value = quantite.QuantiteLivree;
+        command.Parameters.Add("@QuantiteRecuperee", SqlDbType.Int).Value = quantite.QuantiteRecuperee;
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private async Task InsertLogAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        long? idTourneeMobile,
+        int? idLivreur,
+        Guid? idSynchronisation,
+        string typeEvenement,
+        string niveau,
+        string message,
+        string? detailTechnique,
+        string? adresseIp,
+        string? nomAppareil,
+        string? versionApplication,
+        CancellationToken cancellationToken)
+    {
+        const string sql = @"
+INSERT INTO dbo.Mobile_LogSynchronisation
+    (
+        IdTourneeMobile,
+        IdLivreur,
+        IdSynchronisation,
+        TypeEvenement,
+        Niveau,
+        Message,
+        DetailTechnique,
+        AdresseIP,
+        NomAppareil,
+        VersionApplication
+    )
+VALUES
+    (
+        @IdTourneeMobile,
+        @IdLivreur,
+        @IdSynchronisation,
+        @TypeEvenement,
+        @Niveau,
+        @Message,
+        @DetailTechnique,
+        @AdresseIP,
+        @NomAppareil,
+        @VersionApplication
+    );
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@IdTourneeMobile", SqlDbType.BigInt).Value = ToDbValue(idTourneeMobile);
+        command.Parameters.Add("@IdLivreur", SqlDbType.Int).Value = ToDbValue(idLivreur);
+        command.Parameters.Add("@IdSynchronisation", SqlDbType.UniqueIdentifier).Value = ToDbValue(idSynchronisation);
+        command.Parameters.Add("@TypeEvenement", SqlDbType.NVarChar, 50).Value = typeEvenement;
+        command.Parameters.Add("@Niveau", SqlDbType.NVarChar, 20).Value = niveau;
+        command.Parameters.Add("@Message", SqlDbType.NVarChar, 1000).Value = message;
+        command.Parameters.Add("@DetailTechnique", SqlDbType.NVarChar).Value = ToDbValue(detailTechnique);
+        command.Parameters.Add("@AdresseIP", SqlDbType.NVarChar, 50).Value = ToDbValue(adresseIp);
+        command.Parameters.Add("@NomAppareil", SqlDbType.NVarChar, 100).Value = ToDbValue(nomAppareil);
+        command.Parameters.Add("@VersionApplication", SqlDbType.NVarChar, 50).Value = ToDbValue(versionApplication);
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static Guid ParseGuid(object? value)
+    {
+        if (SynchronisationTourneeValidator.TryParseGuid(value, out var guid))
         {
-            throw new ArgumentException(errorMessage);
+            return guid;
         }
 
-        return value.Trim();
+        throw new InvalidOperationException("L'identifiant de synchronisation est invalide.");
     }
 
-    private static string? EmptyToNull(string? value)
+    private static DateTimeOffset? ParseDateTimeOffsetOrNull(object? value)
     {
-        return string.IsNullOrWhiteSpace(value)
-            ? null
-            : value.Trim();
+        return SynchronisationTourneeValidator.TryParseDateTimeOffsetNullable(value, out var dateTimeOffset)
+            ? dateTimeOffset
+            : null;
     }
 
-    private static List<SynchronisationQuantiteRequest> NormalizeQuantites(
-        List<SynchronisationQuantiteRequest>? quantites)
-    {
-        if (quantites is null || quantites.Count == 0)
-        {
-            return new List<SynchronisationQuantiteRequest>();
-        }
-
-        return quantites
-            .Where(q => q is not null)
-            .Select(q => new SynchronisationQuantiteRequest
-            {
-                CodeArticle = q.CodeArticle.Trim().ToUpperInvariant(),
-                Libelle = EmptyToNull(q.Libelle),
-                QuantiteLivreePrevue = q.QuantiteLivreePrevue,
-                QuantiteLivree = q.QuantiteLivree,
-                QuantiteRecuperee = q.QuantiteRecuperee
-            })
-            .Where(q => !string.IsNullOrWhiteSpace(q.CodeArticle))
-            .ToList();
-    }
-
-    private static int GetQuantiteLivreePourArticle(
-        List<SynchronisationQuantiteRequest> quantites,
+    private static int GetQuantiteLivreeArticle(
+        IEnumerable<SynchronisationQuantiteRequest> quantites,
         string codeArticle)
     {
         return quantites
-            .Where(q => string.Equals(
-                q.CodeArticle,
-                codeArticle,
-                StringComparison.OrdinalIgnoreCase))
+            .Where(q => string.Equals(q.CodeArticle, codeArticle, StringComparison.OrdinalIgnoreCase))
             .Sum(q => q.QuantiteLivree);
     }
 
-    private static string? GetJourLibelle(int? jour)
+    private static object ToDbValue(object? value)
     {
-        return jour switch
+        if (value is null)
         {
-            1 => "Lundi",
-            2 => "Mardi",
-            3 => "Mercredi",
-            4 => "Jeudi",
-            5 => "Vendredi",
-            6 => "Samedi",
-            7 => "Dimanche",
-            _ => null
-        };
+            return DBNull.Value;
+        }
+
+        if (value is string text)
+        {
+            return string.IsNullOrWhiteSpace(text) ? DBNull.Value : text.Trim();
+        }
+
+        return value;
     }
+
+    private static string? ReadNullableString(SqlDataReader reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
+    }
+
+    private static DateTimeOffset? ReadNullableDateTimeOffset(SqlDataReader reader, string columnName)
+    {
+        var ordinal = reader.GetOrdinal(columnName);
+        return reader.IsDBNull(ordinal) ? null : reader.GetFieldValue<DateTimeOffset>(ordinal);
+    }
+}
+
+public sealed class TourneeDejaEnvoyeeDto
+{
+    public long IdTourneeMobile { get; set; }
+
+    public DateTime DateTournee { get; set; }
+
+    public string CodeTournee { get; set; } = string.Empty;
+
+    public string? LibelleTournee { get; set; }
+
+    public string CodeLivreur { get; set; } = string.Empty;
+
+    public string? NomLivreur { get; set; }
+
+    public DateTimeOffset? DateEnvoi { get; set; }
+
+    public DateTimeOffset? DateReceptionApi { get; set; }
+}
+
+public sealed class SynchronisationEnregistrementResult
+{
+    public long IdTourneeMobile { get; set; }
+
+    public Guid IdSynchronisation { get; set; }
+
+    public DateTimeOffset DateReceptionApi { get; set; }
+
+    public int NombreLignesRecues { get; set; }
+
+    public int NombreQuantitesRecues { get; set; }
 }

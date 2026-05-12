@@ -1,14 +1,19 @@
-using Microsoft.AspNetCore.Mvc;
 using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Services;
+using Microsoft.AspNetCore.Mvc;
 
 namespace API_ASP.NET_Core.Controllers;
 
 /// <summary>
 /// Contrôleur utilisé par l'application mobile pour consulter les tournées disponibles
-/// et charger le détail d'une tournée sélectionnée.
+/// et charger le détail complet d'une tournée sélectionnée.
 /// </summary>
+/// <remarks>
+/// Ce contrôleur correspond au flux du matin : le livreur s'identifie, consulte les tournées
+/// disponibles pour la date du jour, puis charge une tournée complète dans l'application mobile.
+/// Après ce chargement, le mobile peut fonctionner hors connexion grâce à son stockage local SQLite.
+/// </remarks>
 [ApiController]
 [Route("api/tournees")]
 [Produces("application/json")]
@@ -21,6 +26,28 @@ public class TourneesController : ControllerBase
         _tourneesService = service;
     }
 
+    /// <summary>
+    /// Liste les tournées disponibles pour une date et un livreur.
+    /// </summary>
+    /// <remarks>
+    /// Cette route est utilisée par l'écran de choix de tournée.
+    ///
+    /// Elle retourne une réponse enveloppée contenant :
+    /// - schemaVersion ;
+    /// - dateTournee ;
+    /// - dateModifiable ;
+    /// - livreur ;
+    /// - tournees[].
+    ///
+    /// La date est affichée côté mobile, mais elle ne doit pas être modifiable par le livreur
+    /// dans le fonctionnement prévu.
+    ///
+    /// Exemple :
+    /// GET /api/tournees/disponibles?dateTournee=2026-05-07&amp;codeLivreur=2
+    /// </remarks>
+    /// <param name="dateTournee">Date de tournée au format yyyy-MM-dd. Exemple : 2026-05-07.</param>
+    /// <param name="codeLivreur">Code métier du livreur. Exemple : 2.</param>
+    /// <returns>Liste des tournées disponibles pour le livreur et la date demandée.</returns>
     [HttpGet("disponibles")]
     [ProducesResponseType(typeof(TourneesDisponiblesResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
@@ -68,6 +95,34 @@ public class TourneesController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Charge le détail complet d'une tournée pour l'application mobile.
+    /// </summary>
+    /// <remarks>
+    /// Cette route est utilisée après sélection de la tournée.
+    ///
+    /// Elle retourne le contrat JSON de chargement du matin en version 1.2.
+    /// La réponse contient l'en-tête de tournée, le livreur, les articles saisissables,
+    /// les clients ou points de livraison, les instructions, les commentaires exceptionnels,
+    /// les informations de retour et les quantités initiales.
+    ///
+    /// Champs importants pour le mobile :
+    /// - schemaVersion = "1.2" ;
+    /// - dateModifiable = false ;
+    /// - lignes[].idLigneSource : identifiant stable à renvoyer lors du POST final ;
+    /// - lignes[].infosLivreur.commentaireExceptionnel : commentaire ponctuel affiché au livreur ;
+    /// - lignes[].infosLivreur.zoneDechargementAffichee : zone prête à afficher si disponible ;
+    /// - lignes[].saisie.quantites[].quantiteLivreePrevue : quantité prévue optionnelle, nullable ;
+    /// - lignes[].saisie.quantites[].quantiteLivree et quantiteRecuperee : valeurs initiales de saisie.
+    ///
+    /// Exemple :
+    /// GET /api/tournees/jour?dateTournee=2026-05-07&amp;codeTournee=4006&amp;codeLivreur=2
+    /// </remarks>
+    /// <param name="dateTournee">Date de tournée au format yyyy-MM-dd. Exemple : 2026-05-07.</param>
+    /// <param name="codeLivreur">Code métier du livreur. Exemple : 2.</param>
+    /// <param name="codeTournee">Code de la tournée à charger. Exemple : 4006.</param>
+    /// <param name="nomLivreur">Nom du livreur, optionnel. Le code livreur reste la donnée de référence.</param>
+    /// <returns>Détail complet de la tournée à stocker localement dans l'application mobile.</returns>
     [HttpGet("jour")]
     [ProducesResponseType(typeof(TourneeMobileDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]

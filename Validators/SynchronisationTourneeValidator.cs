@@ -1,354 +1,308 @@
-using System.Globalization;
-using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
+using System.Globalization;
 
 namespace API_ASP.NET_Core.Validators;
 
 public sealed class SynchronisationTourneeValidator
 {
-    public List<string> Validate(SynchronisationTourneeRequest? request)
+    private static readonly HashSet<string> StatutsAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
-        var errors = new List<string>();
+        "FAIT",
+        "NON_FAIT",
+        "ANOMALIE"
+    };
+
+    public SynchronisationValidationResult Validate(SynchronisationTourneeRequest? request)
+    {
+        var errors = new List<SynchronisationValidationError>();
 
         if (request is null)
         {
-            errors.Add("Le corps de la requête est obligatoire.");
-            return errors;
+            errors.Add(new SynchronisationValidationError("body", "Le corps JSON est obligatoire."));
+            return new SynchronisationValidationResult(errors);
         }
 
-        ValidateHeader(request, errors);
-        ValidateLignes(request.Lignes, errors);
-
-        return errors;
-    }
-
-    private static void ValidateHeader(
-        SynchronisationTourneeRequest request,
-        List<string> errors)
-    {
         if (string.IsNullOrWhiteSpace(request.SchemaVersion))
         {
-            errors.Add("SchemaVersion est obligatoire.");
+            errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma est obligatoire."));
         }
-        else if (request.SchemaVersion.Trim() != SchemaVersions.SynchronisationActuelle)
+        else if (!string.Equals(request.SchemaVersion.Trim(), "1.2", StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add($"SchemaVersion {request.SchemaVersion} n'est pas supportée. Version attendue : {SchemaVersions.SynchronisationActuelle}.");
-        }
-
-        if (string.IsNullOrWhiteSpace(request.IdSynchronisation))
-        {
-            errors.Add("IdSynchronisation est obligatoire.");
-        }
-        else if (!Guid.TryParse(request.IdSynchronisation, out _))
-        {
-            errors.Add("IdSynchronisation doit être un UUID valide.");
+            errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma supportée est 1.2."));
         }
 
-        if (string.IsNullOrWhiteSpace(request.DateTournee))
+        if (!TryParseGuid(request.IdSynchronisation, out _))
         {
-            errors.Add("DateTournee est obligatoire.");
+            errors.Add(new SynchronisationValidationError("idSynchronisation", "L'identifiant de synchronisation est obligatoire et doit être un GUID valide."));
         }
-        else if (!DateOnly.TryParseExact(
-                     request.DateTournee,
-                     "yyyy-MM-dd",
-                     CultureInfo.InvariantCulture,
-                     DateTimeStyles.None,
-                     out _))
+
+        if (!TryParseDateTournee(request.DateTournee, out _))
         {
-            errors.Add("DateTournee est invalide. Format attendu : yyyy-MM-dd.");
+            errors.Add(new SynchronisationValidationError("dateTournee", "La date de tournée est obligatoire et doit être valide."));
         }
 
         if (string.IsNullOrWhiteSpace(request.CodeTournee))
         {
-            errors.Add("CodeTournee est obligatoire.");
+            errors.Add(new SynchronisationValidationError("codeTournee", "Le code tournée est obligatoire."));
         }
 
         if (request.Livreur is null)
         {
-            errors.Add("Livreur est obligatoire.");
+            errors.Add(new SynchronisationValidationError("livreur", "L'objet livreur est obligatoire."));
         }
-        else
+        else if (string.IsNullOrWhiteSpace(request.Livreur.CodeLivreur))
         {
-            if (string.IsNullOrWhiteSpace(request.Livreur.CodeLivreur))
-            {
-                errors.Add("Livreur.CodeLivreur est obligatoire.");
-            }
-
-            if (string.IsNullOrWhiteSpace(request.Livreur.NomLivreur))
-            {
-                errors.Add("Livreur.NomLivreur est obligatoire.");
-            }
+            errors.Add(new SynchronisationValidationError("livreur.codeLivreur", "Le code livreur est obligatoire."));
         }
 
-        ValidateMobile(request.Mobile, errors);
-    }
-
-    private static void ValidateMobile(
-        SynchronisationMobileRequest? mobile,
-        List<string> errors)
-    {
-        if (mobile is null)
+        if (request.Mobile is null)
         {
-            errors.Add("Mobile est obligatoire.");
-            return;
+            errors.Add(new SynchronisationValidationError("mobile", "L'objet mobile est obligatoire."));
         }
 
-        if (string.IsNullOrWhiteSpace(mobile.NomAppareil))
+        if (request.Lignes is null || request.Lignes.Count == 0)
         {
-            errors.Add("Mobile.NomAppareil est obligatoire.");
+            errors.Add(new SynchronisationValidationError("lignes", "La synchronisation doit contenir au moins une ligne."));
+            return new SynchronisationValidationResult(errors);
         }
 
-        if (string.IsNullOrWhiteSpace(mobile.VersionApplication))
-        {
-            errors.Add("Mobile.VersionApplication est obligatoire.");
-        }
+        var idsLignes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
-        if (string.IsNullOrWhiteSpace(mobile.DateChargementMobile))
+        for (var indexLigne = 0; indexLigne < request.Lignes.Count; indexLigne++)
         {
-            errors.Add("Mobile.DateChargementMobile est obligatoire.");
-        }
-        else if (!IsValidDateTime(mobile.DateChargementMobile))
-        {
-            errors.Add("Mobile.DateChargementMobile est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
-        }
-
-        if (string.IsNullOrWhiteSpace(mobile.DateEnvoiMobile))
-        {
-            errors.Add("Mobile.DateEnvoiMobile est obligatoire.");
-        }
-        else if (!IsValidDateTime(mobile.DateEnvoiMobile))
-        {
-            errors.Add("Mobile.DateEnvoiMobile est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
-        }
-    }
-
-    private static void ValidateLignes(
-        List<SynchronisationLigneRequest>? lignes,
-        List<string> errors)
-    {
-        if (lignes is null || lignes.Count == 0)
-        {
-            errors.Add("La liste des lignes ne doit pas être vide.");
-            return;
-        }
-
-        var idsLigneSource = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        for (var i = 0; i < lignes.Count; i++)
-        {
-            var numeroLigne = i + 1;
-            var ligne = lignes[i];
+            var ligne = request.Lignes[indexLigne];
+            var prefix = $"lignes[{indexLigne}]";
 
             if (ligne is null)
             {
-                errors.Add($"Ligne {numeroLigne} : la ligne est obligatoire.");
+                errors.Add(new SynchronisationValidationError(prefix, "La ligne est obligatoire."));
                 continue;
             }
 
-            ValidateLigne(ligne, numeroLigne, idsLigneSource, errors);
-        }
-    }
-
-    private static void ValidateLigne(
-        SynchronisationLigneRequest ligne,
-        int numeroLigne,
-        HashSet<string> idsLigneSource,
-        List<string> errors)
-    {
-        if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
-        {
-            errors.Add($"Ligne {numeroLigne} : IdLigneSource est obligatoire.");
-        }
-        else
-        {
-            var idLigneSource = ligne.IdLigneSource.Trim();
-
-            if (!idsLigneSource.Add(idLigneSource))
+            if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
             {
-                errors.Add($"Ligne {numeroLigne} : IdLigneSource est dupliqué dans la requête.");
+                errors.Add(new SynchronisationValidationError($"{prefix}.idLigneSource", "L'identifiant source de ligne est obligatoire."));
             }
-        }
-
-        if (ligne.OrdreArret < 0)
-        {
-            errors.Add($"Ligne {numeroLigne} : OrdreArret ne peut pas être négatif.");
-        }
-
-        if (ligne.Horaire.HasValue && ligne.Horaire.Value < 0)
-        {
-            errors.Add($"Ligne {numeroLigne} : Horaire ne peut pas être négatif.");
-        }
-
-        ValidateClient(ligne.Client, numeroLigne, errors);
-        ValidatePointLivraison(ligne.PointLivraison, numeroLigne, errors);
-        ValidateSaisie(ligne.Saisie, numeroLigne, errors);
-    }
-
-    private static void ValidateClient(
-        SynchronisationClientRequest? client,
-        int numeroLigne,
-        List<string> errors)
-    {
-        if (client is null)
-        {
-            errors.Add($"Ligne {numeroLigne} : Client est obligatoire.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(client.NumClient))
-        {
-            errors.Add($"Ligne {numeroLigne} : Client.NumClient est obligatoire.");
-        }
-
-        if (string.IsNullOrWhiteSpace(client.NomClient))
-        {
-            errors.Add($"Ligne {numeroLigne} : Client.NomClient est obligatoire.");
-        }
-    }
-
-    private static void ValidatePointLivraison(
-        SynchronisationPointLivraisonRequest? pointLivraison,
-        int numeroLigne,
-        List<string> errors)
-    {
-        if (pointLivraison is null)
-        {
-            errors.Add($"Ligne {numeroLigne} : PointLivraison est obligatoire.");
-            return;
-        }
-
-        if (string.IsNullOrWhiteSpace(pointLivraison.CodePDL))
-        {
-            errors.Add($"Ligne {numeroLigne} : PointLivraison.CodePDL est obligatoire.");
-        }
-    }
-
-    private static void ValidateSaisie(
-        SynchronisationSaisieRequest? saisie,
-        int numeroLigne,
-        List<string> errors)
-    {
-        if (saisie is null)
-        {
-            errors.Add($"Ligne {numeroLigne} : Saisie est obligatoire.");
-            return;
-        }
-
-        var statut = saisie.StatutPassage?.Trim().ToUpperInvariant();
-
-        if (string.IsNullOrWhiteSpace(statut))
-        {
-            errors.Add($"Ligne {numeroLigne} : StatutPassage est obligatoire.");
-        }
-        else if (!StatutsPassage.Tous.Contains(statut))
-        {
-            errors.Add($"Ligne {numeroLigne} : StatutPassage doit être {StatutsPassage.AFaire}, {StatutsPassage.Fait}, {StatutsPassage.NonFait} ou {StatutsPassage.Anomalie}.");
-        }
-        else if (!StatutsPassage.AutorisesEnvoiFinal.Contains(statut))
-        {
-            errors.Add($"Ligne {numeroLigne} : {StatutsPassage.AFaire} est interdit dans l'envoi final.");
-        }
-
-        if (!saisie.EstValidee)
-        {
-            errors.Add($"Ligne {numeroLigne} : EstValidee doit être true pour l'envoi final.");
-        }
-
-        if (saisie.EstValidee && string.IsNullOrWhiteSpace(saisie.HeureValidation))
-        {
-            errors.Add($"Ligne {numeroLigne} : HeureValidation est obligatoire.");
-        }
-
-        if (!string.IsNullOrWhiteSpace(saisie.HeureValidation)
-            && !IsValidDateTimeOrTime(saisie.HeureValidation))
-        {
-            errors.Add($"Ligne {numeroLigne} : HeureValidation est invalide. Format recommandé : yyyy-MM-ddTHH:mm:ss+02:00.");
-        }
-
-        if ((string.Equals(statut, StatutsPassage.NonFait, StringComparison.OrdinalIgnoreCase)
-             || string.Equals(statut, StatutsPassage.Anomalie, StringComparison.OrdinalIgnoreCase))
-            && string.IsNullOrWhiteSpace(saisie.CommentaireLivreur))
-        {
-            errors.Add($"Ligne {numeroLigne} : CommentaireLivreur est obligatoire pour le statut {statut}.");
-        }
-
-        ValidateQuantites(saisie.Quantites, numeroLigne, errors);
-    }
-
-    private static void ValidateQuantites(
-        List<SynchronisationQuantiteRequest>? quantites,
-        int numeroLigne,
-        List<string> errors)
-    {
-        if (quantites is null || quantites.Count == 0)
-        {
-            errors.Add($"Ligne {numeroLigne} : Quantites doit contenir au moins un article.");
-            return;
-        }
-
-        var codesArticles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        for (var i = 0; i < quantites.Count; i++)
-        {
-            var numeroArticle = i + 1;
-            var quantite = quantites[i];
-
-            if (quantite is null)
+            else if (!idsLignes.Add(ligne.IdLigneSource.Trim()))
             {
-                errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : l'article est obligatoire.");
+                errors.Add(new SynchronisationValidationError($"{prefix}.idLigneSource", "L'identifiant source de ligne est présent plusieurs fois dans la synchronisation."));
+            }
+
+            if (ligne.Saisie is null)
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie", "L'objet saisie est obligatoire."));
                 continue;
             }
 
-            var codeArticle = string.Empty;
+            var statut = ligne.Saisie.StatutPassage?.Trim();
 
-            if (string.IsNullOrWhiteSpace(quantite.CodeArticle))
+            if (string.IsNullOrWhiteSpace(statut))
             {
-                errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : CodeArticle est obligatoire.");
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.statutPassage", "Le statut de passage est obligatoire."));
             }
-            else
+            else if (string.Equals(statut, "A_FAIRE", StringComparison.OrdinalIgnoreCase))
             {
-                codeArticle = quantite.CodeArticle.Trim().ToUpperInvariant();
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.statutPassage", "Le statut A_FAIRE ne doit pas être envoyé dans la synchronisation finale."));
+            }
+            else if (!StatutsAutorises.Contains(statut))
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.statutPassage", "Le statut de passage doit être FAIT, NON_FAIT ou ANOMALIE."));
+            }
 
-                if (!codesArticles.Add(codeArticle))
+            if ((string.Equals(statut, "NON_FAIT", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(statut, "ANOMALIE", StringComparison.OrdinalIgnoreCase))
+                && string.IsNullOrWhiteSpace(ligne.Saisie.CommentaireLivreur))
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.commentaireLivreur", "Le commentaire livreur est obligatoire pour le statut NON_FAIT ou ANOMALIE."));
+            }
+
+            if (!ligne.Saisie.EstValidee)
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.estValidee", "Chaque ligne envoyée doit être validée."));
+            }
+
+            if (!TryParseDateTimeOffsetNullable(ligne.Saisie.HeureValidation, out _))
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.heureValidation", "L'heure de validation est obligatoire et doit être valide."));
+            }
+
+            if (ligne.Saisie.Quantites is null || ligne.Saisie.Quantites.Count == 0)
+            {
+                errors.Add(new SynchronisationValidationError($"{prefix}.saisie.quantites", "Chaque ligne doit contenir au moins une quantité."));
+                continue;
+            }
+
+            var codesArticles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var indexQuantite = 0; indexQuantite < ligne.Saisie.Quantites.Count; indexQuantite++)
+            {
+                var quantite = ligne.Saisie.Quantites[indexQuantite];
+                var quantitePrefix = $"{prefix}.saisie.quantites[{indexQuantite}]";
+
+                if (quantite is null)
                 {
-                    errors.Add($"Ligne {numeroLigne}, article {numeroArticle} : CodeArticle {codeArticle} est dupliqué.");
+                    errors.Add(new SynchronisationValidationError(quantitePrefix, "La quantité est obligatoire."));
+                    continue;
+                }
+
+                if (string.IsNullOrWhiteSpace(quantite.CodeArticle))
+                {
+                    errors.Add(new SynchronisationValidationError($"{quantitePrefix}.codeArticle", "Le code article est obligatoire."));
+                }
+                else if (!codesArticles.Add(quantite.CodeArticle.Trim()))
+                {
+                    errors.Add(new SynchronisationValidationError($"{quantitePrefix}.codeArticle", "Le code article est présent plusieurs fois dans une même ligne."));
+                }
+
+                if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
+                {
+                    errors.Add(new SynchronisationValidationError($"{quantitePrefix}.quantiteLivreePrevue", "La quantité livrée prévue doit être positive ou nulle."));
+                }
+
+                if (quantite.QuantiteLivree < 0)
+                {
+                    errors.Add(new SynchronisationValidationError($"{quantitePrefix}.quantiteLivree", "La quantité livrée doit être positive ou nulle."));
+                }
+
+                if (quantite.QuantiteRecuperee < 0)
+                {
+                    errors.Add(new SynchronisationValidationError($"{quantitePrefix}.quantiteRecuperee", "La quantité récupérée doit être positive ou nulle."));
                 }
             }
-
-            if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
-            {
-                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteLivreePrevue ne peut pas être négative.");
-            }
-
-            if (quantite.QuantiteLivree < 0)
-            {
-                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteLivree ne peut pas être négative.");
-            }
-
-            if (quantite.QuantiteRecuperee < 0)
-            {
-                errors.Add($"Ligne {numeroLigne}, article {DisplayArticle(numeroArticle, codeArticle)} : QuantiteRecuperee ne peut pas être négative.");
-            }
         }
+
+        return new SynchronisationValidationResult(errors);
     }
 
-    private static string DisplayArticle(int numeroArticle, string codeArticle)
+    public static DateTime ParseDateTournee(object? value)
     {
-        return string.IsNullOrWhiteSpace(codeArticle)
-            ? numeroArticle.ToString(CultureInfo.InvariantCulture)
-            : codeArticle;
+        if (TryParseDateTournee(value, out var dateTournee))
+        {
+            return dateTournee;
+        }
+
+        throw new InvalidOperationException("La date de tournée est invalide.");
     }
 
-    private static bool IsValidDateTime(string value)
+    public static bool TryParseDateTournee(object? value, out DateTime dateTournee)
     {
-        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out _)
-               || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out _);
+        if (value is DateTime dateTime)
+        {
+            dateTournee = dateTime.Date;
+            return true;
+        }
+
+        var text = Convert.ToString(value)?.Trim();
+
+        if (DateTime.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDate))
+        {
+            dateTournee = parsedDate.Date;
+            return true;
+        }
+
+        if (DateTime.TryParse(
+                text,
+                CultureInfo.GetCultureInfo("fr-FR"),
+                DateTimeStyles.None,
+                out parsedDate))
+        {
+            dateTournee = parsedDate.Date;
+            return true;
+        }
+
+        dateTournee = default;
+        return false;
     }
 
-    private static bool IsValidDateTimeOrTime(string value)
+    public static bool TryParseGuid(object? value, out Guid guid)
     {
-        return DateTimeOffset.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out _)
-               || DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AllowWhiteSpaces, out _)
-               || TimeSpan.TryParse(value, CultureInfo.InvariantCulture, out _);
+        if (value is Guid existingGuid)
+        {
+            guid = existingGuid;
+            return true;
+        }
+
+        return Guid.TryParse(Convert.ToString(value), out guid);
     }
+
+    public static bool TryParseDateTimeOffsetNullable(object? value, out DateTimeOffset? dateTimeOffset)
+    {
+        if (value is null)
+        {
+            dateTimeOffset = null;
+            return false;
+        }
+
+        if (value is DateTimeOffset existingDateTimeOffset)
+        {
+            dateTimeOffset = existingDateTimeOffset;
+            return true;
+        }
+
+        if (value is DateTime existingDateTime)
+        {
+            dateTimeOffset = new DateTimeOffset(existingDateTime);
+            return true;
+        }
+
+        var text = Convert.ToString(value)?.Trim();
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            dateTimeOffset = null;
+            return false;
+        }
+
+        if (DateTimeOffset.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDateTimeOffset))
+        {
+            dateTimeOffset = parsedDateTimeOffset;
+            return true;
+        }
+
+        if (DateTime.TryParse(
+                text,
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var parsedDateTime))
+        {
+            dateTimeOffset = new DateTimeOffset(parsedDateTime);
+            return true;
+        }
+
+        dateTimeOffset = null;
+        return false;
+    }
+}
+
+public sealed class SynchronisationValidationResult
+{
+    public SynchronisationValidationResult(IReadOnlyList<SynchronisationValidationError> errors)
+    {
+        Errors = errors;
+    }
+
+    public bool IsValid => Errors.Count == 0;
+
+    public IReadOnlyList<SynchronisationValidationError> Errors { get; }
+}
+
+public sealed class SynchronisationValidationError
+{
+    public SynchronisationValidationError(string field, string message)
+    {
+        Field = field;
+        Message = message;
+    }
+
+    public string Field { get; }
+
+    public string Message { get; }
 }

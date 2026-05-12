@@ -7,7 +7,7 @@ namespace API_ASP.NET_Core.Models;
 /// Ce modèle est renvoyé par GET /api/tournees/jour.
 /// Il représente le contrat JSON v1.2 de chargement du matin : en-tête de tournée,
 /// livreur, informations de chargement, articles saisissables, lignes clients,
-/// commentaires exceptionnels et quantités pré-remplies.
+/// commentaires exceptionnels, zones de déchargement et quantités pré-remplies.
 /// </remarks>
 public class TourneeMobileDto
 {
@@ -75,6 +75,10 @@ public class TourneeMobileDto
     /// <summary>
     /// Liste des articles que le livreur peut saisir dans l'application mobile.
     /// </summary>
+    /// <remarks>
+    /// Cette liste permet au mobile de construire les lignes de saisie sans coder en dur
+    /// les articles dans l'application. Exemples : ROLLS, TAPIS, SACS.
+    /// </remarks>
     public IList<ArticleSaisissableDto> ArticlesSaisissables { get; init; }
         = new List<ArticleSaisissableDto>();
 

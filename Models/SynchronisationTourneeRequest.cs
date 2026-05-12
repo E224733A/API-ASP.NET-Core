@@ -1,4 +1,4 @@
-﻿namespace API_ASP.NET_Core.Models;
+namespace API_ASP.NET_Core.Models;
 
 /// <summary>
 /// Requête envoyée par l'application mobile pour synchroniser une tournée en fin de journée.
@@ -12,6 +12,8 @@
 /// - le livreur ;
 /// - les informations de l'appareil mobile ;
 /// - les lignes de tournée validées par le livreur.
+///
+/// Contrat JSON actuel : schemaVersion = "1.2".
 /// </remarks>
 public class SynchronisationTourneeRequest
 {
@@ -21,7 +23,7 @@ public class SynchronisationTourneeRequest
     /// <remarks>
     /// Cette version permet à l'API de vérifier que le mobile utilise un contrat compatible.
     ///
-    /// Exemple : 1.1
+    /// Exemple : 1.2
     /// </remarks>
     public string SchemaVersion { get; set; } = string.Empty;
 
@@ -42,7 +44,7 @@ public class SynchronisationTourneeRequest
     /// <remarks>
     /// Format attendu : yyyy-MM-dd.
     ///
-    /// Exemple : 2026-04-28
+    /// Exemple : 2026-05-07
     /// </remarks>
     public string DateTournee { get; set; } = string.Empty;
 
@@ -52,7 +54,7 @@ public class SynchronisationTourneeRequest
     /// <remarks>
     /// Ce code doit correspondre à la tournée chargée le matin par l'application mobile.
     ///
-    /// Exemple : 2001
+    /// Exemple : 4006
     /// </remarks>
     public string CodeTournee { get; set; } = string.Empty;
 
@@ -60,7 +62,7 @@ public class SynchronisationTourneeRequest
     /// Libellé lisible de la tournée.
     /// </summary>
     /// <remarks>
-    /// Exemple : MDR VENDEE
+    /// Exemple : BOUAYE
     /// </remarks>
     public string LibelleTournee { get; set; } = string.Empty;
 

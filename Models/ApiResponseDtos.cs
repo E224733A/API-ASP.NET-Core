@@ -1,6 +1,28 @@
 namespace API_ASP.NET_Core.Models;
 
 /// <summary>
+/// Réponse retournée lorsqu'une opération API est réussie.
+/// </summary>
+public sealed class ApiSuccessResponse
+{
+    /// <summary>
+    /// Statut de la réponse.
+    /// </summary>
+    /// <remarks>
+    /// Exemple : SUCCESS
+    /// </remarks>
+    public string Statut { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Message lisible décrivant le succès de l'opération.
+    /// </summary>
+    /// <remarks>
+    /// Exemple : Synchronisation enregistrée avec succès.
+    /// </remarks>
+    public string Message { get; set; } = string.Empty;
+}
+
+/// <summary>
 /// Réponse retournée lorsqu'une validation échoue.
 /// </summary>
 public sealed class ApiValidationErrorResponse
