@@ -7,6 +7,9 @@ namespace API_ASP.NET_Core.Repositories;
 
 public sealed class SynchronisationsRepository
 {
+    private const string CodeArticleRollsVides = "ROLLS_VIDES";
+    private const string LibelleArticleRollsVides = "Rolls vides";
+
     private readonly string _connectionString;
 
     public SynchronisationsRepository(IConfiguration configuration)
@@ -176,8 +179,9 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
 
                 var saisie = ligne.Saisie
                     ?? throw new InvalidOperationException("La saisie d'une ligne a été validée mais reste null.");
-                var quantitesLigne = saisie.Quantites
-                    ?? throw new InvalidOperationException("Les quantités d'une ligne ont été validées mais restent null.");
+                var quantitesLigne = NormalizeQuantites(
+                    saisie.Quantites
+                    ?? throw new InvalidOperationException("Les quantités d'une ligne ont été validées mais restent null."));
 
                 foreach (var quantite in quantitesLigne)
                 {
@@ -449,7 +453,7 @@ VALUES
         long idTourneeMobile,
         CancellationToken cancellationToken)
     {
-        var quantites = ligne.Saisie?.Quantites ?? new List<SynchronisationQuantiteRequest>();
+        var quantites = NormalizeQuantites(ligne.Saisie?.Quantites ?? new List<SynchronisationQuantiteRequest>());
         var totalLivre = quantites.Sum(q => q.QuantiteLivree);
         var totalRecupere = quantites.Sum(q => q.QuantiteRecuperee);
         var nbRolls = GetQuantiteLivreeArticle(quantites, "ROLLS");
@@ -648,10 +652,12 @@ BEGIN
 END
 ";
 
+        var normalizedCodeArticle = codeArticle.Trim();
+        var normalizedLibelle = NormalizeLibelleArticle(normalizedCodeArticle, libelle);
+
         await using var command = new SqlCommand(sql, connection, transaction);
-        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = codeArticle.Trim();
-        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value =
-            string.IsNullOrWhiteSpace(libelle) ? codeArticle.Trim() : libelle.Trim();
+        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = normalizedCodeArticle;
+        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value = normalizedLibelle;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -684,13 +690,15 @@ VALUES
     );
 ";
 
+        var normalized = NormalizeQuantite(quantite);
+
         await using var command = new SqlCommand(sql, connection, transaction);
         command.Parameters.Add("@IdTourneeLigne", SqlDbType.BigInt).Value = idTourneeLigne;
-        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = quantite.CodeArticle.Trim();
-        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value = ToDbValue(quantite.Libelle);
-        command.Parameters.Add("@QuantiteLivreePrevue", SqlDbType.Int).Value = ToDbValue(quantite.QuantiteLivreePrevue);
-        command.Parameters.Add("@QuantiteLivree", SqlDbType.Int).Value = quantite.QuantiteLivree;
-        command.Parameters.Add("@QuantiteRecuperee", SqlDbType.Int).Value = quantite.QuantiteRecuperee;
+        command.Parameters.Add("@CodeArticle", SqlDbType.NVarChar, 50).Value = normalized.CodeArticle.Trim();
+        command.Parameters.Add("@LibelleArticle", SqlDbType.NVarChar, 100).Value = ToDbValue(normalized.Libelle);
+        command.Parameters.Add("@QuantiteLivreePrevue", SqlDbType.Int).Value = ToDbValue(normalized.QuantiteLivreePrevue);
+        command.Parameters.Add("@QuantiteLivree", SqlDbType.Int).Value = normalized.QuantiteLivree;
+        command.Parameters.Add("@QuantiteRecuperee", SqlDbType.Int).Value = normalized.QuantiteRecuperee;
 
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
@@ -752,6 +760,48 @@ VALUES
         command.Parameters.Add("@VersionApplication", SqlDbType.NVarChar, 50).Value = ToDbValue(versionApplication);
 
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static List<SynchronisationQuantiteRequest> NormalizeQuantites(
+        IEnumerable<SynchronisationQuantiteRequest> quantites)
+    {
+        return quantites.Select(NormalizeQuantite).ToList();
+    }
+
+    private static SynchronisationQuantiteRequest NormalizeQuantite(SynchronisationQuantiteRequest quantite)
+    {
+        var codeArticle = quantite.CodeArticle?.Trim() ?? string.Empty;
+
+        if (!IsRollsVides(codeArticle))
+        {
+            return quantite;
+        }
+
+        return new SynchronisationQuantiteRequest
+        {
+            CodeArticle = CodeArticleRollsVides,
+            Libelle = NormalizeLibelleArticle(CodeArticleRollsVides, quantite.Libelle),
+            QuantiteLivreePrevue = null,
+            QuantiteLivree = 0,
+            QuantiteRecuperee = quantite.QuantiteRecuperee
+        };
+    }
+
+    private static string NormalizeLibelleArticle(string codeArticle, string? libelle)
+    {
+        if (IsRollsVides(codeArticle))
+        {
+            return LibelleArticleRollsVides;
+        }
+
+        return string.IsNullOrWhiteSpace(libelle)
+            ? codeArticle.Trim()
+            : libelle.Trim();
+    }
+
+    private static bool IsRollsVides(string? codeArticle)
+    {
+        return string.Equals(codeArticle?.Trim(), CodeArticleRollsVides, StringComparison.OrdinalIgnoreCase);
     }
 
     private static Guid ParseGuid(object? value)
