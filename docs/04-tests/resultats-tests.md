@@ -10,7 +10,7 @@ Les tests POST du contrat JSON v1.2 ont été exécutés avec succès.
 |---:|---|---|---|---|
 | 01 | Synchronisation valide | `sync-valide.json` | `200 OK / SUCCESS` | `HTTP/1.1 200 OK` |
 | 02 | Doublon technique `idSynchronisation` | `sync-doublon.json` | `409 Conflict / SYNCHRONISATION_ALREADY_EXISTS` | `HTTP/1.1 409 Conflict` |
-| 03 | Double envoi métier date + tournée + livreur | `sync-double-envoi-tournee.json` | `409 Conflict / TOURNEE_ALREADY_SENT` | `HTTP/1.1 409 Conflict` |
+| 03 | Double envoi métier date + tournée | `sync-double-envoi-tournee.json` | `409 Conflict / TOURNEE_ALREADY_SENT` | `HTTP/1.1 409 Conflict` |
 | 04 | Quantité négative | `sync-quantite-negative.json` | `400 Bad Request / VALIDATION_ERROR` | `HTTP/1.1 400 Bad Request` |
 | 05 | `NON_FAIT` sans commentaire | `sync-non-fait-sans-commentaire.json` | `400 Bad Request / VALIDATION_ERROR` | `HTTP/1.1 400 Bad Request` |
 | 06 | `ANOMALIE` sans commentaire | `sync-anomalie-sans-commentaire.json` | `400 Bad Request / VALIDATION_ERROR` | `HTTP/1.1 400 Bad Request` |

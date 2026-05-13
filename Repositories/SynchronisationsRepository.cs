@@ -17,6 +17,55 @@ public sealed class SynchronisationsRepository
             ?? throw new InvalidOperationException("La chaîne de connexion MobileConnection est introuvable.");
     }
 
+    public async Task<SynchronisationDejaRecueDto?> GetSynchronisationDejaRecueAsync(
+        Guid idSynchronisation,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new SqlConnection(_connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        const string sql = @"
+SELECT TOP (1)
+    t.IdTourneeMobile,
+    t.IdSynchronisation,
+    t.DateTournee,
+    t.CodeTournee,
+    t.LibelleTournee,
+    l.CodeLivreur,
+    l.NomLivreur,
+    t.DateEnvoi,
+    t.DateReceptionApi
+FROM dbo.Mobile_Tournee t
+LEFT JOIN dbo.Mobile_Livreur l
+    ON l.IdLivreur = t.IdLivreur
+WHERE t.IdSynchronisation = @IdSynchronisation
+ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
+";
+
+        await using var command = new SqlCommand(sql, connection);
+        command.Parameters.Add("@IdSynchronisation", SqlDbType.UniqueIdentifier).Value = idSynchronisation;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new SynchronisationDejaRecueDto
+        {
+            IdTourneeMobile = reader.GetInt64(reader.GetOrdinal("IdTourneeMobile")),
+            IdSynchronisation = reader.GetGuid(reader.GetOrdinal("IdSynchronisation")),
+            DateTournee = reader.GetDateTime(reader.GetOrdinal("DateTournee")),
+            CodeTournee = reader.GetString(reader.GetOrdinal("CodeTournee")),
+            LibelleTournee = ReadNullableString(reader, "LibelleTournee"),
+            CodeLivreur = ReadNullableString(reader, "CodeLivreur"),
+            NomLivreur = ReadNullableString(reader, "NomLivreur"),
+            DateEnvoi = ReadNullableDateTimeOffset(reader, "DateEnvoi"),
+            DateReceptionApi = ReadNullableDateTimeOffset(reader, "DateReceptionApi")
+        };
+    }
+
     public async Task<TourneeDejaEnvoyeeDto?> GetTourneeDejaEnvoyeeAsync(
         DateTime dateTournee,
         string codeTournee,
@@ -113,7 +162,7 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
             var nombreLignes = 0;
             var nombreQuantites = 0;
 
-            foreach (var ligne in request.Lignes)
+            foreach (var ligne in lignes)
             {
                 var idTourneeLigne = await InsertLigneAsync(
                     connection,
@@ -770,6 +819,27 @@ public sealed class TourneeDejaEnvoyeeDto
     public string? LibelleTournee { get; set; }
 
     public string CodeLivreur { get; set; } = string.Empty;
+
+    public string? NomLivreur { get; set; }
+
+    public DateTimeOffset? DateEnvoi { get; set; }
+
+    public DateTimeOffset? DateReceptionApi { get; set; }
+}
+
+public sealed class SynchronisationDejaRecueDto
+{
+    public long IdTourneeMobile { get; set; }
+
+    public Guid IdSynchronisation { get; set; }
+
+    public DateTime DateTournee { get; set; }
+
+    public string CodeTournee { get; set; } = string.Empty;
+
+    public string? LibelleTournee { get; set; }
+
+    public string? CodeLivreur { get; set; }
 
     public string? NomLivreur { get; set; }
 

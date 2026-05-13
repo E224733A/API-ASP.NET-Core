@@ -1,7 +1,7 @@
 # Tests API mobile SLI — contrat JSON v1.2
 
 Date de mise à jour : 2026-05-12  
-URL locale utilisée : `http://localhost:5120`
+URL locale utilisée : `http://127.0.0.1:5000`
 
 Ce dossier contient les fichiers JSON de test pour vérifier le contrat technique `schemaVersion = 1.2`.
 
@@ -28,14 +28,14 @@ Démarrer l'API dans un premier terminal :
 ```powershell
 cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core"
 dotnet build
-dotnet run
+dotnet run --no-launch-profile --urls "http://127.0.0.1:5000"
 ```
 
 Dans un second terminal :
 
 ```powershell
 cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core\docs\04-tests"
-$api = "http://localhost:5120"
+$api = "http://127.0.0.1:5000"
 ```
 
 Les tests `POST` utilisent des `idSynchronisation` fixes. Pour obtenir exactement les résultats attendus, lance-les dans l'ordre indiqué, de préférence sur une base de développement réinitialisée.

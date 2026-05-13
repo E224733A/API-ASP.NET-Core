@@ -163,6 +163,13 @@ Commandes :
 
 ```powershell
 $api = "http://localhost:5120"
+$api = "http://127.0.0.1:5000"
+
+dotnet clean
+dotnet restore
+dotnet build
+dotnet run 
+
 
 curl.exe -i "$api/api/health"
 curl.exe -i "$api/api/health/abssolute"

@@ -1,4 +1,4 @@
-$api = "http://localhost:5120"
+$api = "http://127.0.0.1:5000"
 $ApiUrl = "$api/api/synchronisations"
 
 function Test-Synchronisation {

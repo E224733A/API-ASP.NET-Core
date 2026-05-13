@@ -44,19 +44,51 @@ public sealed class SynchronisationService
 
         var dateTournee = SynchronisationTourneeValidator.ParseDateTournee(request.DateTournee);
         var codeTournee = request.CodeTournee.Trim();
+        var idSynchronisation = ParseIdSynchronisation(request.IdSynchronisation);
+
         var livreur = request.Livreur
             ?? throw new InvalidOperationException("Le livreur a été validé mais reste null.");
+
         var codeLivreur = livreur.CodeLivreur.Trim();
 
         /*
-         * Correction règle métier stricte :
+         * Ordre volontaire des contrôles :
          *
-         * Avant insertion, on vérifie si une tournée ENVOYEE existe déjà
-         * pour DateTournee + CodeTournee.
+         * 1. Doublon technique par IdSynchronisation.
+         * 2. Doublon métier par DateTournee + CodeTournee.
+         * 3. Insertion en base.
          *
-         * Important :
-         * - le code livreur ne fait plus partie de la clé métier ;
-         * - il sert seulement à tracer qui a déjà envoyé.
+         * Si le même fichier JSON est renvoyé, les deux doublons peuvent être vrais.
+         * Dans ce cas, on retourne SYNCHRONISATION_ALREADY_EXISTS en priorité,
+         * parce que le problème identifié est d'abord le rejeu technique de la même requête.
+         */
+        var synchronisationDejaRecue = await _repository.GetSynchronisationDejaRecueAsync(
+            idSynchronisation,
+            cancellationToken);
+
+        if (synchronisationDejaRecue is not null)
+        {
+            return SynchronisationServiceResult.Conflict(new
+            {
+                code = "SYNCHRONISATION_ALREADY_EXISTS",
+                message = "Cette synchronisation a déjà été reçue.",
+                idSynchronisation = idSynchronisation.ToString(),
+                idTourneeMobileExistante = synchronisationDejaRecue.IdTourneeMobile,
+                dateTournee = synchronisationDejaRecue.DateTournee.ToString("yyyy-MM-dd"),
+                codeTournee = synchronisationDejaRecue.CodeTournee,
+                codeLivreurDejaEnvoye = synchronisationDejaRecue.CodeLivreur,
+                nomLivreurDejaEnvoye = synchronisationDejaRecue.NomLivreur,
+                dateEnvoiExistante = synchronisationDejaRecue.DateEnvoi,
+                dateReceptionApiExistante = synchronisationDejaRecue.DateReceptionApi
+            });
+        }
+
+        /*
+         * Règle métier stricte :
+         *
+         * Une seule tournée ENVOYEE est autorisée par DateTournee + CodeTournee.
+         * Le CodeLivreur sert à tracer qui a envoyé, mais il ne permet pas
+         * d'envoyer une deuxième fois la même tournée le même jour.
          */
         var tourneeDejaEnvoyee = await _repository.GetTourneeDejaEnvoyeeAsync(
             dateTournee,
@@ -116,17 +148,29 @@ public sealed class SynchronisationService
         catch (SqlException exception) when (exception.Number is 2601 or 2627)
         {
             /*
-             * Deuxième niveau de sécurité.
+             * Sécurité finale SQL.
              *
-             * Si deux envois passent le contrôle applicatif au même moment,
-             * la contrainte SQL unique DateTournee + CodeTournee bloque
-             * l'insertion concurrente.
+             * Même si l'API vérifie avant insertion, deux requêtes peuvent arriver
+             * presque en même temps. Les contraintes SQL restent donc la vraie sécurité.
              */
             _logger.LogWarning(
                 exception,
-                "Double envoi bloqué par SQL pour la tournée {CodeTournee} du {DateTournee}.",
+                "Doublon bloqué par SQL pour IdSynchronisation={IdSynchronisation}, CodeTournee={CodeTournee}, DateTournee={DateTournee}.",
+                idSynchronisation,
                 codeTournee,
                 dateTournee);
+
+            if (IsSqlDuplicateIdSynchronisation(exception))
+            {
+                return SynchronisationServiceResult.Conflict(new
+                {
+                    code = "SYNCHRONISATION_ALREADY_EXISTS",
+                    message = "Cette synchronisation a déjà été reçue.",
+                    idSynchronisation = idSynchronisation.ToString(),
+                    dateTournee = dateTournee.ToString("yyyy-MM-dd"),
+                    codeTournee
+                });
+            }
 
             return SynchronisationServiceResult.Conflict(new
             {
@@ -136,6 +180,23 @@ public sealed class SynchronisationService
                 codeTournee
             });
         }
+    }
+
+    private static Guid ParseIdSynchronisation(object? value)
+    {
+        if (SynchronisationTourneeValidator.TryParseGuid(value, out var idSynchronisation))
+        {
+            return idSynchronisation;
+        }
+
+        throw new InvalidOperationException("L'identifiant de synchronisation a été validé mais reste invalide.");
+    }
+
+    private static bool IsSqlDuplicateIdSynchronisation(SqlException exception)
+    {
+        return exception.Message.Contains("IdSynchronisation", StringComparison.OrdinalIgnoreCase)
+               || exception.Message.Contains("UQ_Mobile_Tournee_IdSynchronisation", StringComparison.OrdinalIgnoreCase)
+               || exception.Message.Contains("UX_Mobile_Tournee_IdSynchronisation", StringComparison.OrdinalIgnoreCase);
     }
 }
 
