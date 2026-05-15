@@ -168,7 +168,7 @@ $api = "http://127.0.0.1:5000"
 dotnet clean
 dotnet restore
 dotnet build
-dotnet run 
+dotnet run --no-launch-profile --urls "$api"
 
 
 curl.exe -i "$api/api/health"

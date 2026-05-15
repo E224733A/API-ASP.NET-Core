@@ -126,9 +126,10 @@ GO
 INSERT INTO dbo.Mobile_ArticleSaisissable
     (CodeArticle, LibelleArticle, OrdreAffichage, EstActif, EstVisibleMobile)
 VALUES
-    (N'ROLLS', N'Rolls', 1, 1, 1),
-    (N'TAPIS', N'Tapis', 2, 1, 1),
-    (N'SACS',  N'Sacs',  3, 1, 1);
+    (N'ROLLS',       N'Rolls',       1, 1, 1),
+    (N'ROLLS_VIDES', N'Rolls vides', 2, 1, 1),
+    (N'TAPIS',       N'Tapis',       3, 1, 1),
+    (N'SACS',        N'Sacs',        4, 1, 1);
 GO
 
 /* ============================================================
@@ -253,6 +254,8 @@ GO
    Protections :
    - UQ_Mobile_Tournee_IdSynchronisation : anti-rejeu technique.
    - UX_Mobile_Tournee_EnvoiUnique : anti-double envoi metier.
+     Une seule tournee ENVOYEE est autorisee par DateTournee + CodeTournee,
+     meme si le CodeLivreur est different.
 ============================================================ */
 CREATE TABLE dbo.Mobile_Tournee (
     IdTourneeMobile BIGINT IDENTITY(1,1) NOT NULL,
@@ -319,7 +322,7 @@ CREATE TABLE dbo.Mobile_Tournee (
 GO
 
 CREATE UNIQUE INDEX UX_Mobile_Tournee_EnvoiUnique
-ON dbo.Mobile_Tournee (DateTournee, CodeTournee, IdLivreur)
+ON dbo.Mobile_Tournee (DateTournee, CodeTournee)
 WHERE StatutSynchronisation = N'ENVOYEE';
 GO
 

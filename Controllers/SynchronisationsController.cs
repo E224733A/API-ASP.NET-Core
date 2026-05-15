@@ -29,9 +29,13 @@ public sealed class SynchronisationsController : ControllerBase
         {
             return BadRequest(new
             {
-                code = "VALIDATION_ERROR",
+                statut = "VALIDATION_ERROR",
                 message = "Le corps JSON de la synchronisation est obligatoire.",
-                erreurs = new[]
+                errors = new[]
+                {
+                    "Le corps de la requête est vide ou invalide."
+                },
+                details = new[]
                 {
                     new
                     {
@@ -80,6 +84,7 @@ public sealed class SynchronisationsController : ControllerBase
 
             return Conflict(new
             {
+                statut = "CONFLICT",
                 code = "TOURNEE_ALREADY_SENT",
                 message = "Cette tournée a déjà été envoyée pour cette date.",
                 dateTournee = FormatDateTournee(request.DateTournee),
@@ -98,6 +103,7 @@ public sealed class SynchronisationsController : ControllerBase
                 StatusCodes.Status500InternalServerError,
                 new
                 {
+                    statut = "ERROR",
                     code = "SERVER_ERROR",
                     message = "Une erreur technique est survenue pendant le traitement de la synchronisation."
                 });

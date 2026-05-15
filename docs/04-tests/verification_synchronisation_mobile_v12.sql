@@ -4,6 +4,8 @@
    Objectif :
    - Verifier rapidement les donnees inserees apres un test API.
    - Controle oriente nouveau format quantites[].
+   - Controle de la regle stricte : une seule tournee ENVOYEE
+     par DateTournee + CodeTournee.
    - Un seul filtre obligatoire/recommande : @DateTournee.
 
    Utilisation :
@@ -216,13 +218,13 @@ HAVING COUNT(*) > 1
 UNION ALL
 
 SELECT
-    'DOUBLON_ENVOI_TOURNEE' AS TypeControle,
-    CONCAT(CONVERT(NVARCHAR(10), DateTournee, 120), N'|', CodeTournee, N'|', IdLivreur) AS Cle,
+    'DOUBLON_ENVOI_TOURNEE_DATE_CODE' AS TypeControle,
+    CONCAT(CONVERT(NVARCHAR(10), DateTournee, 120), N'|', CodeTournee) AS Cle,
     COUNT(*) AS Nombre
 FROM dbo.Mobile_Tournee
 WHERE (@DateTournee IS NULL OR DateTournee = @DateTournee)
   AND StatutSynchronisation = N'ENVOYEE'
-GROUP BY DateTournee, CodeTournee, IdLivreur
+GROUP BY DateTournee, CodeTournee
 HAVING COUNT(*) > 1
 
 UNION ALL
@@ -278,6 +280,36 @@ AND c.COLUMN_NAME IN (
 ORDER BY c.TABLE_NAME, c.COLUMN_NAME;
 
 /* ============================================================
+   8.b Verification du referentiel articles mobile
+
+   Regle attendue :
+   - ROLLS, ROLLS_VIDES, TAPIS et SACS doivent etre presents.
+   - ROLLS_VIDES doit etre actif et visible mobile.
+============================================================ */
+SELECT
+    CodeArticle,
+    LibelleArticle,
+    OrdreAffichage,
+    EstActif,
+    EstVisibleMobile
+FROM dbo.Mobile_ArticleSaisissable
+WHERE CodeArticle IN (N'ROLLS', N'ROLLS_VIDES', N'TAPIS', N'SACS')
+ORDER BY OrdreAffichage, CodeArticle;
+
+SELECT
+    CASE
+        WHEN EXISTS (
+            SELECT 1
+            FROM dbo.Mobile_ArticleSaisissable
+            WHERE CodeArticle = N'ROLLS_VIDES'
+              AND EstActif = 1
+              AND EstVisibleMobile = 1
+        )
+        THEN N'OK - ROLLS_VIDES present, actif et visible mobile'
+        ELSE N'ERREUR - ROLLS_VIDES absent ou non visible mobile'
+    END AS ControleRollsVides;
+
+/* ============================================================
    9. Verification des index importants
 ============================================================ */
 SELECT
@@ -296,3 +328,43 @@ WHERE i.name IN (
     'UX_Mobile_CommentaireExceptionnel_Actif'
 )
 ORDER BY TableName, IndexName;
+
+/* ============================================================
+   10. Detail de la contrainte anti-double envoi metier
+
+   Regle attendue :
+   - Une seule tournee ENVOYEE par DateTournee + CodeTournee.
+   - IdLivreur ne doit pas faire partie de cet index unique.
+============================================================ */
+SELECT
+    i.name AS IndexName,
+    i.is_unique,
+    i.filter_definition,
+    COL_NAME(ic.object_id, ic.column_id) AS ColumnName,
+    ic.key_ordinal
+FROM sys.indexes i
+INNER JOIN sys.index_columns ic
+    ON ic.object_id = i.object_id
+   AND ic.index_id = i.index_id
+WHERE i.object_id = OBJECT_ID('dbo.Mobile_Tournee')
+  AND i.name = N'UX_Mobile_Tournee_EnvoiUnique'
+ORDER BY ic.key_ordinal;
+
+/* ============================================================
+   11. Controle direct des doublons impossibles avec la regle stricte
+
+   Si le script BDD a bien ete reexecute en suppression/recreation,
+   cette requete doit normalement retourner zero ligne.
+============================================================ */
+SELECT
+    DateTournee,
+    CodeTournee,
+    COUNT(*) AS NombreEnvois,
+    STRING_AGG(CAST(IdTourneeMobile AS NVARCHAR(30)), N', ') AS IdTourneesMobiles
+FROM dbo.Mobile_Tournee
+WHERE (@DateTournee IS NULL OR DateTournee = @DateTournee)
+  AND StatutSynchronisation = N'ENVOYEE'
+GROUP BY DateTournee, CodeTournee
+HAVING COUNT(*) > 1
+ORDER BY DateTournee DESC, CodeTournee;
+

@@ -30,15 +30,24 @@ public sealed class SynchronisationService
 
         if (!validationResult.IsValid)
         {
-            return SynchronisationServiceResult.BadRequest(new
-            {
-                code = "VALIDATION_ERROR",
-                message = "La synchronisation contient des données invalides.",
-                erreurs = validationResult.Errors.Select(error => new
+            var errors = validationResult.Errors
+                .Select(error => error.Message)
+                .ToList();
+
+            var details = validationResult.Errors
+                .Select(error => new
                 {
                     champ = error.Field,
                     message = error.Message
-                }).ToList()
+                })
+                .ToList();
+
+            return SynchronisationServiceResult.BadRequest(new
+            {
+                statut = "VALIDATION_ERROR",
+                message = "La synchronisation contient des données invalides.",
+                errors,
+                details
             });
         }
 
@@ -70,6 +79,7 @@ public sealed class SynchronisationService
         {
             return SynchronisationServiceResult.Conflict(new
             {
+                statut = "CONFLICT",
                 code = "SYNCHRONISATION_ALREADY_EXISTS",
                 message = "Cette synchronisation a déjà été reçue.",
                 idSynchronisation = idSynchronisation.ToString(),
@@ -84,10 +94,10 @@ public sealed class SynchronisationService
         }
 
         /*
-         * Règle métier stricte :
+         * Règle métier finale :
          *
          * Une seule tournée ENVOYEE est autorisée par DateTournee + CodeTournee.
-         * Le CodeLivreur sert à tracer qui a envoyé, mais il ne permet pas
+         * Le CodeLivreur sert uniquement à tracer qui a envoyé, mais il ne permet pas
          * d'envoyer une deuxième fois la même tournée le même jour.
          */
         var tourneeDejaEnvoyee = await _repository.GetTourneeDejaEnvoyeeAsync(
@@ -112,6 +122,7 @@ public sealed class SynchronisationService
 
             return SynchronisationServiceResult.Conflict(new
             {
+                statut = "CONFLICT",
                 code = "TOURNEE_ALREADY_SENT",
                 message,
                 dateTournee = dateTournee.ToString("yyyy-MM-dd"),
@@ -133,7 +144,7 @@ public sealed class SynchronisationService
 
             return SynchronisationServiceResult.Ok(new
             {
-                code = "SUCCESS",
+                statut = "SUCCESS",
                 message = "Synchronisation enregistrée avec succès.",
                 idTourneeMobile = resultat.IdTourneeMobile,
                 idSynchronisation = resultat.IdSynchronisation,
@@ -164,6 +175,7 @@ public sealed class SynchronisationService
             {
                 return SynchronisationServiceResult.Conflict(new
                 {
+                    statut = "CONFLICT",
                     code = "SYNCHRONISATION_ALREADY_EXISTS",
                     message = "Cette synchronisation a déjà été reçue.",
                     idSynchronisation = idSynchronisation.ToString(),
@@ -174,6 +186,7 @@ public sealed class SynchronisationService
 
             return SynchronisationServiceResult.Conflict(new
             {
+                statut = "CONFLICT",
                 code = "TOURNEE_ALREADY_SENT",
                 message = "Cette tournée a déjà été envoyée pour cette date.",
                 dateTournee = dateTournee.ToString("yyyy-MM-dd"),
