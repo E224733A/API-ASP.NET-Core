@@ -1,0 +1,31 @@
+﻿{
+    "schemaVersion":  "1.0",
+    "idLotVerrouillage":  "42792bf4-6ab1-495c-bfe6-505f188653ca",
+    "dateTournee":  "2026-05-07",
+    "codeTournee":  "4006",
+    "libelleTournee":  "TEST API EXPEDITION",
+    "utilisateur":  {
+                        "identifiant":  "test.api",
+                        "nomAffiche":  "Test API"
+                    },
+    "lignes":  [
+                   {
+                       "idLigneSource":  "2026-05-07|4006|4|333|341|1",
+                       "ordreArret":  1,
+                       "horaire":  "1",
+                       "numClient":  "333",
+                       "nomClient":  "HOTEL LE MARTINET",
+                       "nomAffiche":  "HOTEL LE MARTINET",
+                       "codePDL":  "341",
+                       "descriptionPDL":  "HOTEL LE MARTINET",
+                       "commentaireExceptionnel":  null,
+                       "quantites":  [
+                                         {
+                                             "codeArticle":  "ROLLS_VIDES",
+                                             "libelle":  "Rolls vides",
+                                             "quantiteLivreePrevue":  2
+                                         }
+                                     ]
+                   }
+               ]
+}
