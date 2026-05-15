@@ -15,11 +15,10 @@ builder.Logging.AddConsole();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
-        // Le contrat JSON v1.2 doit rester tolérant sur la casse des propriétés reçues.
+        // Le contrat JSON doit rester tolérant sur la casse des propriétés reçues.
         options.JsonSerializerOptions.PropertyNameCaseInsensitive = true;
 
-        // Important pour le contrat JSON v1.2 :
-        // les champs null doivent apparaître dans les réponses.
+        // Important : les champs null doivent apparaître dans les réponses.
         // Exemple : quantiteLivreePrevue = null signifie que l'expédition n'a rien renseigné.
         options.JsonSerializerOptions.DefaultIgnoreCondition = JsonIgnoreCondition.Never;
     });
@@ -50,11 +49,13 @@ builder.Services.AddSwaggerGen(options =>
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "API Mobile SLI - Tournées livreurs",
-        Version = "v1.2",
+        Version = "v1.3",
         Description = """
-        API ASP.NET Core utilisée par l'application mobile MobileSLI des livreurs.
+        API ASP.NET Core utilisée par l'application mobile MobileSLI des livreurs
+        et par le module web Expédition.
 
-        Contrat JSON actuel : schemaVersion = "1.2".
+        Contrat JSON mobile actuel : schemaVersion = "1.2".
+        Contrat JSON Expédition : schemaVersion = "1.0".
 
         L'API permet :
         - de vérifier l'état technique de l'API ;
@@ -62,19 +63,17 @@ builder.Services.AddSwaggerGen(options =>
         - de lister les tournées disponibles pour une date et un livreur ;
         - de charger le détail complet d'une tournée avant le départ ;
         - de recevoir la synchronisation finale envoyée par le mobile en fin de journée ;
+        - de charger toutes les données préparables pour le module Expédition ;
+        - de verrouiller et sauvegarder les préparations Expédition ;
         - de consulter les synchronisations enregistrées côté administration.
 
         Principe d'architecture :
         - le mobile ne se connecte jamais directement à SQL Server ;
-        - le mobile échange uniquement avec cette API en HTTP/JSON ou HTTPS/JSON ;
+        - le navigateur Expédition ne se connecte jamais directement à SQL Server ;
+        - le module web Expédition utilise SQLite local pour ses brouillons avant verrouillage ;
+        - l'API reste responsable du contrôle final avant sauvegarde définitive ;
         - les vues ABSSolute restent la source de lecture métier ;
-        - les tables Mobile_* stockent les synchronisations, les lignes, les quantités et les logs.
-
-        Champs importants du contrat v1.2 :
-        - saisie.quantites[] remplace les anciennes colonnes fixes NbRolls / NbTapis / NbSacs ;
-        - quantiteLivreePrevue est optionnel et nullable ;
-        - commentaireExceptionnel permet d'afficher une remarque ponctuelle saisie côté administration ou expédition ;
-        - zoneDechargementAffichee permet d'afficher directement la zone de déchargement calculée si l'API la fournit.
+        - les tables Mobile_* stockent les synchronisations, les pré-remplissages verrouillés et les logs.
         """
     });
 
@@ -99,6 +98,12 @@ builder.Services.AddScoped<SynchronisationsRepository>();
 builder.Services.AddScoped<SynchronisationTourneeValidator>();
 builder.Services.AddScoped<SynchronisationService>();
 
+// Module Expédition : 2 routes API seulement.
+// GET /api/expedition/preparations/a-preparer
+// POST /api/expedition/preparations/verrouiller
+builder.Services.AddScoped<ExpeditionRepository>();
+builder.Services.AddScoped<ExpeditionService>();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -107,7 +112,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI(options =>
     {
         options.DocumentTitle = "API Mobile SLI - Swagger";
-        options.SwaggerEndpoint("/swagger/v1/swagger.json", "API Mobile SLI v1.2");
+        options.SwaggerEndpoint("/swagger/v1/swagger.json", "API Mobile SLI v1.3");
         options.DisplayRequestDuration();
     });
 }
