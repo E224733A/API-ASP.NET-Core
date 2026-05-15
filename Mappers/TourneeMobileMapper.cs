@@ -72,7 +72,7 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
     {
         var idLigneSource = BuildIdLigneSource(dateTournee, ligne);
-        var commentaireExceptionnel = FindCommentaireExceptionnel(ligne, commentairesExceptionnels);
+        var commentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentairesExceptionnels);
         var zoneDechargement = NormalizeNullable(ligne.ZoneDechargement);
 
         return new TourneeLigneMobileDto
@@ -192,9 +192,19 @@ public sealed class TourneeMobileMapper
     }
 
     private static string? FindCommentaireExceptionnel(
+        string idLigneSource,
         TourneeLigneRecord ligne,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels)
     {
+        var commentaireLigne = commentairesExceptionnels.FirstOrDefault(commentaire =>
+            !string.IsNullOrWhiteSpace(commentaire.IdLigneSource)
+            && string.Equals(commentaire.IdLigneSource, idLigneSource, StringComparison.OrdinalIgnoreCase));
+
+        if (commentaireLigne is not null)
+        {
+            return NormalizeNullable(commentaireLigne.Commentaire);
+        }
+
         var commentaireExact = commentairesExceptionnels.FirstOrDefault(commentaire =>
             string.Equals(commentaire.NumClient, ligne.NumClient, StringComparison.OrdinalIgnoreCase)
             && string.Equals(NormalizeIdPart(commentaire.CodePDL), NormalizeIdPart(ligne.CodePDL), StringComparison.OrdinalIgnoreCase));
@@ -236,7 +246,7 @@ public sealed class TourneeMobileMapper
             .ToList();
     }
 
-    private static string BuildIdLigneSource(DateOnly dateTournee, TourneeLigneRecord ligne)
+    public static string BuildIdLigneSource(DateOnly dateTournee, TourneeLigneRecord ligne)
     {
         var date = dateTournee.ToString("yyyy-MM-dd");
         var codeTournee = NormalizeIdPart(ligne.CodeTournee);

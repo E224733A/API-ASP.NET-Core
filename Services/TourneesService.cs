@@ -97,7 +97,7 @@ public sealed class TourneesService
         }
 
         var articlesSaisissables = await _repository.GetArticlesSaisissablesAsync();
-        var commentairesExceptionnels = await _repository.GetCommentairesExceptionnelsAsync(dateTournee);
+        var commentairesExceptionnels = await _repository.GetCommentairesExceptionnelsAsync(dateTournee, codeTournee);
         var preRemplissages = await _repository.GetPreRemplissagesAsync(dateTournee, codeTournee);
 
         var tournee = _mapper.Map(

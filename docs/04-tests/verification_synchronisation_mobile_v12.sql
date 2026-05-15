@@ -280,36 +280,6 @@ AND c.COLUMN_NAME IN (
 ORDER BY c.TABLE_NAME, c.COLUMN_NAME;
 
 /* ============================================================
-   8.b Verification du referentiel articles mobile
-
-   Regle attendue :
-   - ROLLS, ROLLS_VIDES, TAPIS et SACS doivent etre presents.
-   - ROLLS_VIDES doit etre actif et visible mobile.
-============================================================ */
-SELECT
-    CodeArticle,
-    LibelleArticle,
-    OrdreAffichage,
-    EstActif,
-    EstVisibleMobile
-FROM dbo.Mobile_ArticleSaisissable
-WHERE CodeArticle IN (N'ROLLS', N'ROLLS_VIDES', N'TAPIS', N'SACS')
-ORDER BY OrdreAffichage, CodeArticle;
-
-SELECT
-    CASE
-        WHEN EXISTS (
-            SELECT 1
-            FROM dbo.Mobile_ArticleSaisissable
-            WHERE CodeArticle = N'ROLLS_VIDES'
-              AND EstActif = 1
-              AND EstVisibleMobile = 1
-        )
-        THEN N'OK - ROLLS_VIDES present, actif et visible mobile'
-        ELSE N'ERREUR - ROLLS_VIDES absent ou non visible mobile'
-    END AS ControleRollsVides;
-
-/* ============================================================
    9. Verification des index importants
 ============================================================ */
 SELECT

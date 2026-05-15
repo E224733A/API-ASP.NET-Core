@@ -27,6 +27,8 @@ public record ArticleSaisissableRecord
 
 public record CommentaireExceptionnelRecord
 {
+    public string? IdLigneSource { get; init; }
+    public string? CodeTournee { get; init; }
     public string NumClient { get; init; } = string.Empty;
     public string? CodePDL { get; init; }
     public string Commentaire { get; init; } = string.Empty;
@@ -168,17 +170,25 @@ public class TourneesRepository
     }
 
     public async Task<IReadOnlyList<CommentaireExceptionnelRecord>> GetCommentairesExceptionnelsAsync(
-        DateOnly dateTournee)
+        DateOnly dateTournee,
+        string codeTournee)
     {
         using var connection = _connectionFactory.CreateMobileConnection();
 
         const string sql = """
             SELECT
+                NULLIF(LTRIM(RTRIM(IdLigneSource)), '') AS IdLigneSource,
+                NULLIF(LTRIM(RTRIM(CodeTournee)), '') AS CodeTournee,
                 LTRIM(RTRIM(NumClient)) AS NumClient,
                 NULLIF(LTRIM(RTRIM(CodePDL)), '') AS CodePDL,
                 Commentaire
             FROM dbo.Mobile_CommentaireExceptionnel
             WHERE DateTournee = @DateTournee
+              AND (
+                    CodeTournee = @CodeTournee
+                    OR CodeTournee IS NULL
+                    OR LTRIM(RTRIM(CodeTournee)) = ''
+                  )
               AND Actif = 1;
             """;
 
@@ -186,7 +196,8 @@ public class TourneesRepository
             sql,
             new
             {
-                DateTournee = dateTournee.ToDateTime(TimeOnly.MinValue).Date
+                DateTournee = dateTournee.ToDateTime(TimeOnly.MinValue).Date,
+                CodeTournee = codeTournee.Trim()
             });
 
         return commentaires.ToList();
@@ -213,6 +224,7 @@ public class TourneesRepository
                 ON a.CodeArticle = q.CodeArticle
             WHERE p.DateTournee = @DateTournee
               AND p.CodeTournee = @CodeTournee
+              AND p.EstVerrouille = 1
               AND q.Actif = 1;
             """;
 
@@ -537,7 +549,7 @@ public class TourneesRepository
             });
     }
 
-    private static int GetJourTournee(DateOnly dateTournee)
+    public static int GetJourTournee(DateOnly dateTournee)
     {
         return dateTournee.DayOfWeek switch
         {

@@ -24,9 +24,8 @@ public static class ArticlesSaisissables
      * que la ligne apparaisse au chargement du matin, même si le référentiel
      * SQL n'a pas encore été alimenté ou si la base vient d'être recréée.
      *
-     * Le modèle reste extensible :
-     * - on peut ajouter VETEMENTS ou EXPES plus tard ;
-     * - le contrat JSON ne change pas, car le mobile utilise quantites[].
+     * Côté Expédition, ROLLS_VIDES n'est pas préparable : il est uniquement
+     * récupéré sur le terrain. Cette règle est validée dans ExpeditionService.
      */
     public static readonly IReadOnlyList<(string CodeArticle, string Libelle)> ActifsV1 =
         new List<(string CodeArticle, string Libelle)>

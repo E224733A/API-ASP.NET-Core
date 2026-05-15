@@ -58,6 +58,9 @@ IF OBJECT_ID('dbo.Mobile_PreRemplissageQuantite', 'U') IS NOT NULL
 IF OBJECT_ID('dbo.Mobile_PreRemplissageTournee', 'U') IS NOT NULL
     DROP TABLE dbo.Mobile_PreRemplissageTournee;
 
+IF OBJECT_ID('dbo.Mobile_ExpeditionLotVerrouillage', 'U') IS NOT NULL
+    DROP TABLE dbo.Mobile_ExpeditionLotVerrouillage;
+
 IF OBJECT_ID('dbo.Mobile_CommentaireExceptionnel', 'U') IS NOT NULL
     DROP TABLE dbo.Mobile_CommentaireExceptionnel;
 
@@ -580,6 +583,55 @@ ON dbo.Mobile_TourneeLigneQuantite (CodeArticle);
 GO
 
 /* ============================================================
+   TABLE : Mobile_ExpeditionLotVerrouillage
+   Role :
+   Trace les POST de verrouillage envoyes par le module Expedition.
+
+   Objectifs :
+   - IdLotVerrouillage rend le POST idempotent si le meme lot est rejoue.
+   - EmpreintePayload permet de detecter un meme lot renvoye avec
+     un contenu different.
+   - La table reste interne API/BD et ne change pas le contrat mobile.
+============================================================ */
+CREATE TABLE dbo.Mobile_ExpeditionLotVerrouillage (
+    IdLotVerrouillage UNIQUEIDENTIFIER NOT NULL,
+    EmpreintePayload CHAR(64) NOT NULL,
+    DateTournee DATE NOT NULL,
+    CodeTournee NVARCHAR(50) NOT NULL,
+    LibelleTournee NVARCHAR(255) NULL,
+    StatutLot NVARCHAR(30) NOT NULL
+        CONSTRAINT DF_Mobile_ExpeditionLotVerrouillage_StatutLot DEFAULT N'VERROUILLE',
+    NombreLignes INT NOT NULL
+        CONSTRAINT DF_Mobile_ExpeditionLotVerrouillage_NombreLignes DEFAULT 0,
+    NombreQuantites INT NOT NULL
+        CONSTRAINT DF_Mobile_ExpeditionLotVerrouillage_NombreQuantites DEFAULT 0,
+    IdPreRemplissageTournee BIGINT NULL,
+    AdresseIP NVARCHAR(50) NULL,
+    DateCreation DATETIMEOFFSET(0) NOT NULL
+        CONSTRAINT DF_Mobile_ExpeditionLotVerrouillage_DateCreation DEFAULT SYSDATETIMEOFFSET(),
+    DateModification DATETIMEOFFSET(0) NULL,
+    CONSTRAINT PK_Mobile_ExpeditionLotVerrouillage
+        PRIMARY KEY (IdLotVerrouillage),
+    CONSTRAINT CK_Mobile_ExpeditionLotVerrouillage_EmpreintePayload
+        CHECK (LEN(LTRIM(RTRIM(EmpreintePayload))) = 64),
+    CONSTRAINT CK_Mobile_ExpeditionLotVerrouillage_CodeTournee_NonVide
+        CHECK (LEN(LTRIM(RTRIM(CodeTournee))) > 0),
+    CONSTRAINT CK_Mobile_ExpeditionLotVerrouillage_StatutLot
+        CHECK (StatutLot IN (N'VERROUILLE', N'REJOUE_IDENTIQUE', N'REFUSE')),
+    CONSTRAINT CK_Mobile_ExpeditionLotVerrouillage_Nombres
+        CHECK (NombreLignes >= 0 AND NombreQuantites >= 0)
+);
+GO
+
+CREATE UNIQUE INDEX UX_Mobile_ExpeditionLotVerrouillage_DateCodeEmpreinte
+ON dbo.Mobile_ExpeditionLotVerrouillage (DateTournee, CodeTournee, EmpreintePayload);
+GO
+
+CREATE INDEX IX_Mobile_ExpeditionLotVerrouillage_DateCode
+ON dbo.Mobile_ExpeditionLotVerrouillage (DateTournee, CodeTournee);
+GO
+
+/* ============================================================
    TABLE : Mobile_PreRemplissageTournee
    Role :
    En-tete de preparation expedition pour une date et une tournee.
@@ -595,6 +647,8 @@ CREATE TABLE dbo.Mobile_PreRemplissageTournee (
     EstVerrouille BIT NOT NULL
         CONSTRAINT DF_Mobile_PreRemplissageTournee_EstVerrouille DEFAULT 0,
     DateVerrouillage DATETIMEOFFSET(0) NULL,
+    IdLotVerrouillage UNIQUEIDENTIFIER NULL,
+    EmpreintePayload CHAR(64) NULL,
     IdUtilisateurCreation INT NULL,
     IdUtilisateurModification INT NULL,
     DateCreation DATETIMEOFFSET(0) NOT NULL
@@ -602,6 +656,9 @@ CREATE TABLE dbo.Mobile_PreRemplissageTournee (
     DateModification DATETIMEOFFSET(0) NULL,
     CONSTRAINT PK_Mobile_PreRemplissageTournee
         PRIMARY KEY (IdPreRemplissageTournee),
+    CONSTRAINT FK_Mobile_PreRemplissageTournee_LotVerrouillage
+        FOREIGN KEY (IdLotVerrouillage)
+        REFERENCES dbo.Mobile_ExpeditionLotVerrouillage(IdLotVerrouillage),
     CONSTRAINT FK_Mobile_PreRemplissageTournee_UtilisateurCreation
         FOREIGN KEY (IdUtilisateurCreation)
         REFERENCES dbo.Mobile_UtilisateurExpedition(IdUtilisateurExpedition),
@@ -612,6 +669,8 @@ CREATE TABLE dbo.Mobile_PreRemplissageTournee (
         UNIQUE (DateTournee, CodeTournee),
     CONSTRAINT CK_Mobile_PreRemplissageTournee_CodeTournee_NonVide
         CHECK (LEN(LTRIM(RTRIM(CodeTournee))) > 0),
+    CONSTRAINT CK_Mobile_PreRemplissageTournee_EmpreintePayload
+        CHECK (EmpreintePayload IS NULL OR LEN(LTRIM(RTRIM(EmpreintePayload))) = 64),
     CONSTRAINT CK_Mobile_PreRemplissageTournee_Verrouillage
         CHECK (
             (EstVerrouille = 0 AND DateVerrouillage IS NULL)
@@ -627,6 +686,10 @@ GO
 
 CREATE INDEX IX_Mobile_PreRemplissageTournee_Verrouillage
 ON dbo.Mobile_PreRemplissageTournee (EstVerrouille, DateTournee);
+GO
+
+CREATE INDEX IX_Mobile_PreRemplissageTournee_Lot
+ON dbo.Mobile_PreRemplissageTournee (IdLotVerrouillage);
 GO
 
 /* ============================================================
@@ -679,7 +742,13 @@ CREATE TABLE dbo.Mobile_PreRemplissageQuantite (
     CONSTRAINT CK_Mobile_PreRemplissageQuantite_OrdreArret
         CHECK (OrdreArret IS NULL OR OrdreArret >= 0),
     CONSTRAINT CK_Mobile_PreRemplissageQuantite_QuantiteLivreePrevue
-        CHECK (QuantiteLivreePrevue IS NULL OR QuantiteLivreePrevue >= 0)
+        CHECK (QuantiteLivreePrevue IS NULL OR QuantiteLivreePrevue >= 0),
+    CONSTRAINT CK_Mobile_PreRemplissageQuantite_RollsVides
+        CHECK (
+            CodeArticle <> N'ROLLS_VIDES'
+            OR QuantiteLivreePrevue IS NULL
+            OR QuantiteLivreePrevue = 0
+        )
 );
 GO
 
@@ -767,6 +836,8 @@ GO
 CREATE TABLE dbo.Mobile_CommentaireExceptionnel (
     IdCommentaireExceptionnel BIGINT IDENTITY(1,1) NOT NULL,
     DateTournee DATE NOT NULL,
+    CodeTournee NVARCHAR(50) NULL,
+    IdLigneSource NVARCHAR(300) NULL,
     NumClient NVARCHAR(50) NOT NULL,
     CodePDL NVARCHAR(50) NULL,
     Commentaire NVARCHAR(1000) NOT NULL,
@@ -787,6 +858,10 @@ CREATE TABLE dbo.Mobile_CommentaireExceptionnel (
     CONSTRAINT FK_Mobile_CommentaireExceptionnel_UtilisateurModification
         FOREIGN KEY (IdUtilisateurModification)
         REFERENCES dbo.Mobile_UtilisateurExpedition(IdUtilisateurExpedition),
+    CONSTRAINT CK_Mobile_CommentaireExceptionnel_CodeTournee_NonVide
+        CHECK (CodeTournee IS NULL OR LEN(LTRIM(RTRIM(CodeTournee))) > 0),
+    CONSTRAINT CK_Mobile_CommentaireExceptionnel_IdLigneSource_NonVide
+        CHECK (IdLigneSource IS NULL OR LEN(LTRIM(RTRIM(IdLigneSource))) > 0),
     CONSTRAINT CK_Mobile_CommentaireExceptionnel_NumClient_NonVide
         CHECK (LEN(LTRIM(RTRIM(NumClient))) > 0),
     CONSTRAINT CK_Mobile_CommentaireExceptionnel_Commentaire_NonVide
@@ -794,13 +869,22 @@ CREATE TABLE dbo.Mobile_CommentaireExceptionnel (
 );
 GO
 
-CREATE UNIQUE INDEX UX_Mobile_CommentaireExceptionnel_Actif
-ON dbo.Mobile_CommentaireExceptionnel (DateTournee, NumClient, CodePDL)
-WHERE Actif = 1;
+CREATE UNIQUE INDEX UX_Mobile_CommentaireExceptionnel_Ligne_Actif
+ON dbo.Mobile_CommentaireExceptionnel (DateTournee, CodeTournee, IdLigneSource)
+WHERE Actif = 1 AND IdLigneSource IS NOT NULL;
+GO
+
+CREATE UNIQUE INDEX UX_Mobile_CommentaireExceptionnel_ClientPDL_Actif
+ON dbo.Mobile_CommentaireExceptionnel (DateTournee, CodeTournee, NumClient, CodePDL)
+WHERE Actif = 1 AND IdLigneSource IS NULL;
 GO
 
 CREATE INDEX IX_Mobile_CommentaireExceptionnel_DateClient
-ON dbo.Mobile_CommentaireExceptionnel (DateTournee, NumClient, CodePDL, Actif);
+ON dbo.Mobile_CommentaireExceptionnel (DateTournee, CodeTournee, NumClient, CodePDL, Actif);
+GO
+
+CREATE INDEX IX_Mobile_CommentaireExceptionnel_IdLigneSource
+ON dbo.Mobile_CommentaireExceptionnel (DateTournee, CodeTournee, IdLigneSource, Actif);
 GO
 
 /* ============================================================
