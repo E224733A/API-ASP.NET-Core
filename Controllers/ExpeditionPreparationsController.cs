@@ -17,33 +17,28 @@ public sealed class ExpeditionPreparationsController : ControllerBase
     }
 
     /// <summary>
-    /// Retourne les lignes préparables par le module Expédition pour une date et éventuellement une tournée.
+    /// Retourne les lignes préparables par le module Expédition pour la prochaine date préparable.
+    /// La date est calculée côté API à partir des données disponibles.
     /// </summary>
     [HttpGet("a-preparer")]
     [ProducesResponseType(typeof(ExpeditionPreparationResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> GetPreparationsAPreparer(
-        [FromQuery] string dateTournee,
-        [FromQuery] string? codeTournee = null,
         CancellationToken cancellationToken = default)
     {
-        if (!DateOnly.TryParse(dateTournee, out var date))
+        try
         {
-            return BadRequest(new
+            var response = await _expeditionService.GetPreparationsAPreparerAsync(cancellationToken);
+            return Ok(response);
+        }
+        catch (InvalidOperationException exception)
+        {
+            return NotFound(new
             {
-                statut = "VALIDATION_ERROR",
-                errors = new[]
-                {
-                    "Paramètre dateTournee invalide. Format attendu : yyyy-MM-dd."
-                }
+                statut = "NOT_FOUND",
+                message = exception.Message
             });
         }
-
-        var response = await _expeditionService.GetPreparationsAPreparerAsync(
-            date,
-            codeTournee,
-            cancellationToken);
-
-        return Ok(response);
     }
 
     /// <summary>

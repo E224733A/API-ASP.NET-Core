@@ -29,14 +29,23 @@ public sealed class ExpeditionService
     }
 
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var dateTournee = await GetProchaineDatePreparableAsync(cancellationToken);
+
+        return await GetPreparationsAPreparerAsync(
+            dateTournee,
+            cancellationToken);
+    }
+
+    public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         DateOnly dateTournee,
-        string? codeTournee,
         CancellationToken cancellationToken = default)
     {
         var lignes = (await _tourneesRepository.GetTourneeLinesAsync(
             dateTournee,
             codeLivreur: string.Empty,
-            codeTournee)).ToList();
+            codeTournee: null)).ToList();
 
         var articles = (await _tourneesRepository.GetArticlesSaisissablesAsync())
             .Where(article => !IsRollsVides(article.CodeArticle))
@@ -57,23 +66,44 @@ public sealed class ExpeditionService
                 .ToList();
         }
 
-        var codeTourneeReference = codeTournee;
-        if (string.IsNullOrWhiteSpace(codeTourneeReference) && lignes.Count > 0)
+        var lignesParTournee = lignes
+            .GroupBy(ligne => ligne.CodeTournee, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                groupe => groupe.Key,
+                groupe => groupe.ToList(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var preRemplissagesParTournee = new Dictionary<string, List<PreRemplissageQuantiteRecord>>(StringComparer.OrdinalIgnoreCase);
+        var commentairesParTournee = new Dictionary<string, List<CommentaireExceptionnelRecord>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var codeTournee in lignesParTournee.Keys)
         {
-            codeTourneeReference = lignes[0].CodeTournee;
+            if (string.IsNullOrWhiteSpace(codeTournee))
+            {
+                continue;
+            }
+
+            preRemplissagesParTournee[codeTournee] = (await _tourneesRepository.GetPreRemplissagesAsync(
+                dateTournee,
+                codeTournee)).ToList();
+
+            commentairesParTournee[codeTournee] = (await _tourneesRepository.GetCommentairesExceptionnelsAsync(
+                dateTournee,
+                codeTournee)).ToList();
         }
-
-        var preRemplissages = string.IsNullOrWhiteSpace(codeTourneeReference)
-            ? new List<PreRemplissageQuantiteRecord>()
-            : (await _tourneesRepository.GetPreRemplissagesAsync(dateTournee, codeTourneeReference)).ToList();
-
-        var commentaires = string.IsNullOrWhiteSpace(codeTourneeReference)
-            ? new List<CommentaireExceptionnelRecord>()
-            : (await _tourneesRepository.GetCommentairesExceptionnelsAsync(dateTournee, codeTourneeReference)).ToList();
 
         var lignesDto = lignes.Select(ligne =>
         {
             var idLigneSource = TourneeMobileMapper.BuildIdLigneSource(dateTournee, ligne);
+
+            var preRemplissages = string.IsNullOrWhiteSpace(ligne.CodeTournee)
+                ? new List<PreRemplissageQuantiteRecord>()
+                : preRemplissagesParTournee.GetValueOrDefault(ligne.CodeTournee, new List<PreRemplissageQuantiteRecord>());
+
+            var commentaires = string.IsNullOrWhiteSpace(ligne.CodeTournee)
+                ? new List<CommentaireExceptionnelRecord>()
+                : commentairesParTournee.GetValueOrDefault(ligne.CodeTournee, new List<CommentaireExceptionnelRecord>());
+
             return new ExpeditionPreparationLigneDto
             {
                 IdLigneSource = idLigneSource,
@@ -109,7 +139,7 @@ public sealed class ExpeditionService
         {
             SchemaVersion = SchemaVersionExpedition,
             DateTournee = dateTournee.ToString("yyyy-MM-dd"),
-            CodeTournee = string.IsNullOrWhiteSpace(codeTournee) ? null : codeTournee.Trim(),
+            CodeTournee = null,
             NombreLignes = lignesDto.Count,
             Lignes = lignesDto
         };
@@ -225,6 +255,29 @@ public sealed class ExpeditionService
                     Message = "Une erreur technique est survenue pendant le verrouillage Expédition."
                 });
         }
+    }
+
+    private async Task<DateOnly> GetProchaineDatePreparableAsync(CancellationToken cancellationToken = default)
+    {
+        var dateCourante = DateOnly.FromDateTime(DateTime.Today);
+
+        for (var indexJour = 0; indexJour <= 14; indexJour++)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var dateCandidate = dateCourante.AddDays(indexJour);
+            var lignes = await _tourneesRepository.GetTourneeLinesAsync(
+                dateCandidate,
+                codeLivreur: string.Empty,
+                codeTournee: null);
+
+            if (lignes.Any())
+            {
+                return dateCandidate;
+            }
+        }
+
+        throw new InvalidOperationException("Aucune tournée à préparer n'a été trouvée sur les 14 prochains jours.");
     }
 
     private static List<string> ValidateVerrouillageRequest(
