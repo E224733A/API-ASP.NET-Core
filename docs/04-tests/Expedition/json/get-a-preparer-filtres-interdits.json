@@ -1,0 +1,16 @@
+{
+  "route": "GET /api/expedition/preparations/a-preparer",
+  "principe": "Le GET Expedition est global et n'accepte aucun parametre.",
+  "parametresInterdits": [
+    "dateTournee",
+    "codeTournee",
+    "codeLivreur"
+  ],
+  "exemplesInterdits": [
+    "/api/expedition/preparations/a-preparer?dateTournee=2026-05-19",
+    "/api/expedition/preparations/a-preparer?codeTournee=2023",
+    "/api/expedition/preparations/a-preparer?codeLivreur=2"
+  ],
+  "statutAttendu": 400,
+  "codeAttendu": "EXPEDITION_GET_QUERY_PARAMS_FORBIDDEN"
+}

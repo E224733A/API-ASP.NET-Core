@@ -1,0 +1,105 @@
+{
+  "statut": "SUCCESS",
+  "schemaVersion": "1.2",
+  "dateTournee": "2026-05-19",
+  "datePreparable": "2026-05-19",
+  "dateModifiable": false,
+  "fuseauHoraireMetier": "Europe/Paris",
+  "dateGenerationApi": "2026-05-18T14:00:00+02:00",
+  "message": null,
+  "articlesPreparables": [
+    {
+      "codeArticle": "ROLLS",
+      "libelle": "Rolls",
+      "typeQuantite": "LIVREE_PREVUE",
+      "quantiteNullable": true,
+      "ordreAffichage": 1
+    },
+    {
+      "codeArticle": "TAPIS",
+      "libelle": "Tapis",
+      "typeQuantite": "LIVREE_PREVUE",
+      "quantiteNullable": true,
+      "ordreAffichage": 2
+    },
+    {
+      "codeArticle": "SACS",
+      "libelle": "Sacs",
+      "typeQuantite": "LIVREE_PREVUE",
+      "quantiteNullable": true,
+      "ordreAffichage": 3
+    }
+  ],
+  "tournees": [
+    {
+      "codeTournee": "2023",
+      "libelleTournee": "CLISSON",
+      "statutPreparationWeb": "PRETE_VERROUILLAGE",
+      "lignes": [
+        {
+          "idLigneSource": "2026-05-19|2023|2|12866|2866|0",
+          "ordreArret": 0,
+          "client": {
+            "numClient": "12866",
+            "nomClient": "LOGISTIQUE SPORT - VILLE CLISS",
+            "nomAffiche": "LOGISTIQUE SPORT - VILLE CLISS"
+          },
+          "pointLivraison": {
+            "codePDL": "2866",
+            "descriptionPDL": "LOGISTIQUE SPORT - VILLE CLISS",
+            "adresseLigne1": "CENTRE TECHNIQUE MUNICIPAL",
+            "adresseLigne2": "10 RUE DES FILATURES",
+            "adresseLigne3": null,
+            "ville": "CLISSON",
+            "codePostal": "44190"
+          },
+          "infosLecture": {
+            "horaire": "0",
+            "codeTournee": "2023",
+            "libelleTournee": "CLISSON",
+            "instructions": null,
+            "estFerme": false,
+            "dateFermeture": null,
+            "motifFermeture": null,
+            "zoneDechargement": "VTS"
+          },
+          "preparationInitiale": {
+            "commentaireExceptionnel": null,
+            "quantitesPrevues": [
+              {
+                "codeArticle": "ROLLS",
+                "libelle": "Rolls",
+                "quantiteLivreePrevue": null
+              },
+              {
+                "codeArticle": "TAPIS",
+                "libelle": "Tapis",
+                "quantiteLivreePrevue": null
+              },
+              {
+                "codeArticle": "SACS",
+                "libelle": "Sacs",
+                "quantiteLivreePrevue": null
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "regles": {
+    "heureVerrouillageMetier": "00:05",
+    "fuseauHoraireMetier": "Europe/Paris",
+    "fenetreModification": "Les préparations sont modifiables avant le verrouillage automatique autour de 00:05.",
+    "articlesAutorises": [
+      "ROLLS",
+      "SACS",
+      "TAPIS"
+    ],
+    "articlesInterdits": [
+      "ROLLS_VIDES"
+    ],
+    "exclureRollsVides": true,
+    "quantitesNullesAutorisees": true
+  }
+}
