@@ -17,49 +17,46 @@ public sealed class ExpeditionPreparationsController : ControllerBase
     }
 
     /// <summary>
-    /// Retourne les lignes préparables par le module Expédition pour la prochaine date préparable.
-    /// La date est calculée côté API à partir des données disponibles.
+    /// Charge toutes les préparations Expédition pour la date préparable calculée côté API.
+    /// Aucun paramètre de requête n'est accepté sur cette route.
     /// </summary>
     [HttpGet("a-preparer")]
     [ProducesResponseType(typeof(ExpeditionPreparationResponseDto), StatusCodes.Status200OK)]
-    [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetPreparationsAPreparer(
-        CancellationToken cancellationToken = default)
+    [ProducesResponseType(typeof(ExpeditionApiResult), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GetPreparationsAPreparer(CancellationToken cancellationToken = default)
     {
-        try
+        if (Request.Query.Count > 0)
         {
-            var response = await _expeditionService.GetPreparationsAPreparerAsync(cancellationToken);
-            return Ok(response);
-        }
-        catch (InvalidOperationException exception)
-        {
-            return NotFound(new
+            return BadRequest(new ExpeditionApiResult
             {
-                statut = "NOT_FOUND",
-                message = exception.Message
+                Statut = "VALIDATION_ERROR",
+                Code = "EXPEDITION_GET_QUERY_PARAMS_FORBIDDEN",
+                Message = "Le GET Expédition est global : aucun paramètre dateTournee, codeTournee ou codeLivreur n'est autorisé.",
+                Errors = Request.Query.Keys
+                    .Select(key => $"Paramètre interdit : {key}")
+                    .ToList()
             });
         }
+
+        var response = await _expeditionService.GetPreparationsAPreparerAsync(cancellationToken);
+        return Ok(response);
     }
 
     /// <summary>
-    /// Verrouille définitivement une préparation Expédition et la rend disponible pour le GET mobile.
+    /// Verrouille un lot global de préparations Expédition.
     /// </summary>
-    /// <remarks>
-    /// Le mobile ne lit ensuite que les préparations dont EstVerrouille = 1.
-    /// ROLLS_VIDES est refusé côté Expédition car cet article est uniquement récupéré sur le terrain.
-    /// </remarks>
     [HttpPost("verrouiller")]
     [ProducesResponseType(typeof(ExpeditionApiResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ExpeditionApiResult), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ExpeditionApiResult), StatusCodes.Status409Conflict)]
     [ProducesResponseType(typeof(ExpeditionApiResult), StatusCodes.Status500InternalServerError)]
     public async Task<IActionResult> VerrouillerPreparation(
-        [FromBody] ExpeditionVerrouillageRequest? request,
+        [FromBody] ExpeditionVerrouillageLotRequest? request,
         CancellationToken cancellationToken = default)
     {
         var adresseIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        var result = await _expeditionService.VerrouillerPreparationAsync(
+        var result = await _expeditionService.VerrouillerPreparationLotAsync(
             request,
             adresseIp,
             cancellationToken);

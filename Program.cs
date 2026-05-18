@@ -55,17 +55,25 @@ builder.Services.AddSwaggerGen(options =>
         et par le module web Expédition.
 
         Contrat JSON mobile actuel : schemaVersion = "1.2".
-        Contrat JSON Expédition : schemaVersion = "1.0".
+        Contrat JSON Expédition actuel : schemaVersion = "1.2".
 
-        L'API permet :
-        - de vérifier l'état technique de l'API ;
-        - de consulter les livreurs ;
-        - de lister les tournées disponibles pour une date et un livreur ;
-        - de charger le détail complet d'une tournée avant le départ ;
-        - de recevoir la synchronisation finale envoyée par le mobile en fin de journée ;
-        - de charger toutes les données préparables pour le module Expédition ;
-        - de verrouiller et sauvegarder les préparations Expédition ;
-        - de consulter les synchronisations enregistrées côté administration.
+        Routes Expédition finales :
+        - GET  /api/expedition/preparations/a-preparer
+        - POST /api/expedition/preparations/verrouiller
+
+        Le GET Expédition est global :
+        - aucun paramètre dateTournee ;
+        - aucun paramètre codeTournee ;
+        - aucun paramètre codeLivreur ;
+        - la date préparable est calculée côté API ;
+        - la sélection de tournée reste côté application web Expédition.
+
+        Le POST Expédition est global :
+        - idLotVerrouillage obligatoire ;
+        - source = APPLICATION_WEB_EXPEDITION ;
+        - fuseauHoraireMetier = Europe/Paris ;
+        - dateVerrouillageDemandee avec offset ISO 8601 ;
+        - corps JSON avec tournees[] / lignes[] / quantitesPrevues[].
 
         Principe d'architecture :
         - le mobile ne se connecte jamais directement à SQL Server ;

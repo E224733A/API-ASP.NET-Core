@@ -12,7 +12,22 @@ namespace API_ASP.NET_Core.Services;
 
 public sealed class ExpeditionService
 {
-    private const string SchemaVersionExpedition = "1.0";
+    private const string SchemaVersionExpedition = "1.2";
+    private const string SourceAttendue = "APPLICATION_WEB_EXPEDITION";
+    private const string FuseauHoraireMetier = "Europe/Paris";
+
+    private static readonly HashSet<string> ArticlesAutorises = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "ROLLS",
+        "TAPIS",
+        "SACS"
+    };
+
+    private static readonly HashSet<string> StatutsPreparationWebAutorises = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "PRETE_VERROUILLAGE",
+        "EN_PREPARATION_WEB"
+    };
 
     private readonly TourneesRepository _tourneesRepository;
     private readonly ExpeditionRepository _expeditionRepository;
@@ -28,129 +43,152 @@ public sealed class ExpeditionService
         _logger = logger;
     }
 
+    /// <summary>
+    /// GET global Expédition.
+    /// La date est calculée côté API. En première version, elle correspond au lendemain calendaire.
+    /// </summary>
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         CancellationToken cancellationToken = default)
     {
-        var dateTournee = await GetProchaineDatePreparableAsync(cancellationToken);
+        var dateTournee = GetDatePreparable();
 
-        return await GetPreparationsAPreparerAsync(
-            dateTournee,
-            cancellationToken);
-    }
-
-    public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
-        DateOnly dateTournee,
-        CancellationToken cancellationToken = default)
-    {
         var lignes = (await _tourneesRepository.GetTourneeLinesAsync(
             dateTournee,
             codeLivreur: string.Empty,
             codeTournee: null)).ToList();
 
-        var articles = (await _tourneesRepository.GetArticlesSaisissablesAsync())
-            .Where(article => !IsRollsVides(article.CodeArticle))
-            .OrderBy(article => article.OrdreAffichage)
-            .ThenBy(article => article.CodeArticle)
-            .ToList();
+        var articles = await GetArticlesPreparablesAsync();
 
-        if (articles.Count == 0)
+        var response = new ExpeditionPreparationResponseDto
         {
-            articles = ArticlesSaisissables.ActifsV1
-                .Where(article => !IsRollsVides(article.CodeArticle))
-                .Select((article, index) => new ArticleSaisissableRecord
-                {
-                    CodeArticle = article.CodeArticle,
-                    LibelleArticle = article.Libelle,
-                    OrdreAffichage = index + 1
-                })
-                .ToList();
-        }
-
-        var lignesParTournee = lignes
-            .GroupBy(ligne => ligne.CodeTournee, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                groupe => groupe.Key,
-                groupe => groupe.ToList(),
-                StringComparer.OrdinalIgnoreCase);
-
-        var preRemplissagesParTournee = new Dictionary<string, List<PreRemplissageQuantiteRecord>>(StringComparer.OrdinalIgnoreCase);
-        var commentairesParTournee = new Dictionary<string, List<CommentaireExceptionnelRecord>>(StringComparer.OrdinalIgnoreCase);
-
-        foreach (var codeTournee in lignesParTournee.Keys)
-        {
-            if (string.IsNullOrWhiteSpace(codeTournee))
-            {
-                continue;
-            }
-
-            preRemplissagesParTournee[codeTournee] = (await _tourneesRepository.GetPreRemplissagesAsync(
-                dateTournee,
-                codeTournee)).ToList();
-
-            commentairesParTournee[codeTournee] = (await _tourneesRepository.GetCommentairesExceptionnelsAsync(
-                dateTournee,
-                codeTournee)).ToList();
-        }
-
-        var lignesDto = lignes.Select(ligne =>
-        {
-            var idLigneSource = TourneeMobileMapper.BuildIdLigneSource(dateTournee, ligne);
-
-            var preRemplissages = string.IsNullOrWhiteSpace(ligne.CodeTournee)
-                ? new List<PreRemplissageQuantiteRecord>()
-                : preRemplissagesParTournee.GetValueOrDefault(ligne.CodeTournee, new List<PreRemplissageQuantiteRecord>());
-
-            var commentaires = string.IsNullOrWhiteSpace(ligne.CodeTournee)
-                ? new List<CommentaireExceptionnelRecord>()
-                : commentairesParTournee.GetValueOrDefault(ligne.CodeTournee, new List<CommentaireExceptionnelRecord>());
-
-            return new ExpeditionPreparationLigneDto
-            {
-                IdLigneSource = idLigneSource,
-                OrdreArret = ligne.OrdreArret,
-                Horaire = ligne.Horaire?.ToString(),
-                NumClient = ligne.NumClient,
-                NomClient = ligne.NomClient,
-                NomAffiche = ligne.NomAffiche,
-                CodePDL = ligne.CodePDL,
-                DescriptionPDL = ligne.DescriptionPDL,
-                CodeTournee = ligne.CodeTournee,
-                LibelleTournee = ligne.LibelleTournee,
-                CommentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentaires),
-                Quantites = articles.Select(article =>
-                {
-                    var preRemplissage = FindPreRemplissage(
-                        idLigneSource,
-                        ligne,
-                        article.CodeArticle,
-                        preRemplissages);
-
-                    return new ExpeditionPreparationQuantiteDto
-                    {
-                        CodeArticle = article.CodeArticle.Trim().ToUpperInvariant(),
-                        Libelle = preRemplissage?.LibelleArticle ?? article.LibelleArticle,
-                        QuantiteLivreePrevue = preRemplissage?.QuantiteLivreePrevue
-                    };
-                }).ToList()
-            };
-        }).ToList();
-
-        return new ExpeditionPreparationResponseDto
-        {
+            Statut = "SUCCESS",
             SchemaVersion = SchemaVersionExpedition,
             DateTournee = dateTournee.ToString("yyyy-MM-dd"),
-            CodeTournee = null,
-            NombreLignes = lignesDto.Count,
-            Lignes = lignesDto
+            DatePreparable = dateTournee.ToString("yyyy-MM-dd"),
+            DateModifiable = false,
+            FuseauHoraireMetier = FuseauHoraireMetier,
+            DateGenerationApi = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+            ArticlesPreparables = articles
+                .Select(article => new ExpeditionArticlePreparableDto
+                {
+                    CodeArticle = NormalizeArticleCode(article.CodeArticle),
+                    Libelle = article.LibelleArticle,
+                    TypeQuantite = "LIVREE_PREVUE",
+                    QuantiteNullable = true,
+                    OrdreAffichage = article.OrdreAffichage
+                })
+                .ToList(),
+            Regles = BuildRegles()
         };
+
+        if (lignes.Count == 0)
+        {
+            response.Message = "Aucune tournée préparable pour la date calculée.";
+            return response;
+        }
+
+        foreach (var groupeTournee in lignes
+            .Where(ligne => !string.IsNullOrWhiteSpace(ligne.CodeTournee))
+            .GroupBy(ligne => ligne.CodeTournee, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(groupe => groupe.Key))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+
+            var codeTournee = groupeTournee.Key.Trim();
+            var lignesTournee = groupeTournee.ToList();
+
+            var preRemplissages = (await _tourneesRepository.GetPreRemplissagesAsync(
+                dateTournee,
+                codeTournee)).ToList();
+
+            var commentaires = (await _tourneesRepository.GetCommentairesExceptionnelsAsync(
+                dateTournee,
+                codeTournee)).ToList();
+
+            var etatPreparation = await _expeditionRepository.GetPreparationEtatAsync(
+                dateTournee.ToDateTime(TimeOnly.MinValue),
+                codeTournee,
+                cancellationToken);
+
+            response.Tournees.Add(new ExpeditionPreparationTourneeDto
+            {
+                CodeTournee = codeTournee,
+                LibelleTournee = lignesTournee.FirstOrDefault()?.LibelleTournee,
+                StatutPreparationWeb = etatPreparation is not null && !etatPreparation.EstVerrouille
+                    ? "EN_PREPARATION_WEB"
+                    : "PRETE_VERROUILLAGE",
+                Lignes = lignesTournee.Select(ligne =>
+                {
+                    var idLigneSource = TourneeMobileMapper.BuildIdLigneSource(dateTournee, ligne);
+
+                    return new ExpeditionPreparationLigneDto
+                    {
+                        IdLigneSource = idLigneSource,
+                        OrdreArret = ligne.OrdreArret,
+                        Client = new ExpeditionClientDto
+                        {
+                            NumClient = ligne.NumClient,
+                            NomClient = ligne.NomClient,
+                            NomAffiche = ligne.NomAffiche
+                        },
+                        PointLivraison = new ExpeditionPointLivraisonDto
+                        {
+                            CodePDL = ligne.CodePDL,
+                            DescriptionPDL = ligne.DescriptionPDL,
+                            AdresseLigne1 = ligne.AdresseLigne1,
+                            AdresseLigne2 = ligne.AdresseLigne2,
+                            AdresseLigne3 = ligne.AdresseLigne3,
+                            Ville = ligne.Ville,
+                            CodePostal = ligne.CodePostal
+                        },
+                        InfosLecture = new ExpeditionInfosLectureDto
+                        {
+                            Horaire = ligne.Horaire?.ToString(),
+                            CodeTournee = ligne.CodeTournee,
+                            LibelleTournee = ligne.LibelleTournee,
+                            Instructions = ligne.Instructions,
+                            EstFerme = ligne.EstFerme,
+                            DateFermeture = ligne.DateFermeture?.ToString("yyyy-MM-dd"),
+                            MotifFermeture = ligne.MotifFermeture,
+                            ZoneDechargement = ligne.ZoneDechargement
+                        },
+                        PreparationInitiale = new ExpeditionPreparationInitialeDto
+                        {
+                            CommentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentaires),
+                            QuantitesPrevues = articles.Select(article =>
+                            {
+                                var preRemplissage = FindPreRemplissage(
+                                    idLigneSource,
+                                    ligne,
+                                    article.CodeArticle,
+                                    preRemplissages);
+
+                                return new ExpeditionQuantitePrevueDto
+                                {
+                                    CodeArticle = NormalizeArticleCode(article.CodeArticle),
+                                    Libelle = preRemplissage?.LibelleArticle ?? article.LibelleArticle,
+                                    QuantiteLivreePrevue = preRemplissage?.QuantiteLivreePrevue
+                                };
+                            }).ToList()
+                        }
+                    };
+                }).ToList()
+            });
+        }
+
+        return response;
     }
 
-    public async Task<(int StatusCode, ExpeditionApiResult Body)> VerrouillerPreparationAsync(
-        ExpeditionVerrouillageRequest? request,
+    /// <summary>
+    /// POST global Expédition v1.2.
+    /// Vérifie le lot, contrôle les lignes et articles, puis verrouille les tournées dans une transaction SQL.
+    /// </summary>
+    public async Task<(int StatusCode, ExpeditionApiResult Body)> VerrouillerPreparationLotAsync(
+        ExpeditionVerrouillageLotRequest? request,
         string? adresseIp,
         CancellationToken cancellationToken = default)
     {
-        var errors = ValidateVerrouillageRequest(request, out var dateTournee, out var idLotVerrouillage);
+        var errors = await ValidateVerrouillageLotRequestAsync(request, cancellationToken);
 
         if (errors.Count > 0 || request is null)
         {
@@ -159,14 +197,18 @@ public sealed class ExpeditionService
                 new ExpeditionApiResult
                 {
                     Statut = "VALIDATION_ERROR",
-                    Message = "La préparation Expédition contient des données invalides.",
+                    Code = "EXPEDITION_VALIDATION_ERROR",
+                    Message = "Le lot de préparation Expédition contient des données invalides.",
                     Errors = errors
                 });
         }
 
-        var empreintePayload = ComputePayloadFingerprint(request, dateTournee, idLotVerrouillage);
+        var dateTournee = DateTime.Parse(request.DateTournee).Date;
+        var idLotVerrouillageTechnique = BuildDeterministicGuid(request.IdLotVerrouillage);
+        var empreintePayload = ComputePayloadFingerprint(request);
+
         var existingLot = await _expeditionRepository.GetLotVerrouillageAsync(
-            idLotVerrouillage,
+            idLotVerrouillageTechnique,
             cancellationToken);
 
         if (existingLot is not null)
@@ -178,10 +220,11 @@ public sealed class ExpeditionService
                     new ExpeditionApiResult
                     {
                         Statut = "SUCCESS",
-                        Code = "EXPEDITION_LOT_ALREADY_LOCKED",
-                        Message = "Préparation Expédition déjà verrouillée avec le même contenu.",
-                        IdPreRemplissageTournee = existingLot.IdPreRemplissageTournee,
-                        IdLotVerrouillage = existingLot.IdLotVerrouillage.ToString("D")
+                        Code = "ALREADY_PROCESSED",
+                        Message = "Lot Expédition déjà traité avec le même contenu.",
+                        IdLotVerrouillage = request.IdLotVerrouillage,
+                        DateTournee = request.DateTournee,
+                        StatutVerrouillage = "DEJA_TRAITE"
                     });
             }
 
@@ -191,38 +234,18 @@ public sealed class ExpeditionService
                 {
                     Statut = "CONFLICT",
                     Code = "EXPEDITION_LOT_PAYLOAD_MISMATCH",
-                    Message = "Ce lot de verrouillage a déjà été reçu avec un contenu différent. Le rejeu est refusé."
-                });
-        }
-
-        var preparationExistante = await _expeditionRepository.GetPreparationEtatAsync(
-            dateTournee,
-            request.CodeTournee,
-            cancellationToken);
-
-        if (preparationExistante is not null &&
-            preparationExistante.EstVerrouille &&
-            preparationExistante.IdLotVerrouillage.HasValue &&
-            preparationExistante.IdLotVerrouillage.Value != idLotVerrouillage)
-        {
-            return (
-                StatusCodes.Status409Conflict,
-                new ExpeditionApiResult
-                {
-                    Statut = "CONFLICT",
-                    Code = "EXPEDITION_PREPARATION_ALREADY_LOCKED",
-                    Message = "Cette préparation Expédition est déjà verrouillée pour cette date et cette tournée.",
-                    IdPreRemplissageTournee = preparationExistante.IdPreRemplissageTournee,
-                    IdLotVerrouillage = preparationExistante.IdLotVerrouillage?.ToString("D")
+                    Message = "Ce lot de verrouillage a déjà été reçu avec un contenu différent.",
+                    IdLotVerrouillage = request.IdLotVerrouillage,
+                    DateTournee = request.DateTournee
                 });
         }
 
         try
         {
-            var idPreRemplissageTournee = await _expeditionRepository.EnregistrerVerrouillageAsync(
+            var result = await _expeditionRepository.EnregistrerVerrouillageLotAsync(
                 request,
                 dateTournee,
-                idLotVerrouillage,
+                idLotVerrouillageTechnique,
                 empreintePayload,
                 adresseIp,
                 cancellationToken);
@@ -232,19 +255,23 @@ public sealed class ExpeditionService
                 new ExpeditionApiResult
                 {
                     Statut = "SUCCESS",
-                    Code = "EXPEDITION_PREPARATION_LOCKED",
-                    Message = "Préparation Expédition verrouillée avec succès.",
-                    IdPreRemplissageTournee = idPreRemplissageTournee,
-                    IdLotVerrouillage = idLotVerrouillage.ToString("D")
+                    Code = "EXPEDITION_LOT_LOCKED",
+                    Message = "Préparations Expédition sauvegardées et verrouillées avec succès.",
+                    IdLotVerrouillage = request.IdLotVerrouillage,
+                    DateTournee = request.DateTournee,
+                    StatutVerrouillage = "VERROUILLEE_BD",
+                    DateReceptionApi = result.DateReceptionApi.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+                    DateSauvegardeSql = result.DateSauvegardeSql.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+                    NombreTourneesVerrouillees = result.NombreTourneesVerrouillees,
+                    NombreLignesVerrouillees = result.NombreLignesVerrouillees
                 });
         }
         catch (Exception exception)
         {
             _logger.LogError(
                 exception,
-                "Erreur lors du verrouillage Expédition pour la tournée {CodeTournee} du {DateTournee}.",
-                request.CodeTournee,
-                dateTournee);
+                "Erreur lors du verrouillage du lot Expédition {IdLotVerrouillage}.",
+                request.IdLotVerrouillage);
 
             return (
                 StatusCodes.Status500InternalServerError,
@@ -252,172 +279,276 @@ public sealed class ExpeditionService
                 {
                     Statut = "ERROR",
                     Code = "SERVER_ERROR",
-                    Message = "Une erreur technique est survenue pendant le verrouillage Expédition."
+                    Message = "Une erreur technique est survenue pendant le verrouillage Expédition.",
+                    IdLotVerrouillage = request.IdLotVerrouillage,
+                    DateTournee = request.DateTournee
                 });
         }
     }
 
-    private async Task<DateOnly> GetProchaineDatePreparableAsync(CancellationToken cancellationToken = default)
+    private async Task<List<ArticleSaisissableRecord>> GetArticlesPreparablesAsync()
     {
-        var dateCourante = DateOnly.FromDateTime(DateTime.Today);
+        var articles = (await _tourneesRepository.GetArticlesSaisissablesAsync())
+            .Where(article => IsArticleAutoriseExpedition(article.CodeArticle))
+            .OrderBy(article => article.OrdreAffichage)
+            .ThenBy(article => article.CodeArticle)
+            .ToList();
 
-        for (var indexJour = 0; indexJour <= 14; indexJour++)
+        if (articles.Count > 0)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-
-            var dateCandidate = dateCourante.AddDays(indexJour);
-            var lignes = await _tourneesRepository.GetTourneeLinesAsync(
-                dateCandidate,
-                codeLivreur: string.Empty,
-                codeTournee: null);
-
-            if (lignes.Any())
-            {
-                return dateCandidate;
-            }
+            return articles;
         }
 
-        throw new InvalidOperationException("Aucune tournée à préparer n'a été trouvée sur les 14 prochains jours.");
+        return ArticlesSaisissables.ActifsV1
+            .Where(article => IsArticleAutoriseExpedition(article.CodeArticle))
+            .Select((article, index) => new ArticleSaisissableRecord
+            {
+                CodeArticle = article.CodeArticle,
+                LibelleArticle = article.Libelle,
+                OrdreAffichage = index + 1
+            })
+            .ToList();
     }
 
-    private static List<string> ValidateVerrouillageRequest(
-        ExpeditionVerrouillageRequest? request,
-        out DateTime dateTournee,
-        out Guid idLotVerrouillage)
+    private async Task<List<string>> ValidateVerrouillageLotRequestAsync(
+        ExpeditionVerrouillageLotRequest? request,
+        CancellationToken cancellationToken)
     {
         var errors = new List<string>();
-        dateTournee = default;
-        idLotVerrouillage = default;
 
         if (request is null)
         {
-            errors.Add("Le corps JSON de la préparation Expédition est obligatoire.");
+            errors.Add("Le corps JSON du lot Expédition est obligatoire.");
             return errors;
         }
 
-        if (!string.IsNullOrWhiteSpace(request.SchemaVersion) &&
-            !string.Equals(request.SchemaVersion.Trim(), SchemaVersionExpedition, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(request.SchemaVersion?.Trim(), SchemaVersionExpedition, StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add($"La version de schéma Expédition supportée est {SchemaVersionExpedition}.");
+            errors.Add("schemaVersion doit être égal à \"1.2\".");
         }
 
-        if (!Guid.TryParse(request.IdLotVerrouillage, out idLotVerrouillage))
+        if (string.IsNullOrWhiteSpace(request.IdLotVerrouillage))
         {
-            errors.Add("idLotVerrouillage est obligatoire et doit être un GUID valide.");
+            errors.Add("idLotVerrouillage est obligatoire.");
         }
 
-        if (!DateTime.TryParse(request.DateTournee, out dateTournee))
+        if (!string.Equals(request.Source?.Trim(), SourceAttendue, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add($"source doit être égal à \"{SourceAttendue}\".");
+        }
+
+        if (!DateTime.TryParse(request.DateTournee, out var dateTournee))
         {
             errors.Add("dateTournee est obligatoire et doit être une date valide au format yyyy-MM-dd.");
         }
         else
         {
             dateTournee = dateTournee.Date;
+            var datePreparable = GetDatePreparable().ToDateTime(TimeOnly.MinValue).Date;
+            if (dateTournee != datePreparable)
+            {
+                errors.Add($"dateTournee doit correspondre à la date préparable calculée par l'API : {datePreparable:yyyy-MM-dd}.");
+            }
         }
 
-        if (string.IsNullOrWhiteSpace(request.CodeTournee))
+        if (!DateTimeOffset.TryParse(request.DateVerrouillageDemandee, out var dateVerrouillageDemandee))
         {
-            errors.Add("codeTournee est obligatoire.");
+            errors.Add("dateVerrouillageDemandee est obligatoire et doit être une date ISO 8601 avec offset.");
+        }
+        else if (dateVerrouillageDemandee.Offset == TimeSpan.Zero && !request.DateVerrouillageDemandee.EndsWith("+00:00", StringComparison.Ordinal))
+        {
+            errors.Add("dateVerrouillageDemandee doit contenir un offset horaire explicite.");
         }
 
-        if (request.Lignes is null || request.Lignes.Count == 0)
+        if (!string.Equals(request.FuseauHoraireMetier?.Trim(), FuseauHoraireMetier, StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add("La préparation Expédition doit contenir au moins une ligne.");
+            errors.Add($"fuseauHoraireMetier doit être égal à \"{FuseauHoraireMetier}\".");
+        }
+
+        if (request.Tournees is null || request.Tournees.Count == 0)
+        {
+            errors.Add("tournees doit contenir au moins une tournée.");
             return errors;
         }
 
-        var idLignes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-        for (var indexLigne = 0; indexLigne < request.Lignes.Count; indexLigne++)
+        if (DateTime.TryParse(request.DateTournee, out var validDate))
         {
-            var ligne = request.Lignes[indexLigne];
-            var prefix = $"lignes[{indexLigne}]";
+            var lignesPreparables = (await _tourneesRepository.GetTourneeLinesAsync(
+                DateOnly.FromDateTime(validDate.Date),
+                codeLivreur: string.Empty,
+                codeTournee: null)).ToList();
 
-            if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
-            {
-                errors.Add($"{prefix}.idLigneSource est obligatoire.");
-            }
-            else if (!idLignes.Add(ligne.IdLigneSource.Trim()))
-            {
-                errors.Add($"{prefix}.idLigneSource est présent plusieurs fois dans le lot.");
-            }
+            var idLignesPreparables = lignesPreparables
+                .Select(ligne => TourneeMobileMapper.BuildIdLigneSource(DateOnly.FromDateTime(validDate.Date), ligne))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-            if (string.IsNullOrWhiteSpace(ligne.NumClient))
-            {
-                errors.Add($"{prefix}.numClient est obligatoire.");
-            }
-
-            if (ligne.Quantites is null)
-            {
-                continue;
-            }
-
-            var codesArticles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            for (var indexQuantite = 0; indexQuantite < ligne.Quantites.Count; indexQuantite++)
-            {
-                var quantite = ligne.Quantites[indexQuantite];
-                var quantitePrefix = $"{prefix}.quantites[{indexQuantite}]";
-
-                if (string.IsNullOrWhiteSpace(quantite.CodeArticle))
-                {
-                    errors.Add($"{quantitePrefix}.codeArticle est obligatoire.");
-                    continue;
-                }
-
-                var codeArticle = quantite.CodeArticle.Trim();
-
-                if (!codesArticles.Add(codeArticle))
-                {
-                    errors.Add($"{quantitePrefix}.codeArticle est présent plusieurs fois dans la même ligne.");
-                }
-
-                if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
-                {
-                    errors.Add($"{quantitePrefix}.quantiteLivreePrevue doit être positive ou nulle.");
-                }
-
-                if (IsRollsVides(codeArticle) &&
-                    quantite.QuantiteLivreePrevue.HasValue &&
-                    quantite.QuantiteLivreePrevue.Value > 0)
-                {
-                    errors.Add("L'article ROLLS_VIDES ne peut pas être préparé côté Expédition car il est uniquement récupéré.");
-                }
-            }
+            ValidateTournees(request, idLignesPreparables, errors);
         }
 
         return errors;
     }
 
-    private static string ComputePayloadFingerprint(
-        ExpeditionVerrouillageRequest request,
-        DateTime dateTournee,
-        Guid idLotVerrouillage)
+    private static void ValidateTournees(
+        ExpeditionVerrouillageLotRequest request,
+        HashSet<string> idLignesPreparables,
+        List<string> errors)
+    {
+        var idLignesGlobal = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var indexTournee = 0; indexTournee < request.Tournees.Count; indexTournee++)
+        {
+            var tournee = request.Tournees[indexTournee];
+            var prefixTournee = $"tournees[{indexTournee}]";
+
+            if (string.IsNullOrWhiteSpace(tournee.CodeTournee))
+            {
+                errors.Add($"{prefixTournee}.codeTournee est obligatoire.");
+            }
+
+            if (!string.IsNullOrWhiteSpace(tournee.StatutPreparationWeb) &&
+                !StatutsPreparationWebAutorises.Contains(tournee.StatutPreparationWeb))
+            {
+                errors.Add($"{prefixTournee}.statutPreparationWeb doit être PRETE_VERROUILLAGE ou EN_PREPARATION_WEB.");
+            }
+
+            if (tournee.Lignes is null || tournee.Lignes.Count == 0)
+            {
+                errors.Add($"{prefixTournee}.lignes doit contenir au moins une ligne.");
+                continue;
+            }
+
+            var idLignesTournee = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            for (var indexLigne = 0; indexLigne < tournee.Lignes.Count; indexLigne++)
+            {
+                var ligne = tournee.Lignes[indexLigne];
+                var prefixLigne = $"{prefixTournee}.lignes[{indexLigne}]";
+
+                if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
+                {
+                    errors.Add($"{prefixLigne}.idLigneSource est obligatoire.");
+                }
+                else
+                {
+                    var idLigne = ligne.IdLigneSource.Trim();
+
+                    if (!idLignesTournee.Add(idLigne))
+                    {
+                        errors.Add($"{prefixLigne}.idLigneSource est présent plusieurs fois dans la même tournée.");
+                    }
+
+                    if (!idLignesGlobal.Add(idLigne))
+                    {
+                        errors.Add($"{prefixLigne}.idLigneSource est présent dans plusieurs tournées du lot.");
+                    }
+
+                    if (!idLignesPreparables.Contains(idLigne))
+                    {
+                        errors.Add($"{prefixLigne}.idLigneSource n'existe pas dans les lignes préparables de la date.");
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(ligne.Client?.NumClient))
+                {
+                    errors.Add($"{prefixLigne}.client.numClient est obligatoire.");
+                }
+
+                if (ligne.QuantitesPrevues is null)
+                {
+                    continue;
+                }
+
+                var codesArticles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (var indexQuantite = 0; indexQuantite < ligne.QuantitesPrevues.Count; indexQuantite++)
+                {
+                    var quantite = ligne.QuantitesPrevues[indexQuantite];
+                    var prefixQuantite = $"{prefixLigne}.quantitesPrevues[{indexQuantite}]";
+
+                    if (string.IsNullOrWhiteSpace(quantite.CodeArticle))
+                    {
+                        errors.Add($"{prefixQuantite}.codeArticle est obligatoire.");
+                        continue;
+                    }
+
+                    var codeArticle = NormalizeArticleCode(quantite.CodeArticle);
+
+                    if (!codesArticles.Add(codeArticle))
+                    {
+                        errors.Add($"{prefixQuantite}.codeArticle est présent plusieurs fois dans la même ligne.");
+                    }
+
+                    if (IsRollsVides(codeArticle))
+                    {
+                        errors.Add($"{prefixQuantite}.codeArticle ROLLS_VIDES est interdit côté Expédition.");
+                    }
+
+                    if (!IsArticleAutoriseExpedition(codeArticle))
+                    {
+                        errors.Add($"{prefixQuantite}.codeArticle doit être ROLLS, TAPIS ou SACS.");
+                    }
+
+                    if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
+                    {
+                        errors.Add($"{prefixQuantite}.quantiteLivreePrevue doit être positive ou nulle.");
+                    }
+                }
+            }
+        }
+    }
+
+    private static ExpeditionReglesDto BuildRegles()
+    {
+        return new ExpeditionReglesDto
+        {
+            HeureVerrouillageMetier = "00:05",
+            FuseauHoraireMetier = FuseauHoraireMetier,
+            FenetreModification = "Les préparations sont modifiables avant le verrouillage automatique autour de 00:05.",
+            ArticlesAutorises = ArticlesAutorises.OrderBy(code => code).ToList(),
+            ArticlesInterdits = new List<string> { ArticlesSaisissables.RollsVides },
+            ExclureRollsVides = true,
+            QuantitesNullesAutorisees = true
+        };
+    }
+
+    private static DateOnly GetDatePreparable()
+    {
+        return DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+    }
+
+    private static string ComputePayloadFingerprint(ExpeditionVerrouillageLotRequest request)
     {
         var normalizedPayload = new
         {
-            schemaVersion = string.IsNullOrWhiteSpace(request.SchemaVersion)
-                ? SchemaVersionExpedition
-                : request.SchemaVersion.Trim(),
-            idLotVerrouillage = idLotVerrouillage.ToString("D"),
-            dateTournee = dateTournee.ToString("yyyy-MM-dd"),
-            codeTournee = request.CodeTournee.Trim(),
-            libelleTournee = NormalizeNullable(request.LibelleTournee),
-            lignes = request.Lignes
-                .OrderBy(ligne => ligne.IdLigneSource, StringComparer.OrdinalIgnoreCase)
-                .Select(ligne => new
+            schemaVersion = SchemaVersionExpedition,
+            idLotVerrouillage = NormalizeNullable(request.IdLotVerrouillage),
+            source = NormalizeNullable(request.Source),
+            dateTournee = NormalizeNullable(request.DateTournee),
+            dateVerrouillageDemandee = NormalizeNullable(request.DateVerrouillageDemandee),
+            fuseauHoraireMetier = NormalizeNullable(request.FuseauHoraireMetier),
+            tournees = request.Tournees
+                .OrderBy(tournee => tournee.CodeTournee, StringComparer.OrdinalIgnoreCase)
+                .Select(tournee => new
                 {
-                    idLigneSource = ligne.IdLigneSource.Trim(),
-                    ordreArret = ligne.OrdreArret,
-                    numClient = ligne.NumClient.Trim(),
-                    codePDL = NormalizeNullable(ligne.CodePDL),
-                    commentaireExceptionnel = NormalizeNullable(ligne.CommentaireExceptionnel),
-                    quantites = (ligne.Quantites ?? new List<ExpeditionVerrouillageQuantiteRequest>())
-                        .OrderBy(quantite => quantite.CodeArticle, StringComparer.OrdinalIgnoreCase)
-                        .Select(quantite => new
+                    codeTournee = NormalizeNullable(tournee.CodeTournee),
+                    libelleTournee = NormalizeNullable(tournee.LibelleTournee),
+                    statutPreparationWeb = NormalizeNullable(tournee.StatutPreparationWeb),
+                    lignes = tournee.Lignes
+                        .OrderBy(ligne => ligne.IdLigneSource, StringComparer.OrdinalIgnoreCase)
+                        .Select(ligne => new
                         {
-                            codeArticle = quantite.CodeArticle.Trim().ToUpperInvariant(),
-                            quantiteLivreePrevue = quantite.QuantiteLivreePrevue
+                            idLigneSource = NormalizeNullable(ligne.IdLigneSource),
+                            ordreArret = ligne.OrdreArret,
+                            numClient = NormalizeNullable(ligne.Client?.NumClient),
+                            codePDL = NormalizeNullable(ligne.PointLivraison?.CodePDL),
+                            commentaireExceptionnel = NormalizeNullable(ligne.CommentaireExceptionnel),
+                            quantitesPrevues = ligne.QuantitesPrevues
+                                .OrderBy(quantite => quantite.CodeArticle, StringComparer.OrdinalIgnoreCase)
+                                .Select(quantite => new
+                                {
+                                    codeArticle = NormalizeArticleCode(quantite.CodeArticle),
+                                    quantiteLivreePrevue = quantite.QuantiteLivreePrevue
+                                })
+                                .ToList()
                         })
                         .ToList()
                 })
@@ -434,6 +565,13 @@ public sealed class ExpeditionService
 
         var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(json));
         return Convert.ToHexString(bytes);
+    }
+
+    private static Guid BuildDeterministicGuid(string value)
+    {
+        var bytes = SHA256.HashData(Encoding.UTF8.GetBytes(value.Trim().ToUpperInvariant()));
+        var guidBytes = bytes.Take(16).ToArray();
+        return new Guid(guidBytes);
     }
 
     private static PreRemplissageQuantiteRecord? FindPreRemplissage(
@@ -487,9 +625,21 @@ public sealed class ExpeditionService
         return NormalizeNullable(commentaireClient?.Commentaire);
     }
 
+    private static bool IsArticleAutoriseExpedition(string? codeArticle)
+    {
+        return ArticlesAutorises.Contains(NormalizeArticleCode(codeArticle));
+    }
+
     private static bool IsRollsVides(string? codeArticle)
     {
-        return string.Equals(codeArticle?.Trim(), ArticlesSaisissables.RollsVides, StringComparison.OrdinalIgnoreCase);
+        return string.Equals(NormalizeArticleCode(codeArticle), ArticlesSaisissables.RollsVides, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeArticleCode(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim().ToUpperInvariant();
     }
 
     private static string NormalizeIdPart(string? value)
