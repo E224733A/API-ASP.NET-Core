@@ -8,7 +8,24 @@ Elles ne remplacent pas ABSSolute.
 
 Elles servent à stocker les données de terrain, les synchronisations, les quantités et les logs.
 
-## Tables principales
+## Séparation Mobile / Expédition
+
+Les tables mobile stockent ce qui vient du livreur et de l'application Android.
+
+Les tables Expédition stockent ce qui vient du service Expédition après verrouillage.
+
+```text
+Mobile_Tournee*                 -> données saisies et envoyées par le mobile
+Mobile_ExpeditionPreparation*   -> données préparées et verrouillées par l'Expédition
+Mobile_ArticleSaisissable       -> référentiel commun
+Mobile_LogSynchronisation       -> logs communs
+```
+
+Le mobile ne lit pas les brouillons SQLite du serveur web Expédition.
+
+Le mobile reçoit uniquement les préparations Expédition verrouillées par l'API.
+
+## Tables principales côté mobile
 
 | Table | Rôle |
 |---|---|
@@ -19,6 +36,18 @@ Elles servent à stocker les données de terrain, les synchronisations, les quan
 | `Mobile_TourneeLigneQuantite` | Quantités par article et par ligne |
 | `Mobile_LogSynchronisation` | Journal des synchronisations et erreurs |
 | `Mobile_ArticleSaisissable` | Articles affichés ou saisis dans l'application |
+
+## Tables Expédition lues par le mobile via l'API
+
+Le mobile ne lit pas ces tables directement.
+
+L'API les utilise pour alimenter `quantiteLivreePrevue` dans `GET /api/tournees/jour`.
+
+| Table | Rôle |
+|---|---|
+| `Mobile_ExpeditionPreparation` | En-tête d'une préparation Expédition verrouillée |
+| `Mobile_ExpeditionPreparationLigne` | Quantités prévues par article et par arrêt |
+| `Mobile_CommentaireExceptionnel` | Commentaire ponctuel séparé des instructions |
 
 ## Mobile_Tournee
 
@@ -32,6 +61,8 @@ CodeTournee
 LibelleTournee
 IdLivreur
 StatutSynchronisation
+DateChargementMobile
+DateReceptionApi
 DateEnvoi
 EstVerrouillee
 NomAppareil
@@ -48,6 +79,7 @@ IdLigneSource
 OrdreArret
 NumClient
 NomClient
+NomAffiche
 CodePDL
 DescriptionPDL
 Adresse
@@ -71,7 +103,41 @@ QuantiteLivree
 QuantiteRecuperee
 ```
 
-## Règles métier
+## Origine de QuantiteLivreePrevue
+
+`QuantiteLivreePrevue` vient du module Expédition uniquement après verrouillage.
+
+Flux :
+
+```text
+Mobile_ExpeditionPreparationLigne.QuantiteLivreePrevue
+        -> API GET /api/tournees/jour
+        -> lignes[].saisie.quantites[].quantiteLivreePrevue
+        -> Mobile_TourneeLigneQuantite.QuantiteLivreePrevue après synchronisation
+```
+
+Une préparation Expédition non verrouillée ne doit jamais alimenter le mobile.
+
+## Articles
+
+Articles principaux :
+
+```text
+ROLLS
+TAPIS
+SACS
+ROLLS_VIDES
+```
+
+Règles :
+
+```text
+ROLLS, TAPIS, SACS -> livrables et récupérables selon le besoin métier
+ROLLS_VIDES        -> récupérable côté mobile uniquement
+ROLLS_VIDES        -> interdit côté Expédition
+```
+
+## Règles métier sur les quantités
 
 ```text
 QuantiteLivreePrevue = NULL -> l'Expédition n'a rien renseigné
@@ -125,4 +191,24 @@ Mobile_Tournee              -> 1 en-tête de tournée
 Mobile_TourneeLigne         -> 1 ligne par arrêt
 Mobile_TourneeLigneQuantite -> 1 ligne par article et par arrêt
 Mobile_LogSynchronisation   -> 1 log de réussite ou d'erreur
+```
+
+## Vérification que les préparations verrouillées alimentent le mobile
+
+```sql
+SELECT TOP 50
+    p.DateTournee,
+    p.CodeTournee,
+    p.StatutPreparation,
+    p.EstVerrouille,
+    q.IdLigneSource,
+    q.CodeArticle,
+    q.QuantiteLivreePrevue
+FROM dbo.Mobile_ExpeditionPreparation p
+INNER JOIN dbo.Mobile_ExpeditionPreparationLigne q
+    ON q.IdPreparationExpedition = p.IdPreparationExpedition
+WHERE p.EstVerrouille = 1
+  AND p.StatutPreparation = N'VERROUILLEE'
+  AND q.Actif = 1
+ORDER BY p.DateTournee DESC, p.CodeTournee, q.IdLigneSource, q.CodeArticle;
 ```

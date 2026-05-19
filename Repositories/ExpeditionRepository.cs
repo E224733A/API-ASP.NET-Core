@@ -22,13 +22,16 @@ public sealed class ExpeditionRepository
 
         const string sql = """
             SELECT TOP (1)
-                IdLotVerrouillage,
-                EmpreintePayload,
-                DateTournee,
-                CodeTournee,
-                IdPreRemplissageTournee
-            FROM dbo.Mobile_ExpeditionLotVerrouillage
-            WHERE IdLotVerrouillage = @IdLotVerrouillage;
+                lot.IdLotVerrouillage,
+                lot.EmpreintePayload,
+                lot.DateTournee,
+                lot.CodeTournee,
+                preparation.IdPreparationExpedition
+            FROM dbo.Mobile_ExpeditionLotVerrouillage AS lot
+            LEFT JOIN dbo.Mobile_ExpeditionPreparation AS preparation
+                ON preparation.IdLotVerrouillage = lot.IdLotVerrouillage
+            WHERE lot.IdLotVerrouillage = @IdLotVerrouillage
+            ORDER BY preparation.IdPreparationExpedition;
             """;
 
         return await connection.QuerySingleOrDefaultAsync<ExpeditionLotVerrouillageDto>(
@@ -50,12 +53,13 @@ public sealed class ExpeditionRepository
 
         const string sql = """
             SELECT TOP (1)
-                IdPreRemplissageTournee,
+                IdPreparationExpedition,
                 DateTournee,
                 CodeTournee,
+                StatutPreparation,
                 EstVerrouille,
                 IdLotVerrouillage
-            FROM dbo.Mobile_PreRemplissageTournee
+            FROM dbo.Mobile_ExpeditionPreparation
             WHERE DateTournee = @DateTournee
               AND CodeTournee = @CodeTournee;
             """;
@@ -106,9 +110,13 @@ public sealed class ExpeditionRepository
                         CodeTournee,
                         LibelleTournee,
                         StatutLot,
+                        NombrePreparations,
                         NombreLignes,
                         NombreQuantites,
                         AdresseIP,
+                        MessageRetour,
+                        DateReceptionApi,
+                        DateSauvegardeSql,
                         DateCreation
                     )
                     VALUES (
@@ -118,9 +126,13 @@ public sealed class ExpeditionRepository
                         @CodeTournee,
                         @LibelleTournee,
                         N'VERROUILLE',
+                        @NombrePreparations,
                         @NombreLignes,
                         @NombreQuantites,
                         @AdresseIP,
+                        @MessageRetour,
+                        @Now,
+                        @Now,
                         @Now
                     );
                     """,
@@ -131,35 +143,33 @@ public sealed class ExpeditionRepository
                         DateTournee = dateTournee.Date,
                         CodeTournee = "GLOBAL",
                         LibelleTournee = $"Lot global Expédition {request.IdLotVerrouillage}",
+                        NombrePreparations = nombreTournees,
                         NombreLignes = nombreLignes,
                         NombreQuantites = nombreQuantites,
                         AdresseIP = NormalizeNullable(adresseIp),
+                        MessageRetour = "Préparations Expédition verrouillées.",
                         Now = now
                     },
                     transaction,
                     cancellationToken: cancellationToken));
 
-            long? firstIdPreRemplissageTournee = null;
-
             foreach (var tournee in request.Tournees)
             {
-                var idPreRemplissageTournee = await UpsertPreRemplissageTourneeAsync(
+                var idPreparationExpedition = await UpsertPreparationExpeditionAsync(
                     connection,
                     transaction,
-                    request,
                     tournee,
                     dateTournee,
                     idLotVerrouillageTechnique,
                     empreintePayload,
+                    adresseIp,
                     now,
                     cancellationToken);
-
-                firstIdPreRemplissageTournee ??= idPreRemplissageTournee;
 
                 await DesactiverAnciennesQuantitesAsync(
                     connection,
                     transaction,
-                    idPreRemplissageTournee,
+                    idPreparationExpedition,
                     now,
                     cancellationToken);
 
@@ -168,7 +178,7 @@ public sealed class ExpeditionRepository
                     await EnregistrerQuantitesLigneAsync(
                         connection,
                         transaction,
-                        idPreRemplissageTournee,
+                        idPreparationExpedition,
                         ligne,
                         now,
                         cancellationToken);
@@ -189,33 +199,12 @@ public sealed class ExpeditionRepository
                     transaction,
                     request,
                     tournee,
-                    idPreRemplissageTournee,
+                    idPreparationExpedition,
                     dateTournee,
                     idLotVerrouillageTechnique,
                     adresseIp,
                     now,
                     cancellationToken);
-            }
-
-            if (firstIdPreRemplissageTournee.HasValue)
-            {
-                await connection.ExecuteAsync(
-                    new CommandDefinition(
-                        """
-                        UPDATE dbo.Mobile_ExpeditionLotVerrouillage
-                        SET
-                            IdPreRemplissageTournee = @IdPreRemplissageTournee,
-                            DateModification = @Now
-                        WHERE IdLotVerrouillage = @IdLotVerrouillage;
-                        """,
-                        new
-                        {
-                            IdPreRemplissageTournee = firstIdPreRemplissageTournee.Value,
-                            IdLotVerrouillage = idLotVerrouillageTechnique,
-                            Now = now
-                        },
-                        transaction,
-                        cancellationToken: cancellationToken));
             }
 
             await EnregistrerLogVerrouillageAsync(
@@ -246,37 +235,39 @@ public sealed class ExpeditionRepository
         }
     }
 
-    private static async Task<long> UpsertPreRemplissageTourneeAsync(
+    private static async Task<long> UpsertPreparationExpeditionAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        ExpeditionVerrouillageLotRequest request,
         ExpeditionVerrouillageTourneeRequest tournee,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
         string empreintePayload,
+        string? adresseIp,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         return await connection.QuerySingleAsync<long>(
             new CommandDefinition(
                 """
-                DECLARE @IdPreRemplissageTournee BIGINT;
+                DECLARE @IdPreparationExpedition BIGINT;
 
-                SELECT @IdPreRemplissageTournee = IdPreRemplissageTournee
-                FROM dbo.Mobile_PreRemplissageTournee WITH (UPDLOCK, HOLDLOCK)
+                SELECT @IdPreparationExpedition = IdPreparationExpedition
+                FROM dbo.Mobile_ExpeditionPreparation WITH (UPDLOCK, HOLDLOCK)
                 WHERE DateTournee = @DateTournee
                   AND CodeTournee = @CodeTournee;
 
-                IF @IdPreRemplissageTournee IS NULL
+                IF @IdPreparationExpedition IS NULL
                 BEGIN
-                    INSERT INTO dbo.Mobile_PreRemplissageTournee (
+                    INSERT INTO dbo.Mobile_ExpeditionPreparation (
                         DateTournee,
                         CodeTournee,
                         LibelleTournee,
+                        StatutPreparation,
                         EstVerrouille,
                         DateVerrouillage,
                         IdLotVerrouillage,
                         EmpreintePayload,
+                        AdresseIPVerrouillage,
                         DateCreation,
                         DateModification
                     )
@@ -284,42 +275,44 @@ public sealed class ExpeditionRepository
                         @DateTournee,
                         @CodeTournee,
                         @LibelleTournee,
+                        N'VERROUILLEE',
                         1,
                         @Now,
                         @IdLotVerrouillage,
                         @EmpreintePayload,
+                        @AdresseIP,
                         @Now,
                         NULL
                     );
 
-                    SET @IdPreRemplissageTournee = CONVERT(BIGINT, SCOPE_IDENTITY());
+                    SET @IdPreparationExpedition = CONVERT(BIGINT, SCOPE_IDENTITY());
                 END
                 ELSE
                 BEGIN
                     IF EXISTS (
                         SELECT 1
-                        FROM dbo.Mobile_PreRemplissageTournee
-                        WHERE IdPreRemplissageTournee = @IdPreRemplissageTournee
-                          AND EstVerrouille = 1
-                          AND IdLotVerrouillage IS NOT NULL
+                        FROM dbo.Mobile_ExpeditionPreparation
+                        WHERE IdPreparationExpedition = @IdPreparationExpedition
                           AND IdLotVerrouillage <> @IdLotVerrouillage
                     )
                     BEGIN
-                        THROW 51001, 'La préparation est déjà verrouillée avec un autre lot.', 1;
+                        THROW 51001, 'La préparation Expédition est déjà verrouillée avec un autre lot.', 1;
                     END;
 
-                    UPDATE dbo.Mobile_PreRemplissageTournee
+                    UPDATE dbo.Mobile_ExpeditionPreparation
                     SET
                         LibelleTournee = @LibelleTournee,
+                        StatutPreparation = N'VERROUILLEE',
                         EstVerrouille = 1,
                         DateVerrouillage = COALESCE(DateVerrouillage, @Now),
                         IdLotVerrouillage = @IdLotVerrouillage,
                         EmpreintePayload = @EmpreintePayload,
+                        AdresseIPVerrouillage = COALESCE(AdresseIPVerrouillage, @AdresseIP),
                         DateModification = @Now
-                    WHERE IdPreRemplissageTournee = @IdPreRemplissageTournee;
+                    WHERE IdPreparationExpedition = @IdPreparationExpedition;
                 END;
 
-                SELECT @IdPreRemplissageTournee;
+                SELECT @IdPreparationExpedition;
                 """,
                 new
                 {
@@ -328,6 +321,7 @@ public sealed class ExpeditionRepository
                     LibelleTournee = NormalizeNullable(tournee.LibelleTournee),
                     IdLotVerrouillage = idLotVerrouillageTechnique,
                     EmpreintePayload = empreintePayload,
+                    AdresseIP = NormalizeNullable(adresseIp),
                     Now = now
                 },
                 transaction,
@@ -337,23 +331,23 @@ public sealed class ExpeditionRepository
     private static async Task DesactiverAnciennesQuantitesAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        long idPreRemplissageTournee,
+        long idPreparationExpedition,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                UPDATE dbo.Mobile_PreRemplissageQuantite
+                UPDATE dbo.Mobile_ExpeditionPreparationLigne
                 SET
                     Actif = 0,
                     DateModification = @Now
-                WHERE IdPreRemplissageTournee = @IdPreRemplissageTournee
+                WHERE IdPreparationExpedition = @IdPreparationExpedition
                   AND Actif = 1;
                 """,
                 new
                 {
-                    IdPreRemplissageTournee = idPreRemplissageTournee,
+                    IdPreparationExpedition = idPreparationExpedition,
                     Now = now
                 },
                 transaction,
@@ -363,7 +357,7 @@ public sealed class ExpeditionRepository
     private static async Task EnregistrerQuantitesLigneAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        long idPreRemplissageTournee,
+        long idPreparationExpedition,
         ExpeditionVerrouillageLigneRequest ligne,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -383,8 +377,8 @@ public sealed class ExpeditionRepository
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     """
-                    INSERT INTO dbo.Mobile_PreRemplissageQuantite (
-                        IdPreRemplissageTournee,
+                    INSERT INTO dbo.Mobile_ExpeditionPreparationLigne (
+                        IdPreparationExpedition,
                         IdLigneSource,
                         OrdreArret,
                         NumClient,
@@ -398,7 +392,7 @@ public sealed class ExpeditionRepository
                         DateCreation
                     )
                     VALUES (
-                        @IdPreRemplissageTournee,
+                        @IdPreparationExpedition,
                         @IdLigneSource,
                         @OrdreArret,
                         @NumClient,
@@ -414,7 +408,7 @@ public sealed class ExpeditionRepository
                     """,
                     new
                     {
-                        IdPreRemplissageTournee = idPreRemplissageTournee,
+                        IdPreparationExpedition = idPreparationExpedition,
                         IdLigneSource = ligne.IdLigneSource.Trim(),
                         OrdreArret = ligne.OrdreArret,
                         NumClient = ligne.Client.NumClient.Trim(),
@@ -519,7 +513,7 @@ public sealed class ExpeditionRepository
         Microsoft.Data.SqlClient.SqlTransaction transaction,
         ExpeditionVerrouillageLotRequest request,
         ExpeditionVerrouillageTourneeRequest tournee,
-        long idPreRemplissageTournee,
+        long idPreparationExpedition,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
         string? adresseIp,
@@ -529,8 +523,8 @@ public sealed class ExpeditionRepository
         await connection.ExecuteAsync(
             new CommandDefinition(
                 """
-                INSERT INTO dbo.Mobile_PreRemplissageHistorique (
-                    IdPreRemplissageTournee,
+                INSERT INTO dbo.Mobile_ExpeditionPreparationHistorique (
+                    IdPreparationExpedition,
                     DateTournee,
                     CodeTournee,
                     ActionHistorique,
@@ -539,7 +533,7 @@ public sealed class ExpeditionRepository
                     DateEvenement
                 )
                 VALUES (
-                    @IdPreRemplissageTournee,
+                    @IdPreparationExpedition,
                     @DateTournee,
                     @CodeTournee,
                     N'VERROUILLAGE',
@@ -550,7 +544,7 @@ public sealed class ExpeditionRepository
                 """,
                 new
                 {
-                    IdPreRemplissageTournee = idPreRemplissageTournee,
+                    IdPreparationExpedition = idPreparationExpedition,
                     DateTournee = dateTournee.Date,
                     CodeTournee = tournee.CodeTournee.Trim(),
                     Commentaire = $"Lot global Expédition verrouillé : {request.IdLotVerrouillage} ({idLotVerrouillageTechnique:D})",
@@ -584,7 +578,7 @@ public sealed class ExpeditionRepository
                     DateEvenement
                 )
                 VALUES (
-                    N'BLOCAGE_PRE_REMPLISSAGE',
+                    N'VERROUILLAGE_EXPEDITION_PREPARATION',
                     N'INFO',
                     N'Préparations Expédition verrouillées.',
                     @DetailTechnique,

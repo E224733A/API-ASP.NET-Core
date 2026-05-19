@@ -217,14 +217,15 @@ public class TourneesRepository
                 q.CodeArticle,
                 COALESCE(q.LibelleArticle, a.LibelleArticle) AS LibelleArticle,
                 q.QuantiteLivreePrevue
-            FROM dbo.Mobile_PreRemplissageTournee AS p
-            INNER JOIN dbo.Mobile_PreRemplissageQuantite AS q
-                ON q.IdPreRemplissageTournee = p.IdPreRemplissageTournee
+            FROM dbo.Mobile_ExpeditionPreparation AS p
+            INNER JOIN dbo.Mobile_ExpeditionPreparationLigne AS q
+                ON q.IdPreparationExpedition = p.IdPreparationExpedition
             LEFT JOIN dbo.Mobile_ArticleSaisissable AS a
                 ON a.CodeArticle = q.CodeArticle
             WHERE p.DateTournee = @DateTournee
               AND p.CodeTournee = @CodeTournee
               AND p.EstVerrouille = 1
+              AND p.StatutPreparation = N'VERROUILLEE'
               AND q.Actif = 1;
             """;
 

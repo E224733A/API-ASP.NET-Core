@@ -180,7 +180,7 @@ public sealed class ExpeditionApiResult
 
 /// <summary>
 /// Représentation technique du lot stocké en base.
-/// La base existante stocke IdLotVerrouillage en GUID.
+/// La base cible stocke IdLotVerrouillage en GUID.
 /// L'API v1.2 accepte un identifiant métier en string et le convertit en GUID stable côté serveur.
 /// </summary>
 public sealed class ExpeditionLotVerrouillageDto
@@ -189,14 +189,15 @@ public sealed class ExpeditionLotVerrouillageDto
     public string EmpreintePayload { get; set; } = string.Empty;
     public DateTime DateTournee { get; set; }
     public string CodeTournee { get; set; } = string.Empty;
-    public long? IdPreRemplissageTournee { get; set; }
+    public long? IdPreparationExpedition { get; set; }
 }
 
 public sealed class ExpeditionPreparationEtatDto
 {
-    public long IdPreRemplissageTournee { get; set; }
+    public long IdPreparationExpedition { get; set; }
     public DateTime DateTournee { get; set; }
     public string CodeTournee { get; set; } = string.Empty;
+    public string StatutPreparation { get; set; } = string.Empty;
     public bool EstVerrouille { get; set; }
     public Guid? IdLotVerrouillage { get; set; }
 }
