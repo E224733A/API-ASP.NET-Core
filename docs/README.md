@@ -53,7 +53,7 @@ schemaVersion = 1.2
 | Expédition | GET | `/api/expedition/preparations/a-preparer` | Charger toutes les préparations à préparer |
 | Expédition | POST | `/api/expedition/preparations/verrouiller` | Verrouiller les préparations Expédition |
 
-## Lecture conseillée
+## Lecture minimum conseillée
 
 1. Lire `00-cadrage/decisions-techniques.md`.
 2. Lire `01-api/README.md`.

@@ -46,7 +46,6 @@ Version actuelle :
 | `contrats-json-expedition.md` | Contrats JSON Expédition |
 | `erreurs-api.md` | Codes HTTP et erreurs métier |
 | `swagger.md` | Utilisation de Swagger |
-| `changelog.md` | Historique des décisions API |
 
 ## Architecture logique
 
@@ -80,8 +79,6 @@ Validators/
 ## Règles majeures
 
 ```text
-Le mobile ne se connecte jamais à SQL Server.
-Le Web Expédition ne filtre pas le GET côté API.
 Le GET Expédition est global.
 Le POST Expédition est idempotent avec idLotVerrouillage.
 Le mobile lit uniquement les préparations verrouillées.

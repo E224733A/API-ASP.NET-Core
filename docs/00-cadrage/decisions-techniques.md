@@ -74,15 +74,6 @@ GET /api/expedition/preparations/a-preparer
 ```
 
 Aucun paramètre n'est accepté.
-
-Paramètres interdits :
-
-```text
-dateTournee
-codeTournee
-codeLivreur
-```
-
 Le choix de la tournée se fait côté Web Expédition après chargement complet.
 
 ## POST Expédition
