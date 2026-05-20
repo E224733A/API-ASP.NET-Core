@@ -289,25 +289,15 @@ public sealed class ExpeditionRepository
                 END
                 ELSE
                 BEGIN
-                    IF EXISTS (
-                        SELECT 1
-                        FROM dbo.Mobile_ExpeditionPreparation
-                        WHERE IdPreparationExpedition = @IdPreparationExpedition
-                          AND IdLotVerrouillage <> @IdLotVerrouillage
-                    )
-                    BEGIN
-                        THROW 51001, 'La préparation Expédition est déjà verrouillée avec un autre lot.', 1;
-                    END;
-
                     UPDATE dbo.Mobile_ExpeditionPreparation
                     SET
                         LibelleTournee = @LibelleTournee,
                         StatutPreparation = N'VERROUILLEE',
                         EstVerrouille = 1,
-                        DateVerrouillage = COALESCE(DateVerrouillage, @Now),
+                        DateVerrouillage = @Now,
                         IdLotVerrouillage = @IdLotVerrouillage,
                         EmpreintePayload = @EmpreintePayload,
-                        AdresseIPVerrouillage = COALESCE(AdresseIPVerrouillage, @AdresseIP),
+                        AdresseIPVerrouillage = @AdresseIP,
                         DateModification = @Now
                     WHERE IdPreparationExpedition = @IdPreparationExpedition;
                 END;
