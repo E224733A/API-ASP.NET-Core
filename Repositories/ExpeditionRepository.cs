@@ -100,6 +100,14 @@ public sealed class ExpeditionRepository
 
         try
         {
+            await RemplacerAncienLotGlobalVerrouilleAsync(
+                connection,
+                transaction,
+                dateTournee,
+                idLotVerrouillageTechnique,
+                now,
+                cancellationToken);
+
             await connection.ExecuteAsync(
                 new CommandDefinition(
                     """
@@ -233,6 +241,37 @@ public sealed class ExpeditionRepository
             transaction.Rollback();
             throw;
         }
+    }
+
+    private static async Task RemplacerAncienLotGlobalVerrouilleAsync(
+        Microsoft.Data.SqlClient.SqlConnection connection,
+        Microsoft.Data.SqlClient.SqlTransaction transaction,
+        DateTime dateTournee,
+        Guid idLotVerrouillageTechnique,
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        await connection.ExecuteAsync(
+            new CommandDefinition(
+                """
+                UPDATE dbo.Mobile_ExpeditionLotVerrouillage
+                SET
+                    StatutLot = N'REMPLACE',
+                    DateModification = @Now,
+                    MessageRetour = N'Lot remplacé par un nouveau verrouillage Expédition.'
+                WHERE DateTournee = @DateTournee
+                  AND CodeTournee = N'GLOBAL'
+                  AND StatutLot = N'VERROUILLE'
+                  AND IdLotVerrouillage <> @IdLotVerrouillage;
+                """,
+                new
+                {
+                    DateTournee = dateTournee.Date,
+                    IdLotVerrouillage = idLotVerrouillageTechnique,
+                    Now = now
+                },
+                transaction,
+                cancellationToken: cancellationToken));
     }
 
     private static async Task<long> UpsertPreparationExpeditionAsync(
