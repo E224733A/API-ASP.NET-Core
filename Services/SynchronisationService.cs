@@ -9,15 +9,18 @@ public sealed class SynchronisationService
 {
     private readonly SynchronisationTourneeValidator _validator;
     private readonly SynchronisationsRepository _repository;
+    private readonly DateMetierService _dateMetierService;
     private readonly ILogger<SynchronisationService> _logger;
 
     public SynchronisationService(
         SynchronisationTourneeValidator validator,
         SynchronisationsRepository repository,
+        DateMetierService dateMetierService,
         ILogger<SynchronisationService> logger)
     {
         _validator = validator;
         _repository = repository;
+        _dateMetierService = dateMetierService;
         _logger = logger;
     }
 
@@ -52,6 +55,18 @@ public sealed class SynchronisationService
         }
 
         var dateTournee = SynchronisationTourneeValidator.ParseDateTournee(request.DateTournee);
+        var dateTourneePayload = DateOnly.FromDateTime(dateTournee);
+        var dateTourneeAutorisee = _dateMetierService.GetDateTourneeAutorisee();
+
+        if (dateTourneePayload != dateTourneeAutorisee)
+        {
+            return SynchronisationServiceResult.Conflict(
+                BuildDateTourneeNonAutoriseeResponse(
+                    dateTourneePayload,
+                    dateTourneeAutorisee,
+                    "synchronisée"));
+        }
+
         var codeTournee = request.CodeTournee.Trim();
         var idSynchronisation = ParseIdSynchronisation(request.IdSynchronisation);
 
@@ -63,13 +78,13 @@ public sealed class SynchronisationService
         /*
          * Ordre volontaire des contrôles :
          *
-         * 1. Doublon technique par IdSynchronisation.
-         * 2. Doublon métier par DateTournee + CodeTournee.
-         * 3. Insertion en base.
+         * 1. Blocage de la date métier : une date ancienne ou future ne doit pas être traitée.
+         * 2. Doublon technique par IdSynchronisation.
+         * 3. Doublon métier par DateTournee + CodeTournee.
+         * 4. Insertion en base.
          *
-         * Si le même fichier JSON est renvoyé, les deux doublons peuvent être vrais.
-         * Dans ce cas, on retourne SYNCHRONISATION_ALREADY_EXISTS en priorité,
-         * parce que le problème identifié est d'abord le rejeu technique de la même requête.
+         * Si le mobile renvoie une tournée d'hier, l'API refuse avant tout contrôle
+         * d'idempotence pour éviter de considérer un vieux payload comme encore rejouable.
          */
         var synchronisationDejaRecue = await _repository.GetSynchronisationDejaRecueAsync(
             idSynchronisation,
@@ -203,6 +218,38 @@ public sealed class SynchronisationService
         }
 
         throw new InvalidOperationException("L'identifiant de synchronisation a été validé mais reste invalide.");
+    }
+
+    private static object BuildDateTourneeNonAutoriseeResponse(
+        DateOnly dateTourneePayload,
+        DateOnly dateTourneeAutorisee,
+        string actionMetier)
+    {
+        var datePayload = dateTourneePayload.ToString("yyyy-MM-dd");
+        var dateAutorisee = dateTourneeAutorisee.ToString("yyyy-MM-dd");
+
+        if (dateTourneePayload < dateTourneeAutorisee)
+        {
+            return new
+            {
+                success = false,
+                statut = "CONFLICT",
+                code = "DATE_TOURNEE_EXPIREE",
+                message = $"La tournée envoyée date du {datePayload}. Elle ne peut plus être {actionMetier} le {dateAutorisee}.",
+                dateTourneePayload = datePayload,
+                dateTourneeAutorisee = dateAutorisee
+            };
+        }
+
+        return new
+        {
+            success = false,
+            statut = "CONFLICT",
+            code = "DATE_TOURNEE_NON_AUTORISEE",
+            message = $"La tournée envoyée date du {datePayload}. Elle ne peut pas être {actionMetier} le {dateAutorisee}.",
+            dateTourneePayload = datePayload,
+            dateTourneeAutorisee = dateAutorisee
+        };
     }
 
     private static bool IsSqlDuplicateIdSynchronisation(SqlException exception)

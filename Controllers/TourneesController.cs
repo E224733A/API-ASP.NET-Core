@@ -11,7 +11,8 @@ namespace API_ASP.NET_Core.Controllers;
 /// </summary>
 /// <remarks>
 /// Ce contrôleur correspond au flux du matin : le livreur s'identifie, consulte les tournées
-/// disponibles pour la date du jour, puis charge une tournée complète dans l'application mobile.
+/// disponibles pour la date métier calculée côté API, puis charge une tournée complète
+/// dans l'application mobile.
 /// Après ce chargement, le mobile peut fonctionner hors connexion grâce à son stockage local SQLite.
 /// </remarks>
 [ApiController]
@@ -20,14 +21,18 @@ namespace API_ASP.NET_Core.Controllers;
 public class TourneesController : ControllerBase
 {
     private readonly TourneesService _tourneesService;
+    private readonly DateMetierService _dateMetierService;
 
-    public TourneesController(TourneesService service)
+    public TourneesController(
+        TourneesService service,
+        DateMetierService dateMetierService)
     {
         _tourneesService = service;
+        _dateMetierService = dateMetierService;
     }
 
     /// <summary>
-    /// Liste les tournées disponibles pour une date et un livreur.
+    /// Liste les tournées disponibles pour la date métier serveur et un livreur.
     /// </summary>
     /// <remarks>
     /// Cette route est utilisée par l'écran de choix de tournée.
@@ -39,34 +44,27 @@ public class TourneesController : ControllerBase
     /// - livreur ;
     /// - tournees[].
     ///
-    /// La date est affichée côté mobile, mais elle ne doit pas être modifiable par le livreur
-    /// dans le fonctionnement prévu.
+    /// La date n'est pas acceptée depuis le mobile.
+    /// Elle est toujours calculée par l'API avec le fuseau métier Europe/Paris.
     ///
     /// Exemple :
-    /// GET /api/tournees/disponibles?dateTournee=2026-05-07&amp;codeLivreur=2
+    /// GET /api/tournees/disponibles?codeLivreur=2
     /// </remarks>
-    /// <param name="dateTournee">Date de tournée au format yyyy-MM-dd. Exemple : 2026-05-07.</param>
     /// <param name="codeLivreur">Code métier du livreur. Exemple : 2.</param>
-    /// <returns>Liste des tournées disponibles pour le livreur et la date demandée.</returns>
+    /// <returns>Liste des tournées disponibles pour le livreur et la date serveur autorisée.</returns>
     [HttpGet("disponibles")]
     [ProducesResponseType(typeof(TourneesDisponiblesResponseDto), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiNotFoundResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TourneesDisponiblesResponseDto>> GetTourneesDisponibles(
-        [FromQuery] string dateTournee,
-        [FromQuery] string codeLivreur)
+        [FromQuery] string? codeLivreur)
     {
-        if (!DateOnly.TryParse(dateTournee, out var date))
+        var parametreDateInterdit = GetParametreDateInterdit();
+
+        if (parametreDateInterdit is not null)
         {
-            return BadRequest(new ApiValidationErrorResponse
-            {
-                Statut = ApiErrorCodes.ValidationError,
-                Errors = new[]
-                {
-                    "Paramètre dateTournee invalide. Format attendu : yyyy-MM-dd."
-                }
-            });
+            return BadRequest(BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
         if (string.IsNullOrWhiteSpace(codeLivreur))
@@ -81,14 +79,17 @@ public class TourneesController : ControllerBase
             });
         }
 
-        var response = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreur);
+        var date = _dateMetierService.GetDateTourneeAutorisee();
+        var codeLivreurNormalise = codeLivreur.Trim();
+
+        var response = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreurNormalise);
 
         if (response is null)
         {
             return NotFound(new ApiNotFoundResponse
             {
                 Statut = ApiErrorCodes.NotFound,
-                Message = $"Livreur introuvable : {codeLivreur}"
+                Message = $"Livreur introuvable : {codeLivreurNormalise}"
             });
         }
 
@@ -115,10 +116,12 @@ public class TourneesController : ControllerBase
     /// - lignes[].saisie.quantites[].quantiteLivreePrevue : quantité prévue optionnelle, nullable ;
     /// - lignes[].saisie.quantites[].quantiteLivree et quantiteRecuperee : valeurs initiales de saisie.
     ///
+    /// La date n'est pas acceptée depuis le mobile.
+    /// Elle est toujours calculée par l'API avec le fuseau métier Europe/Paris.
+    ///
     /// Exemple :
-    /// GET /api/tournees/jour?dateTournee=2026-05-07&amp;codeTournee=4006&amp;codeLivreur=2
+    /// GET /api/tournees/jour?codeTournee=4006&amp;codeLivreur=2
     /// </remarks>
-    /// <param name="dateTournee">Date de tournée au format yyyy-MM-dd. Exemple : 2026-05-07.</param>
     /// <param name="codeLivreur">Code métier du livreur. Exemple : 2.</param>
     /// <param name="codeTournee">Code de la tournée à charger. Exemple : 4006.</param>
     /// <param name="nomLivreur">Nom du livreur, optionnel. Le code livreur reste la donnée de référence.</param>
@@ -129,21 +132,15 @@ public class TourneesController : ControllerBase
     [ProducesResponseType(typeof(ApiNotFoundResponse), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<TourneeMobileDto>> GetTourneeDuJour(
-        [FromQuery] string dateTournee,
-        [FromQuery] string codeLivreur,
+        [FromQuery] string? codeLivreur,
         [FromQuery] string? codeTournee = null,
         [FromQuery] string? nomLivreur = null)
     {
-        if (!DateOnly.TryParse(dateTournee, out var date))
+        var parametreDateInterdit = GetParametreDateInterdit();
+
+        if (parametreDateInterdit is not null)
         {
-            return BadRequest(new ApiValidationErrorResponse
-            {
-                Statut = ApiErrorCodes.ValidationError,
-                Errors = new[]
-                {
-                    "Paramètre dateTournee invalide. Format attendu : yyyy-MM-dd."
-                }
-            });
+            return BadRequest(BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
         if (string.IsNullOrWhiteSpace(codeLivreur))
@@ -170,7 +167,11 @@ public class TourneesController : ControllerBase
             });
         }
 
-        var tournee = await _tourneesService.GetTourneeAsync(date, codeLivreur, codeTournee, nomLivreur);
+        var date = _dateMetierService.GetDateTourneeAutorisee();
+        var codeLivreurNormalise = codeLivreur.Trim();
+        var codeTourneeNormalise = codeTournee.Trim();
+
+        var tournee = await _tourneesService.GetTourneeAsync(date, codeLivreurNormalise, codeTourneeNormalise, nomLivreur);
 
         if (tournee is null)
         {
@@ -182,5 +183,26 @@ public class TourneesController : ControllerBase
         }
 
         return Ok(tournee);
+    }
+
+    private string? GetParametreDateInterdit()
+    {
+        return Request.Query.Keys.FirstOrDefault(key =>
+            string.Equals(key, "date", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(key, "dateTournee", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private object BuildDateQueryForbiddenResponse(string parametreDateInterdit)
+    {
+        var dateAutorisee = _dateMetierService.GetDateTourneeAutorisee();
+
+        return new
+        {
+            statut = "VALIDATION_ERROR",
+            code = "DATE_QUERY_PARAM_INTERDIT",
+            message = "La date de tournée n'est pas acceptée dans l'URL. Elle est calculée côté API avec la date métier Europe/Paris.",
+            parametreInterdit = parametreDateInterdit,
+            dateTourneeAutorisee = dateAutorisee.ToString("yyyy-MM-dd")
+        };
     }
 }

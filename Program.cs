@@ -57,6 +57,14 @@ builder.Services.AddSwaggerGen(options =>
         Contrat JSON mobile actuel : schemaVersion = "1.2".
         Contrat JSON Expédition actuel : schemaVersion = "1.2".
 
+        Règle centrale de date métier :
+        - la date autorisée est calculée côté API avec le fuseau Europe/Paris ;
+        - sur Windows Server, l'identifiant de fuseau utilisé est Romance Standard Time ;
+        - le fallback Europe/Paris permet aussi l'exécution sur Linux ou en environnement de développement ;
+        - les POST d'écriture refusent toute date différente de la date serveur autorisée ;
+        - un POST ancien ou futur retourne 409 Conflict ;
+        - les GET mobiles ne doivent pas accepter de date envoyée par le client.
+
         Routes Expédition finales :
         - GET  /api/expedition/preparations/a-preparer
         - POST /api/expedition/preparations/verrouiller
@@ -73,7 +81,8 @@ builder.Services.AddSwaggerGen(options =>
         - source = APPLICATION_WEB_EXPEDITION ;
         - fuseauHoraireMetier = Europe/Paris ;
         - dateVerrouillageDemandee avec offset ISO 8601 ;
-        - corps JSON avec tournees[] / lignes[] / quantitesPrevues[].
+        - corps JSON avec tournees[] / lignes[] / quantitesPrevues[] ;
+        - dateTournee doit correspondre à la date métier autorisée côté API.
 
         Principe d'architecture :
         - le mobile ne se connecte jamais directement à SQL Server ;
@@ -95,6 +104,7 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 builder.Services.AddSingleton<SqlConnectionFactory>();
+builder.Services.AddSingleton<DateMetierService>();
 
 builder.Services.AddScoped<LivreursRepository>();
 

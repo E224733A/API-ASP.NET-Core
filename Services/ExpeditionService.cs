@@ -31,26 +31,29 @@ public sealed class ExpeditionService
 
     private readonly TourneesRepository _tourneesRepository;
     private readonly ExpeditionRepository _expeditionRepository;
+    private readonly DateMetierService _dateMetierService;
     private readonly ILogger<ExpeditionService> _logger;
 
     public ExpeditionService(
         TourneesRepository tourneesRepository,
         ExpeditionRepository expeditionRepository,
+        DateMetierService dateMetierService,
         ILogger<ExpeditionService> logger)
     {
         _tourneesRepository = tourneesRepository;
         _expeditionRepository = expeditionRepository;
+        _dateMetierService = dateMetierService;
         _logger = logger;
     }
 
     /// <summary>
     /// GET global Expédition.
-    /// La date est calculée côté API. En première version, elle correspond au lendemain calendaire.
+    /// La date est calculée côté API avec la date métier Europe/Paris.
     /// </summary>
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         CancellationToken cancellationToken = default)
     {
-        var dateTournee = GetDatePreparable();
+        var dateTournee = _dateMetierService.GetDateTourneeAutorisee();
 
         var lignes = (await _tourneesRepository.GetTourneeLinesAsync(
             dateTournee,
@@ -67,7 +70,7 @@ public sealed class ExpeditionService
             DatePreparable = dateTournee.ToString("yyyy-MM-dd"),
             DateModifiable = false,
             FuseauHoraireMetier = FuseauHoraireMetier,
-            DateGenerationApi = DateTimeOffset.Now.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+            DateGenerationApi = _dateMetierService.GetNowParis().ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
             ArticlesPreparables = articles
                 .Select(article => new ExpeditionArticlePreparableDto
                 {
@@ -83,7 +86,7 @@ public sealed class ExpeditionService
 
         if (lignes.Count == 0)
         {
-            response.Message = "Aucune tournée préparable pour la date calculée.";
+            response.Message = "Aucune tournée préparable pour la date métier calculée par l'API.";
             return response;
         }
 
@@ -183,7 +186,7 @@ public sealed class ExpeditionService
     /// POST global Expédition v1.2.
     /// Vérifie le lot, contrôle les lignes et articles, puis verrouille les tournées dans une transaction SQL.
     /// </summary>
-    public async Task<(int StatusCode, ExpeditionApiResult Body)> VerrouillerPreparationLotAsync(
+    public async Task<(int StatusCode, object Body)> VerrouillerPreparationLotAsync(
         ExpeditionVerrouillageLotRequest? request,
         string? adresseIp,
         CancellationToken cancellationToken = default)
@@ -204,6 +207,19 @@ public sealed class ExpeditionService
         }
 
         var dateTournee = DateTime.Parse(request.DateTournee).Date;
+        var dateTourneePayload = DateOnly.FromDateTime(dateTournee);
+        var dateTourneeAutorisee = _dateMetierService.GetDateTourneeAutorisee();
+
+        if (dateTourneePayload != dateTourneeAutorisee)
+        {
+            return (
+                StatusCodes.Status409Conflict,
+                BuildDateTourneeNonAutoriseeResponse(
+                    dateTourneePayload,
+                    dateTourneeAutorisee,
+                    "verrouillée"));
+        }
+
         var idLotVerrouillageTechnique = BuildDeterministicGuid(request.IdLotVerrouillage);
         var empreintePayload = ComputePayloadFingerprint(request);
 
@@ -315,6 +331,7 @@ public sealed class ExpeditionService
         CancellationToken cancellationToken)
     {
         var errors = new List<string>();
+        DateTime? dateTourneeValide = null;
 
         if (request is null)
         {
@@ -343,12 +360,7 @@ public sealed class ExpeditionService
         }
         else
         {
-            dateTournee = dateTournee.Date;
-            var datePreparable = GetDatePreparable().ToDateTime(TimeOnly.MinValue).Date;
-            if (dateTournee != datePreparable)
-            {
-                errors.Add($"dateTournee doit correspondre à la date préparable calculée par l'API : {datePreparable:yyyy-MM-dd}.");
-            }
+            dateTourneeValide = dateTournee.Date;
         }
 
         if (!DateTimeOffset.TryParse(request.DateVerrouillageDemandee, out var dateVerrouillageDemandee))
@@ -371,18 +383,23 @@ public sealed class ExpeditionService
             return errors;
         }
 
-        if (DateTime.TryParse(request.DateTournee, out var validDate))
+        if (dateTourneeValide.HasValue)
         {
-            var lignesPreparables = (await _tourneesRepository.GetTourneeLinesAsync(
-                DateOnly.FromDateTime(validDate.Date),
-                codeLivreur: string.Empty,
-                codeTournee: null)).ToList();
+            var dateAutorisee = _dateMetierService.GetDateTourneeAutorisee().ToDateTime(TimeOnly.MinValue).Date;
 
-            var idLignesPreparables = lignesPreparables
-                .Select(ligne => TourneeMobileMapper.BuildIdLigneSource(DateOnly.FromDateTime(validDate.Date), ligne))
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            if (dateTourneeValide.Value == dateAutorisee)
+            {
+                var lignesPreparables = (await _tourneesRepository.GetTourneeLinesAsync(
+                    DateOnly.FromDateTime(dateTourneeValide.Value),
+                    codeLivreur: string.Empty,
+                    codeTournee: null)).ToList();
 
-            ValidateTournees(request, idLignesPreparables, errors);
+                var idLignesPreparables = lignesPreparables
+                    .Select(ligne => TourneeMobileMapper.BuildIdLigneSource(DateOnly.FromDateTime(dateTourneeValide.Value), ligne))
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                ValidateTournees(request, idLignesPreparables, errors);
+            }
         }
 
         return errors;
@@ -510,9 +527,36 @@ public sealed class ExpeditionService
         };
     }
 
-    private static DateOnly GetDatePreparable()
+    private static object BuildDateTourneeNonAutoriseeResponse(
+        DateOnly dateTourneePayload,
+        DateOnly dateTourneeAutorisee,
+        string actionMetier)
     {
-        return DateOnly.FromDateTime(DateTime.Today.AddDays(1));
+        var datePayload = dateTourneePayload.ToString("yyyy-MM-dd");
+        var dateAutorisee = dateTourneeAutorisee.ToString("yyyy-MM-dd");
+
+        if (dateTourneePayload < dateTourneeAutorisee)
+        {
+            return new
+            {
+                success = false,
+                statut = "CONFLICT",
+                code = "DATE_TOURNEE_EXPIREE",
+                message = $"La tournée envoyée date du {datePayload}. Elle ne peut plus être {actionMetier} le {dateAutorisee}.",
+                dateTourneePayload = datePayload,
+                dateTourneeAutorisee = dateAutorisee
+            };
+        }
+
+        return new
+        {
+            success = false,
+            statut = "CONFLICT",
+            code = "DATE_TOURNEE_NON_AUTORISEE",
+            message = $"La tournée envoyée date du {datePayload}. Elle ne peut pas être {actionMetier} le {dateAutorisee}.",
+            dateTourneePayload = datePayload,
+            dateTourneeAutorisee = dateAutorisee
+        };
     }
 
     private static string ComputePayloadFingerprint(ExpeditionVerrouillageLotRequest request)
