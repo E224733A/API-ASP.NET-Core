@@ -49,11 +49,12 @@ public sealed class ExpeditionService
     /// <summary>
     /// GET global Expédition.
     /// La date est calculée côté API avec la date métier Europe/Paris.
+    /// Règle métier : l'Expédition prépare les tournées du lendemain.
     /// </summary>
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         CancellationToken cancellationToken = default)
     {
-        var dateTournee = _dateMetierService.GetDateTourneeAutorisee();
+        var dateTournee = _dateMetierService.GetDateTourneeExpeditionPreparable();
 
         var lignes = (await _tourneesRepository.GetTourneeLinesAsync(
             dateTournee,
@@ -86,7 +87,7 @@ public sealed class ExpeditionService
 
         if (lignes.Count == 0)
         {
-            response.Message = "Aucune tournée préparable pour la date métier calculée par l'API.";
+            response.Message = "Aucune tournée préparable pour la date métier Expédition calculée par l'API.";
             return response;
         }
 
@@ -208,7 +209,7 @@ public sealed class ExpeditionService
 
         var dateTournee = DateTime.Parse(request.DateTournee).Date;
         var dateTourneePayload = DateOnly.FromDateTime(dateTournee);
-        var dateTourneeAutorisee = _dateMetierService.GetDateTourneeAutorisee();
+        var dateTourneeAutorisee = _dateMetierService.GetDateTourneeExpeditionPreparable();
 
         if (dateTourneePayload != dateTourneeAutorisee)
         {
@@ -385,7 +386,7 @@ public sealed class ExpeditionService
 
         if (dateTourneeValide.HasValue)
         {
-            var dateAutorisee = _dateMetierService.GetDateTourneeAutorisee().ToDateTime(TimeOnly.MinValue).Date;
+            var dateAutorisee = _dateMetierService.GetDateTourneeExpeditionPreparable().ToDateTime(TimeOnly.MinValue).Date;
 
             if (dateTourneeValide.Value == dateAutorisee)
             {
