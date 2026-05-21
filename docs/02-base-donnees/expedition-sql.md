@@ -65,7 +65,18 @@ Ils peuvent seulement apparaître dans la partie de nettoyage d'un script comple
 
 Rôle : tracer les lots globaux envoyés par le Web Expédition.
 
-Cette table permet l'idempotence du POST :
+Cette table est un journal technique des POST de verrouillage Expédition.
+
+Elle permet :
+
+```text
+- de tracer chaque lot envoyé par le serveur web Expédition ;
+- d'assurer l'idempotence du POST via IdLotVerrouillage ;
+- de conserver l'historique des lots remplacés ;
+- de savoir quel est le dernier lot global actif pour une date.
+```
+
+Route concernée :
 
 ```http
 POST /api/expedition/preparations/verrouiller
@@ -81,8 +92,55 @@ Règle métier :
 
 ```text
 Un seul lot VERROUILLE est autorisé par DateTournee + CodeTournee.
-Pour le POST global, CodeTournee vaut généralement GLOBAL.
+Pour le POST global Expédition, CodeTournee vaut généralement GLOBAL.
 ```
+
+Quand un nouveau verrouillage global est effectué pour une date déjà verrouillée, l'ancien lot `GLOBAL / VERROUILLE` passe en :
+
+```text
+REMPLACE
+```
+
+Le nouveau lot devient alors le seul lot :
+
+```text
+GLOBAL / VERROUILLE
+```
+
+Important : `StatutLot = REMPLACE` ne signifie pas que les tournées contenues dans cet ancien lot sont invalides.
+
+Cela signifie seulement :
+
+```text
+ce lot global n’est plus le dernier lot global actif pour la date concernée.
+```
+
+Les tournées réellement valides pour le mobile ne sont pas déterminées par `Mobile_ExpeditionLotVerrouillage.StatutLot`.
+
+La validité métier d’une tournée verrouillée est portée par :
+
+```text
+Mobile_ExpeditionPreparation
+Mobile_ExpeditionPreparationLigne
+```
+
+Une tournée Expédition est considérée comme valide pour alimenter le mobile si :
+
+```sql
+Mobile_ExpeditionPreparation.StatutPreparation = N'VERROUILLEE'
+AND Mobile_ExpeditionPreparation.EstVerrouille = 1
+AND Mobile_ExpeditionPreparationLigne.Actif = 1
+```
+
+Le mobile, les exports métier et les futurs écrans d’administration ne doivent donc pas utiliser uniquement :
+
+```sql
+WHERE Mobile_ExpeditionLotVerrouillage.StatutLot = N'VERROUILLE'
+```
+
+pour déterminer les tournées utilisables.
+
+Cette requête serait incorrecte, car elle ne récupérerait que les tournées du dernier lot global actif, alors que des tournées verrouillées par un ancien lot `REMPLACE` peuvent encore être valides dans `Mobile_ExpeditionPreparation`.
 
 Champs importants :
 
@@ -112,7 +170,70 @@ Statuts autorisés :
 VERROUILLE
 REJOUE_IDENTIQUE
 REFUSE
+REMPLACE
 ```
+
+Signification des statuts :
+
+```text
+VERROUILLE
+    Dernier lot global actif pour une date et un CodeTournee donné.
+
+REJOUE_IDENTIQUE
+    Lot rejoué avec le même contenu, conservé pour trace technique.
+
+REFUSE
+    Lot refusé par l’API ou par les règles de validation.
+
+REMPLACE
+    Ancien lot global qui a été remplacé par un nouveau lot VERROUILLE.
+    Il reste conservé pour l’audit, mais il n’est plus le lot global actif.
+```
+
+Exemple :
+
+```text
+1. SERVWEB prépare les tournées 5001 et 5017.
+2. L’API verrouille 5001 et 5017.
+3. Mobile_ExpeditionPreparation contient 5001 et 5017 en VERROUILLEE.
+
+4. SERVWEB prépare ensuite la tournée 5005.
+5. L’API verrouille 5005.
+6. L’ancien lot GLOBAL passe en REMPLACE.
+7. Le nouveau lot GLOBAL passe en VERROUILLE.
+8. 5001, 5017 et 5005 restent en VERROUILLEE dans Mobile_ExpeditionPreparation.
+9. Le mobile peut lire 5001, 5017 et 5005.
+```
+
+Requête correcte pour récupérer les préparations valides :
+
+```sql
+SELECT
+    p.DateTournee,
+    p.CodeTournee,
+    p.StatutPreparation,
+    p.EstVerrouille,
+    l.IdLigneSource,
+    l.CodeArticle,
+    l.QuantiteLivreePrevue
+FROM dbo.Mobile_ExpeditionPreparation p
+INNER JOIN dbo.Mobile_ExpeditionPreparationLigne l
+    ON l.IdPreparationExpedition = p.IdPreparationExpedition
+WHERE p.DateTournee = @DateTournee
+  AND p.StatutPreparation = N'VERROUILLEE'
+  AND p.EstVerrouille = 1
+  AND l.Actif = 1;
+```
+
+Requête à éviter pour déterminer les tournées utilisables :
+
+```sql
+SELECT *
+FROM dbo.Mobile_ExpeditionLotVerrouillage lot
+WHERE lot.StatutLot = N'VERROUILLE';
+```
+
+Cette requête ne doit servir qu’à identifier le dernier lot global actif, pas les tournées réellement exploitables par le mobile.
 
 ## Mobile_ExpeditionPreparation
 

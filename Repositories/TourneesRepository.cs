@@ -203,6 +203,12 @@ public class TourneesRepository
         return commentaires.ToList();
     }
 
+    // Important : ne pas filtrer sur Mobile_ExpeditionLotVerrouillage.StatutLot ici.
+    // Mobile_ExpeditionLotVerrouillage est un journal technique des lots.
+    // Une tournée est valide pour le mobile si sa préparation est VERROUILLEE,
+    // EstVerrouille = 1, et si ses lignes sont Actif = 1.
+    // Un ancien lot peut être en REMPLACE sans invalider les tournées déjà présentes
+    // dans Mobile_ExpeditionPreparation.
     public async Task<IReadOnlyList<PreRemplissageQuantiteRecord>> GetPreRemplissagesAsync(
         DateOnly dateTournee,
         string codeTournee)

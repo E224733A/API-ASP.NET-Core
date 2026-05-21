@@ -49,6 +49,66 @@ L'API les utilise pour alimenter `quantiteLivreePrevue` dans `GET /api/tournees/
 | `Mobile_ExpeditionPreparationLigne` | Quantités prévues par article et par arrêt |
 | `Mobile_CommentaireExceptionnel` | Commentaire ponctuel séparé des instructions |
 
+### Règle importante : ne pas utiliser StatutLot pour le mobile
+
+Le mobile ne doit pas déterminer les tournées disponibles à partir de :
+
+```text
+Mobile_ExpeditionLotVerrouillage.StatutLot
+```
+
+`Mobile_ExpeditionLotVerrouillage` est un journal technique des lots envoyés par le serveur web Expédition.
+
+Cette table sert à tracer les POST de verrouillage, à conserver l’historique des lots et à identifier le dernier lot global actif.
+
+Elle ne doit pas être utilisée comme source principale pour savoir quelles tournées sont valides côté mobile.
+
+La validité des données Expédition pour le mobile repose sur :
+
+```sql
+Mobile_ExpeditionPreparation.StatutPreparation = N'VERROUILLEE'
+AND Mobile_ExpeditionPreparation.EstVerrouille = 1
+AND Mobile_ExpeditionPreparationLigne.Actif = 1
+```
+
+Un lot avec :
+
+```text
+StatutLot = REMPLACE
+```
+
+peut avoir verrouillé des tournées encore valides dans :
+
+```text
+Mobile_ExpeditionPreparation
+```
+
+Exemple :
+
+```text
+1. Un premier lot verrouille les tournées 5001 et 5017.
+2. Un second lot verrouille ensuite la tournée 5005.
+3. Le premier lot passe en REMPLACE.
+4. Le second lot devient VERROUILLE.
+5. Les tournées 5001, 5017 et 5005 restent valides si elles sont présentes dans Mobile_ExpeditionPreparation avec :
+   - StatutPreparation = VERROUILLEE ;
+   - EstVerrouille = 1 ;
+   - lignes Actif = 1.
+```
+
+Donc le mobile et les futurs exports métier doivent partir de :
+
+```text
+Mobile_ExpeditionPreparation
+Mobile_ExpeditionPreparationLigne
+```
+
+et non de :
+
+```text
+Mobile_ExpeditionLotVerrouillage.StatutLot
+```
+
 ## Mobile_Tournee
 
 Champs importants :
@@ -105,7 +165,7 @@ QuantiteRecuperee
 
 ## Origine de QuantiteLivreePrevue
 
-`QuantiteLivreePrevue` vient du module Expédition uniquement après verrouillage.
+`QuantiteLivreePrevue` vient du module Expédition uniquement après verrouillage par l’API.
 
 Flux :
 
@@ -113,10 +173,22 @@ Flux :
 Mobile_ExpeditionPreparationLigne.QuantiteLivreePrevue
         -> API GET /api/tournees/jour
         -> lignes[].saisie.quantites[].quantiteLivreePrevue
-        -> Mobile_TourneeLigneQuantite.QuantiteLivreePrevue après synchronisation
+        -> Mobile_TourneeLigneQuantite.QuantiteLivreePrevue après synchronisation mobile
 ```
 
 Une préparation Expédition non verrouillée ne doit jamais alimenter le mobile.
+
+Le mobile reçoit uniquement les quantités prévues provenant de lignes actives :
+
+```sql
+Mobile_ExpeditionPreparation.StatutPreparation = N'VERROUILLEE'
+AND Mobile_ExpeditionPreparation.EstVerrouille = 1
+AND Mobile_ExpeditionPreparationLigne.Actif = 1
+```
+
+Le statut du lot global dans `Mobile_ExpeditionLotVerrouillage` ne doit pas être utilisé pour décider si une tournée est disponible côté mobile.
+
+`Mobile_ExpeditionLotVerrouillage.StatutLot` sert à l’audit des lots envoyés, pas à la validité métier des tournées.
 
 ## Articles
 
