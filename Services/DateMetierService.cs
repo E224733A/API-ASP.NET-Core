@@ -19,12 +19,48 @@ public sealed class DateMetierService
     /// <summary>
     /// Date métier utilisée par le module Expédition.
     ///
-    /// Règle métier : l'Expédition prépare les tournées du lendemain.
-    /// Exemple : le 21/05/2026, le Web Expédition prépare la tournée du 22/05/2026.
+    /// Règle métier : l'Expédition prépare le prochain jour ouvré métier après la date du jour.
+    /// Dans cette première version, les jours non ouvrés sont uniquement le samedi et le dimanche.
+    ///
+    /// Exemples :
+    /// - lundi    -> mardi
+    /// - mardi    -> mercredi
+    /// - mercredi -> jeudi
+    /// - jeudi    -> vendredi
+    /// - vendredi -> lundi
+    /// - samedi   -> lundi
+    /// - dimanche -> lundi
     /// </summary>
     public DateOnly GetDateTourneeExpeditionPreparable()
     {
-        return GetDateTourneeMobileAutorisee().AddDays(1);
+        return GetProchainJourOuvreExpedition(GetDateTourneeMobileAutorisee());
+    }
+
+    /// <summary>
+    /// Calcule le prochain jour ouvré métier Expédition après une date de référence.
+    /// Cette méthode permet de tester facilement la règle sans dépendre de l'heure système.
+    /// </summary>
+    public DateOnly GetProchainJourOuvreExpedition(DateOnly dateReference)
+    {
+        var candidate = dateReference.AddDays(1);
+
+        while (EstJourNonOuvreExpedition(candidate))
+        {
+            candidate = candidate.AddDays(1);
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Indique si une date est non ouvrée pour l'Expédition.
+    /// Version actuelle : week-end uniquement.
+    /// Évolution prévue : ajouter une table calendrier métier pour les jours fériés,
+    /// ponts et fermetures exceptionnelles.
+    /// </summary>
+    public bool EstJourNonOuvreExpedition(DateOnly date)
+    {
+        return date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday;
     }
 
     /// <summary>

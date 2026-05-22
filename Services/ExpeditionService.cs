@@ -49,7 +49,8 @@ public sealed class ExpeditionService
     /// <summary>
     /// GET global Expédition.
     /// La date est calculée côté API avec la date métier Europe/Paris.
-    /// Règle métier : l'Expédition prépare les tournées du lendemain.
+    /// Règle métier : l'Expédition prépare le prochain jour ouvré métier.
+    /// Version actuelle : le samedi et le dimanche sont ignorés.
     /// </summary>
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         CancellationToken cancellationToken = default)
@@ -186,6 +187,7 @@ public sealed class ExpeditionService
     /// <summary>
     /// POST global Expédition v1.2.
     /// Vérifie le lot, contrôle les lignes et articles, puis verrouille les tournées dans une transaction SQL.
+    /// La date autorisée est la même que celle du GET : prochain jour ouvré métier Expédition.
     /// </summary>
     public async Task<(int StatusCode, object Body)> VerrouillerPreparationLotAsync(
         ExpeditionVerrouillageLotRequest? request,
@@ -518,9 +520,9 @@ public sealed class ExpeditionService
     {
         return new ExpeditionReglesDto
         {
-            HeureVerrouillageMetier = "00:05",
+            HeureVerrouillageMetier = "22:35",
             FuseauHoraireMetier = FuseauHoraireMetier,
-            FenetreModification = "Les préparations sont modifiables avant le verrouillage automatique autour de 00:05.",
+            FenetreModification = "Les préparations sont modifiables avant le verrouillage automatique entre 22:35 et 22:55.",
             ArticlesAutorises = ArticlesAutorises.OrderBy(code => code).ToList(),
             ArticlesInterdits = new List<string> { ArticlesSaisissables.RollsVides },
             ExclureRollsVides = true,

@@ -105,9 +105,9 @@ public sealed class ExpeditionQuantitePrevueDto
 
 public sealed class ExpeditionReglesDto
 {
-    public string HeureVerrouillageMetier { get; set; } = "00:05";
+    public string HeureVerrouillageMetier { get; set; } = "22:35";
     public string FuseauHoraireMetier { get; set; } = "Europe/Paris";
-    public string FenetreModification { get; set; } = "Les préparations sont modifiables avant le verrouillage automatique autour de 00:05.";
+    public string FenetreModification { get; set; } = "Les préparations sont modifiables avant le verrouillage automatique entre 22:35 et 22:55.";
     public List<string> ArticlesAutorises { get; set; } = new() { "ROLLS", "TAPIS", "SACS" };
     public List<string> ArticlesInterdits { get; set; } = new() { "ROLLS_VIDES" };
     public bool ExclureRollsVides { get; set; } = true;
