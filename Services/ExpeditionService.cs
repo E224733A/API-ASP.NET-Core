@@ -19,6 +19,7 @@ public sealed class ExpeditionService
     private static readonly HashSet<string> ArticlesAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "ROLLS",
+        "ROLLS_VIDES",
         "TAPIS",
         "SACS"
     };
@@ -497,14 +498,9 @@ public sealed class ExpeditionService
                         errors.Add($"{prefixQuantite}.codeArticle est présent plusieurs fois dans la même ligne.");
                     }
 
-                    if (IsRollsVides(codeArticle))
-                    {
-                        errors.Add($"{prefixQuantite}.codeArticle ROLLS_VIDES est interdit côté Expédition.");
-                    }
-
                     if (!IsArticleAutoriseExpedition(codeArticle))
                     {
-                        errors.Add($"{prefixQuantite}.codeArticle doit être ROLLS, TAPIS ou SACS.");
+                        errors.Add($"{prefixQuantite}.codeArticle doit être ROLLS, ROLLS_VIDES, TAPIS ou SACS.");
                     }
 
                     if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
@@ -524,8 +520,8 @@ public sealed class ExpeditionService
             FuseauHoraireMetier = FuseauHoraireMetier,
             FenetreModification = "Les préparations sont modifiables avant le verrouillage automatique entre 22:35 et 22:55.",
             ArticlesAutorises = ArticlesAutorises.OrderBy(code => code).ToList(),
-            ArticlesInterdits = new List<string> { ArticlesSaisissables.RollsVides },
-            ExclureRollsVides = true,
+            ArticlesInterdits = new List<string>(),
+            ExclureRollsVides = false,
             QuantitesNullesAutorisees = true
         };
     }
@@ -675,11 +671,6 @@ public sealed class ExpeditionService
     private static bool IsArticleAutoriseExpedition(string? codeArticle)
     {
         return ArticlesAutorises.Contains(NormalizeArticleCode(codeArticle));
-    }
-
-    private static bool IsRollsVides(string? codeArticle)
-    {
-        return string.Equals(NormalizeArticleCode(codeArticle), ArticlesSaisissables.RollsVides, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string NormalizeArticleCode(string? value)

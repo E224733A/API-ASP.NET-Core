@@ -21,8 +21,8 @@ public sealed class ExpeditionPreparationResponseDto
 
 /// <summary>
 /// Article préparé côté Expédition.
-/// Seuls ROLLS, TAPIS et SACS sont autorisés.
-/// ROLLS_VIDES est volontairement exclu.
+/// ROLLS = chariots, ROLLS_VIDES = chariots vides.
+/// Seuls ROLLS, ROLLS_VIDES, TAPIS et SACS sont autorisés côté Expédition.
 /// </summary>
 public sealed class ExpeditionArticlePreparableDto
 {
@@ -108,9 +108,9 @@ public sealed class ExpeditionReglesDto
     public string HeureVerrouillageMetier { get; set; } = "22:35";
     public string FuseauHoraireMetier { get; set; } = "Europe/Paris";
     public string FenetreModification { get; set; } = "Les préparations sont modifiables avant le verrouillage automatique entre 22:35 et 22:55.";
-    public List<string> ArticlesAutorises { get; set; } = new() { "ROLLS", "TAPIS", "SACS" };
-    public List<string> ArticlesInterdits { get; set; } = new() { "ROLLS_VIDES" };
-    public bool ExclureRollsVides { get; set; } = true;
+    public List<string> ArticlesAutorises { get; set; } = new() { "ROLLS", "ROLLS_VIDES", "TAPIS", "SACS" };
+    public List<string> ArticlesInterdits { get; set; } = new();
+    public bool ExclureRollsVides { get; set; } = false;
     public bool QuantitesNullesAutorisees { get; set; } = true;
 }
 

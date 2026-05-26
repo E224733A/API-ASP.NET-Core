@@ -9,8 +9,8 @@ public static class ArticlesSaisissables
     public const string Vetements = "VETEMENTS";
     public const string Expes = "EXPES";
 
-    public const string LibelleRolls = "Rolls";
-    public const string LibelleRollsVides = "Rolls vides";
+    public const string LibelleRolls = "Chariots";
+    public const string LibelleRollsVides = "Chariots vides";
     public const string LibelleTapis = "Tapis";
     public const string LibelleSacs = "Sacs";
     public const string LibelleVetements = "Vêtements";
@@ -19,13 +19,15 @@ public static class ArticlesSaisissables
     /*
      * Articles affichés dans l'application mobile pour la V1.2.
      *
-     * Le mobile applique déjà les règles de saisie métier en dur.
-     * L'API doit tout de même renvoyer ROLLS_VIDES dans la liste afin
-     * que la ligne apparaisse au chargement du matin, même si le référentiel
-     * SQL n'a pas encore été alimenté ou si la base vient d'être recréée.
+     * Règle métier : ROLLS et ROLLS_VIDES utilisent le vocabulaire métier
+     * "chariots". ROLLS correspond aux chariots classiques, ROLLS_VIDES
+     * correspond aux chariots vides demandés par les clients.
      *
-     * Côté Expédition, ROLLS_VIDES n'est pas préparable : il est uniquement
-     * récupéré sur le terrain. Cette règle est validée dans ExpeditionService.
+     * ROLLS_VIDES peut désormais être préparé côté Expédition comme une
+     * quantité livrée prévue, tout en restant récupérable côté mobile.
+     * Cela permet de suivre deux mouvements différents sur le même article :
+     * - quantiteLivreePrevue / quantiteLivree pour les chariots vides demandés ;
+     * - quantiteRecuperee pour les chariots vides récupérés sur le terrain.
      */
     public static readonly IReadOnlyList<(string CodeArticle, string Libelle)> ActifsV1 =
         new List<(string CodeArticle, string Libelle)>

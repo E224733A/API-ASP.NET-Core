@@ -1,4 +1,3 @@
-using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Models;
 using Dapper;
@@ -94,9 +93,7 @@ public sealed class ExpeditionRepository
         var nombreQuantites = request.Tournees
             .SelectMany(tournee => tournee.Lignes ?? new List<ExpeditionVerrouillageLigneRequest>())
             .SelectMany(ligne => ligne.QuantitesPrevues ?? new List<ExpeditionQuantitePrevueRequest>())
-            .Count(quantite =>
-                !IsRollsVides(quantite.CodeArticle)
-                && quantite.QuantiteLivreePrevue.HasValue);
+            .Count(quantite => quantite.QuantiteLivreePrevue.HasValue);
 
         try
         {
@@ -398,7 +395,7 @@ public sealed class ExpeditionRepository
 
         foreach (var quantite in ligne.QuantitesPrevues)
         {
-            if (IsRollsVides(quantite.CodeArticle) || !quantite.QuantiteLivreePrevue.HasValue)
+            if (!quantite.QuantiteLivreePrevue.HasValue)
             {
                 continue;
             }
@@ -623,11 +620,6 @@ public sealed class ExpeditionRepository
                 },
                 transaction,
                 cancellationToken: cancellationToken));
-    }
-
-    private static bool IsRollsVides(string? codeArticle)
-    {
-        return string.Equals(codeArticle?.Trim(), ArticlesSaisissables.RollsVides, StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? NormalizeNullable(string? value)
