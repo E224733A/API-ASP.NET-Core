@@ -8,7 +8,7 @@ namespace API_ASP.NET_Core.Repositories;
 public sealed class SynchronisationsRepository
 {
     private const string CodeArticleRollsVides = "ROLLS_VIDES";
-    private const string LibelleArticleRollsVides = "Rolls vides";
+    private const string LibelleArticleRollsVides = "Chariots vides";
 
     private readonly string _connectionString;
 
@@ -770,19 +770,16 @@ VALUES
 
     private static SynchronisationQuantiteRequest NormalizeQuantite(SynchronisationQuantiteRequest quantite)
     {
-        var codeArticle = quantite.CodeArticle?.Trim() ?? string.Empty;
-
-        if (!IsRollsVides(codeArticle))
-        {
-            return quantite;
-        }
+        var codeArticle = string.IsNullOrWhiteSpace(quantite.CodeArticle)
+            ? string.Empty
+            : quantite.CodeArticle.Trim().ToUpperInvariant();
 
         return new SynchronisationQuantiteRequest
         {
-            CodeArticle = CodeArticleRollsVides,
-            Libelle = NormalizeLibelleArticle(CodeArticleRollsVides, quantite.Libelle),
-            QuantiteLivreePrevue = null,
-            QuantiteLivree = 0,
+            CodeArticle = codeArticle,
+            Libelle = NormalizeLibelleArticle(codeArticle, quantite.Libelle),
+            QuantiteLivreePrevue = quantite.QuantiteLivreePrevue,
+            QuantiteLivree = quantite.QuantiteLivree,
             QuantiteRecuperee = quantite.QuantiteRecuperee
         };
     }

@@ -5,8 +5,6 @@ namespace API_ASP.NET_Core.Validators;
 
 public sealed class SynchronisationTourneeValidator
 {
-    private const string CodeArticleRollsVides = "ROLLS_VIDES";
-
     private static readonly HashSet<string> StatutsAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "FAIT",
@@ -170,38 +168,10 @@ public sealed class SynchronisationTourneeValidator
                 {
                     errors.Add(new SynchronisationValidationError($"{quantitePrefix}.quantiteRecuperee", "La quantité récupérée doit être positive ou nulle."));
                 }
-
-                /*
-                 * Règle métier ROLLS_VIDES :
-                 * cet article sert uniquement à distinguer les rolls vides récupérés.
-                 * Il ne doit jamais être livré au client et ne doit pas avoir
-                 * de quantité livrée prévue positive.
-                 */
-                if (IsRollsVides(quantite.CodeArticle))
-                {
-                    if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value > 0)
-                    {
-                        errors.Add(new SynchronisationValidationError(
-                            $"{quantitePrefix}.quantiteLivreePrevue",
-                            "Les rolls vides ne doivent pas avoir de quantité livrée prévue."));
-                    }
-
-                    if (quantite.QuantiteLivree != 0)
-                    {
-                        errors.Add(new SynchronisationValidationError(
-                            $"{quantitePrefix}.quantiteLivree",
-                            "L'article ROLLS_VIDES est uniquement récupéré : la quantité livrée doit être égale à 0."));
-                    }
-                }
             }
         }
 
         return new SynchronisationValidationResult(errors);
-    }
-
-    public static bool IsRollsVides(string? codeArticle)
-    {
-        return string.Equals(codeArticle?.Trim(), CodeArticleRollsVides, StringComparison.OrdinalIgnoreCase);
     }
 
     public static DateTime ParseDateTournee(object? value)
