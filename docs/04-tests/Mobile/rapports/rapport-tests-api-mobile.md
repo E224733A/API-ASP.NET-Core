@@ -1,12 +1,12 @@
 ﻿# Rapport tests API Mobile SLI v1.2
 
-Date execution : 2026-05-27 11:56:00
+Date execution : 2026-05-27 14:09:52
 
 API testee : http://192.168.1.233:5000/api/synchronisations
 
 Date tournee utilisee : 2026-05-27
 
-RunId : 20260527115557
+RunId : 20260527140947
 
 ## Synthese
 

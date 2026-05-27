@@ -23,11 +23,14 @@ Les tests POST peuvent écrire en base de développement.
 4. Vérifier les données SQL après les POST.
 
 
-
+Test de base : 
 Les tests API Mobile v1.2 ont été exécutés le 27/05/2026 contre l’API centrale http://192.168.1.233:5000.
 Les 18 scénarios automatisés sont passés avec succès : 18 OK, 0 KO, 0 ignoré.
 Les tests couvrent les synchronisations valides, les doublons techniques, les doublons métier, les validations de quantités, les statuts invalides, les lignes non validées, les articles dupliqués, la version de schéma et le cas métier ROLLS_VIDES.
 
+Test de masse : 
+Le test de masse de 20 synchronisations mobiles est validé.
+L’API a accepté 20/20 synchronisations, sans erreur 400, 409 ou 500.
+La vérification SQL confirme l’enregistrement des volumes attendus en base.
+Le seuil de performance k6 a signalé un dépassement sur le p95, mais cela ne remet pas en cause la réussite fonctionnelle du test.
 
-
-Le script ne fonctionne pas pour test de masse. 
