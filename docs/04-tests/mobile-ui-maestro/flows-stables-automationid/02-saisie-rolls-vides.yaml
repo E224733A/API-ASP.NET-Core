@@ -1,0 +1,29 @@
+appId: fr.sli.mobiletournee
+---
+# MUI-002 - Saisie ROLLS_VIDES avec AutomationId
+#
+# Précondition :
+# - une tournée contenant ROLLS_VIDES est chargée localement ;
+# - l'écran Points de livraison est affiché ;
+# - les AutomationId recommandés sont ajoutés dans l'application mobile.
+
+- launchApp
+- assertVisible:
+    id: "page_points_livraison"
+- tapOn:
+    id: "btn_ouvrir_point_0"
+- assertVisible:
+    id: "page_detail_point"
+- assertVisible:
+    id: "row_article_rolls_vides"
+- assertVisible:
+    id: "input_rolls_vides_livre"
+- tapOn:
+    id: "input_rolls_vides_livre"
+- eraseText
+- inputText: "3"
+- hideKeyboard
+- tapOn:
+    id: "btn_valider_passage"
+- assertVisible:
+    id: "page_points_livraison"

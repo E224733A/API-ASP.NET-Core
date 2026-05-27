@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "1.2",
+  "idSynchronisation": "10000000-0000-4000-8000-000000000016",
+  "dateTournee": "2026-06-04",
+  "codeTournee": "4025",
+  "libelleTournee": "TEST LIGNES VIDE",
+  "livreur": {
+    "codeLivreur": "2",
+    "nomLivreur": "DAVID LEBAS"
+  },
+  "mobile": {
+    "nomAppareil": "Postman Test",
+    "versionApplication": "1.0.0",
+    "dateChargementMobile": "2026-06-04T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-04T16:45:00+02:00"
+  },
+  "commentaireGlobal": null,
+  "lignes": []
+}

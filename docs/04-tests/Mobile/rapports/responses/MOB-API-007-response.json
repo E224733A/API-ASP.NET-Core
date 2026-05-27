@@ -1,0 +1,1 @@
+﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["L'heure de validation est obligatoire et doit être valide."],"details":[{"champ":"lignes[0].saisie.heureValidation","message":"L'heure de validation est obligatoire et doit être valide."}]}

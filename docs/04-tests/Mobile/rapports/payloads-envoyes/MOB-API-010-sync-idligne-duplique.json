@@ -1,0 +1,168 @@
+﻿{
+    "schemaVersion":  "1.2",
+    "idSynchronisation":  "37d1e942-375a-4f48-aef6-7bce43e9d841",
+    "dateTournee":  "2026-05-27",
+    "codeTournee":  "M11555710",
+    "libelleTournee":  "TEST API MOBILE MOB-API-010",
+    "livreur":  {
+                    "codeLivreur":  "2",
+                    "nomLivreur":  "DAVID LEBAS"
+                },
+    "mobile":  {
+                   "nomAppareil":  "Test PowerShell 20260527115557",
+                   "versionApplication":  "1.0.0-test",
+                   "dateChargementMobile":  "2026-05-27T07:30:00+02:00",
+                   "dateEnvoiMobile":  "2026-05-27T16:45:00+02:00"
+               },
+    "commentaireGlobal":  "TEST API MOBILE AUTOMATISE 20260527115557 MOB-API-010",
+    "lignes":  [
+                   {
+                       "idLigneSource":  "2026-05-27|M11555710|3|DUPLICATE|PDL|1",
+                       "ordreArret":  1,
+                       "horaire":  1,
+                       "client":  {
+                                      "numClient":  "333",
+                                      "nomClient":  "HOTEL LE MARTINET",
+                                      "nomAffiche":  "HOTEL LE MARTINET"
+                                  },
+                       "pointLivraison":  {
+                                              "codePDL":  "341",
+                                              "descriptionPDL":  "HOTEL LE MARTINET",
+                                              "adresseLigne1":  "PLACE DU GENERALE CHARRETTE",
+                                              "adresseLigne2":  null,
+                                              "adresseLigne3":  "SARL HOTEL LE MARTINET",
+                                              "ville":  "BOUIN",
+                                              "codePostal":  "85230"
+                                          },
+                       "tournee":  {
+                                       "codeTournee":  "M11555710",
+                                       "libelleTournee":  "TEST API MOBILE MOB-API-010",
+                                       "jourTournee":  3,
+                                       "jourLibelle":  "Mercredi",
+                                       "schemaLivraison":  "1W1"
+                                   },
+                       "retour":  {
+                                      "jourTourneeRetour":  3,
+                                      "jourRetourLibelle":  "Mercredi",
+                                      "codeTourneeRetour":  "M11555710",
+                                      "libelleTourneeRetour":  "TEST API MOBILE MOB-API-010"
+                                  },
+                       "infosLivreur":  {
+                                            "instructions":  "CODE 8578 *",
+                                            "commentaireExceptionnel":  null,
+                                            "zoneDechargement":  null,
+                                            "zoneDechargementAffichee":  "4",
+                                            "zone":  null,
+                                            "precision":  null,
+                                            "cle":  null,
+                                            "estFerme":  false,
+                                            "dateFermeture":  null,
+                                            "motifFermeture":  null
+                                        },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test API v1.2",
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null,
+                                      "heureValidation":  "2026-05-27T09:12:00+02:00",
+                                      "estValidee":  true,
+                                      "quantites":  [
+                                                        {
+                                                            "codeArticle":  "ROLLS",
+                                                            "libelle":  "Rolls",
+                                                            "quantiteLivreePrevue":  null,
+                                                            "quantiteLivree":  1,
+                                                            "quantiteRecuperee":  2
+                                                        },
+                                                        {
+                                                            "codeArticle":  "TAPIS",
+                                                            "libelle":  "Tapis",
+                                                            "quantiteLivreePrevue":  0,
+                                                            "quantiteLivree":  0,
+                                                            "quantiteRecuperee":  0
+                                                        },
+                                                        {
+                                                            "codeArticle":  "SACS",
+                                                            "libelle":  "Sacs",
+                                                            "quantiteLivreePrevue":  2,
+                                                            "quantiteLivree":  3,
+                                                            "quantiteRecuperee":  1
+                                                        }
+                                                    ]
+                                  }
+                   },
+                   {
+                       "idLigneSource":  "2026-05-27|M11555710|3|DUPLICATE|PDL|1",
+                       "ordreArret":  2,
+                       "horaire":  1,
+                       "client":  {
+                                      "numClient":  "334",
+                                      "nomClient":  "CLIENT DUPLIQUE",
+                                      "nomAffiche":  "CLIENT DUPLIQUE"
+                                  },
+                       "pointLivraison":  {
+                                              "codePDL":  "342",
+                                              "descriptionPDL":  "PDL DUPLIQUE",
+                                              "adresseLigne1":  "PLACE DU GENERALE CHARRETTE",
+                                              "adresseLigne2":  null,
+                                              "adresseLigne3":  "SARL HOTEL LE MARTINET",
+                                              "ville":  "BOUIN",
+                                              "codePostal":  "85230"
+                                          },
+                       "tournee":  {
+                                       "codeTournee":  "M11555710",
+                                       "libelleTournee":  "TEST API MOBILE MOB-API-010",
+                                       "jourTournee":  3,
+                                       "jourLibelle":  "Mercredi",
+                                       "schemaLivraison":  "1W1"
+                                   },
+                       "retour":  {
+                                      "jourTourneeRetour":  3,
+                                      "jourRetourLibelle":  "Mercredi",
+                                      "codeTourneeRetour":  "M11555710",
+                                      "libelleTourneeRetour":  "TEST API MOBILE MOB-API-010"
+                                  },
+                       "infosLivreur":  {
+                                            "instructions":  "CODE 8578 *",
+                                            "commentaireExceptionnel":  null,
+                                            "zoneDechargement":  null,
+                                            "zoneDechargementAffichee":  "4",
+                                            "zone":  null,
+                                            "precision":  null,
+                                            "cle":  null,
+                                            "estFerme":  false,
+                                            "dateFermeture":  null,
+                                            "motifFermeture":  null
+                                        },
+                       "saisie":  {
+                                      "precisionLivreur":  "Test API v1.2",
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null,
+                                      "heureValidation":  "2026-05-27T09:12:00+02:00",
+                                      "estValidee":  true,
+                                      "quantites":  [
+                                                        {
+                                                            "codeArticle":  "ROLLS",
+                                                            "libelle":  "Rolls",
+                                                            "quantiteLivreePrevue":  null,
+                                                            "quantiteLivree":  1,
+                                                            "quantiteRecuperee":  2
+                                                        },
+                                                        {
+                                                            "codeArticle":  "TAPIS",
+                                                            "libelle":  "Tapis",
+                                                            "quantiteLivreePrevue":  0,
+                                                            "quantiteLivree":  0,
+                                                            "quantiteRecuperee":  0
+                                                        },
+                                                        {
+                                                            "codeArticle":  "SACS",
+                                                            "libelle":  "Sacs",
+                                                            "quantiteLivreePrevue":  2,
+                                                            "quantiteLivree":  3,
+                                                            "quantiteRecuperee":  1
+                                                        }
+                                                    ]
+                                  }
+                   }
+               ]
+}

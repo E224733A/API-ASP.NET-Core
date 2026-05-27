@@ -1,0 +1,1 @@
+﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["La version de schéma supportée est 1.2."],"details":[{"champ":"schemaVersion","message":"La version de schéma supportée est 1.2."}]}

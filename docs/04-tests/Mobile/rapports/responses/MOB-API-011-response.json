@@ -1,0 +1,1 @@
+﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["Le code article est présent plusieurs fois dans une même ligne."],"details":[{"champ":"lignes[0].saisie.quantites[1].codeArticle","message":"Le code article est présent plusieurs fois dans une même ligne."}]}

@@ -1,0 +1,20 @@
+appId: fr.sli.mobiletournee
+---
+# MUI-003 - Validation simple d'un point
+#
+# Précondition :
+# - une tournée est déjà chargée localement ;
+# - l'écran "Points de livraison" est accessible au lancement ;
+# - au moins un point est encore à faire ;
+# - le point ouvert contient au moins un article saisissable.
+
+- launchApp
+- assertVisible: "Points de livraison"
+- tapOn: "Ouvrir"
+- assertVisible: "Détail point"
+- assertVisible: "Statut du passage"
+- tapOn: "Fait"
+- assertVisible: "Statut sélectionné"
+- assertVisible: "FAIT|Fait"
+- tapOn: "Valider le passage"
+- assertVisible: "Points de livraison"

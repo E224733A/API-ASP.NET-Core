@@ -1,0 +1,24 @@
+appId: fr.sli.mobiletournee
+---
+# MUI-003 - Validation d'un point avec AutomationId
+#
+# Précondition :
+# - une tournée est chargée localement ;
+# - au moins un point est encore à faire ;
+# - les AutomationId recommandés sont ajoutés dans l'application mobile.
+
+- launchApp
+- assertVisible:
+    id: "page_points_livraison"
+- tapOn:
+    id: "btn_ouvrir_point_0"
+- assertVisible:
+    id: "page_detail_point"
+- tapOn:
+    id: "btn_statut_fait"
+- assertVisible:
+    id: "label_statut_selectionne"
+- tapOn:
+    id: "btn_valider_passage"
+- assertVisible:
+    id: "page_points_livraison"

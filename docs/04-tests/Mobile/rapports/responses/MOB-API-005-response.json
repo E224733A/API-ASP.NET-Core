@@ -1,0 +1,1 @@
+﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["Le commentaire livreur est obligatoire pour le statut NON_FAIT ou ANOMALIE."],"details":[{"champ":"lignes[0].saisie.commentaireLivreur","message":"Le commentaire livreur est obligatoire pour le statut NON_FAIT ou ANOMALIE."}]}

@@ -1,0 +1,101 @@
+﻿{
+    "schemaVersion":  "1.2",
+    "idSynchronisation":  "25186e29-2fa0-40b8-a510-170da1671c6e",
+    "dateTournee":  "2026-05-27",
+    "codeTournee":  "M11555716",
+    "libelleTournee":  "TEST API MOBILE MOB-API-016",
+    "livreur":  {
+                    "codeLivreur":  "2",
+                    "nomLivreur":  "DAVID LEBAS"
+                },
+    "mobile":  {
+                   "nomAppareil":  "Test PowerShell 20260527115557",
+                   "versionApplication":  "1.0.0-test",
+                   "dateChargementMobile":  "2026-05-27T07:30:00+02:00",
+                   "dateEnvoiMobile":  "2026-05-27T16:45:00+02:00"
+               },
+    "commentaireGlobal":  "TEST API MOBILE AUTOMATISE 20260527115557 MOB-API-016",
+    "lignes":  [
+                   {
+                       "idLigneSource":  "2026-05-27|M11555716|3|1058|PDL01|0",
+                       "ordreArret":  1,
+                       "horaire":  "1",
+                       "client":  {
+                                      "numClient":  "1058",
+                                      "nomClient":  "HOTEL EXEMPLE",
+                                      "nomAffiche":  "HOTEL EXEMPLE"
+                                  },
+                       "pointLivraison":  {
+                                              "codePDL":  "PDL01",
+                                              "descriptionPDL":  "Entrée principale",
+                                              "adresseLigne1":  "1 RUE DE TEST",
+                                              "adresseLigne2":  null,
+                                              "adresseLigne3":  null,
+                                              "ville":  "NANTES",
+                                              "codePostal":  "44000"
+                                          },
+                       "tournee":  {
+                                       "codeTournee":  "M11555716",
+                                       "libelleTournee":  "TEST API MOBILE MOB-API-016",
+                                       "jourTournee":  3,
+                                       "jourLibelle":  "Mercredi",
+                                       "schemaLivraison":  "1W1"
+                                   },
+                       "retour":  {
+                                      "jourTourneeRetour":  3,
+                                      "jourRetourLibelle":  "Mercredi",
+                                      "codeTourneeRetour":  "M11555716",
+                                      "libelleTourneeRetour":  "TEST API MOBILE MOB-API-016"
+                                  },
+                       "infosLivreur":  {
+                                            "instructions":  null,
+                                            "commentaireExceptionnel":  null,
+                                            "zoneDechargement":  "EHPAD",
+                                            "zoneDechargementAffichee":  "EHPAD",
+                                            "zone":  "EHPAD",
+                                            "precision":  null,
+                                            "cle":  null,
+                                            "estFerme":  false,
+                                            "dateFermeture":  null,
+                                            "motifFermeture":  null
+                                        },
+                       "saisie":  {
+                                      "precisionLivreur":  null,
+                                      "statutPassage":  "FAIT",
+                                      "commentaireLivreur":  null,
+                                      "heureValidation":  "2026-05-27T09:12:00+02:00",
+                                      "estValidee":  true,
+                                      "quantites":  [
+                                                        {
+                                                            "codeArticle":  "ROLLS",
+                                                            "libelle":  "Rolls",
+                                                            "quantiteLivreePrevue":  2,
+                                                            "quantiteLivree":  2,
+                                                            "quantiteRecuperee":  1
+                                                        },
+                                                        {
+                                                            "codeArticle":  "ROLLS_VIDES",
+                                                            "libelle":  "Rolls vides",
+                                                            "quantiteLivreePrevue":  null,
+                                                            "quantiteLivree":  0,
+                                                            "quantiteRecuperee":  3
+                                                        },
+                                                        {
+                                                            "codeArticle":  "TAPIS",
+                                                            "libelle":  "Tapis",
+                                                            "quantiteLivreePrevue":  null,
+                                                            "quantiteLivree":  0,
+                                                            "quantiteRecuperee":  0
+                                                        },
+                                                        {
+                                                            "codeArticle":  "SACS",
+                                                            "libelle":  "Sacs",
+                                                            "quantiteLivreePrevue":  0,
+                                                            "quantiteLivree":  0,
+                                                            "quantiteRecuperee":  0
+                                                        }
+                                                    ]
+                                  }
+                   }
+               ]
+}

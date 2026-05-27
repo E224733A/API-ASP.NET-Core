@@ -21,3 +21,13 @@ Les tests POST peuvent écrire en base de développement.
 2. Exécuter les tests GET.
 3. Exécuter les tests POST uniquement sur une base de développement.
 4. Vérifier les données SQL après les POST.
+
+
+
+Les tests API Mobile v1.2 ont été exécutés le 27/05/2026 contre l’API centrale http://192.168.1.233:5000.
+Les 18 scénarios automatisés sont passés avec succès : 18 OK, 0 KO, 0 ignoré.
+Les tests couvrent les synchronisations valides, les doublons techniques, les doublons métier, les validations de quantités, les statuts invalides, les lignes non validées, les articles dupliqués, la version de schéma et le cas métier ROLLS_VIDES.
+
+
+
+Le script ne fonctionne pas pour test de masse. 
