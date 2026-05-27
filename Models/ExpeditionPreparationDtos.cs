@@ -134,6 +134,13 @@ public sealed class ExpeditionVerrouillageTourneeRequest
     public string CodeTournee { get; set; } = string.Empty;
     public string? LibelleTournee { get; set; }
     public string StatutPreparationWeb { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Heure du dernier clic humain "Marquer prête pour verrouillage" côté SERVWEB.
+    /// Cette valeur alimente Mobile_ExpeditionPreparation.DateModification.
+    /// </summary>
+    public string? DateModification { get; set; }
+
     public List<ExpeditionVerrouillageLigneRequest> Lignes { get; set; } = new();
 }
 

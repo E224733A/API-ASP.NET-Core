@@ -282,6 +282,8 @@ public sealed class ExpeditionRepository
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
+        var dateModificationPreparation = TryParseDateModification(tournee.DateModification) ?? now;
+
         return await connection.QuerySingleAsync<long>(
             new CommandDefinition(
                 """
@@ -318,7 +320,7 @@ public sealed class ExpeditionRepository
                         @EmpreintePayload,
                         @AdresseIP,
                         @Now,
-                        NULL
+                        @DateModificationPreparation
                     );
 
                     SET @IdPreparationExpedition = CONVERT(BIGINT, SCOPE_IDENTITY());
@@ -334,7 +336,7 @@ public sealed class ExpeditionRepository
                         IdLotVerrouillage = @IdLotVerrouillage,
                         EmpreintePayload = @EmpreintePayload,
                         AdresseIPVerrouillage = @AdresseIP,
-                        DateModification = @Now
+                        DateModification = @DateModificationPreparation
                     WHERE IdPreparationExpedition = @IdPreparationExpedition;
                 END;
 
@@ -348,6 +350,7 @@ public sealed class ExpeditionRepository
                     IdLotVerrouillage = idLotVerrouillageTechnique,
                     EmpreintePayload = empreintePayload,
                     AdresseIP = NormalizeNullable(adresseIp),
+                    DateModificationPreparation = dateModificationPreparation,
                     Now = now
                 },
                 transaction,
@@ -620,6 +623,13 @@ public sealed class ExpeditionRepository
                 },
                 transaction,
                 cancellationToken: cancellationToken));
+    }
+
+    private static DateTimeOffset? TryParseDateModification(string? value)
+    {
+        return DateTimeOffset.TryParse(value, out var dateModification)
+            ? dateModification
+            : null;
     }
 
     private static string? NormalizeNullable(string? value)
