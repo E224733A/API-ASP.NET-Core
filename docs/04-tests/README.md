@@ -34,3 +34,4 @@ L’API a accepté 20/20 synchronisations, sans erreur 400, 409 ou 500.
 La vérification SQL confirme l’enregistrement des volumes attendus en base.
 Le seuil de performance k6 a signalé un dépassement sur le p95, mais cela ne remet pas en cause la réussite fonctionnelle du test.
 
+Le test de masse de 50 synchronisations a été exécuté avec 10 utilisateurs virtuels k6. Les 50 synchronisations valides ont été acceptées par l’API avec un code HTTP 200. Aucune erreur serveur, aucun conflit et aucune réponse inattendue n’ont été observés. Le test est donc validé fonctionnellement. Le p95 HTTP mesuré est de 2810 ms, supérieur au seuil indicatif de 2000 ms, ce qui constitue un point de performance à surveiller mais ne remet pas en cause la validité fonctionnelle du traitement.
