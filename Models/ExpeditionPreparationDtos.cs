@@ -138,6 +138,7 @@ public sealed class ExpeditionVerrouillageTourneeRequest
     /// <summary>
     /// Heure du dernier clic humain "Marquer prête pour verrouillage" côté SERVWEB.
     /// Cette valeur alimente Mobile_ExpeditionPreparation.DateModification.
+    /// Elle doit être transmise au format ISO 8601 avec offset, puis normalisée en heure Europe/Paris côté API.
     /// </summary>
     public string? DateModification { get; set; }
 

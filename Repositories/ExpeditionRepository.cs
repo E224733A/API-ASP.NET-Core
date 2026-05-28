@@ -1,3 +1,4 @@
+using System.Globalization;
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Models;
 using Dapper;
@@ -6,6 +7,9 @@ namespace API_ASP.NET_Core.Repositories;
 
 public sealed class ExpeditionRepository
 {
+    private const string ParisTimeZoneIanaId = "Europe/Paris";
+    private const string ParisTimeZoneWindowsId = "Romance Standard Time";
+
     private readonly SqlConnectionFactory _connectionFactory;
 
     public ExpeditionRepository(SqlConnectionFactory connectionFactory)
@@ -87,7 +91,7 @@ public sealed class ExpeditionRepository
 
         using var transaction = connection.BeginTransaction();
 
-        var now = DateTimeOffset.Now;
+        var now = GetNowParis();
         var nombreTournees = request.Tournees.Count;
         var nombreLignes = request.Tournees.Sum(tournee => tournee.Lignes?.Count ?? 0);
         var nombreQuantites = request.Tournees
@@ -230,7 +234,7 @@ public sealed class ExpeditionRepository
                 NombreTourneesVerrouillees = nombreTournees,
                 NombreLignesVerrouillees = nombreLignes,
                 DateReceptionApi = now,
-                DateSauvegardeSql = DateTimeOffset.Now
+                DateSauvegardeSql = now
             };
         }
         catch
@@ -282,7 +286,7 @@ public sealed class ExpeditionRepository
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        var dateModificationPreparation = TryParseDateModification(tournee.DateModification) ?? now;
+        var dateModificationPreparation = TryParseDateModificationParis(tournee.DateModification) ?? now;
 
         return await connection.QuerySingleAsync<long>(
             new CommandDefinition(
@@ -625,11 +629,46 @@ public sealed class ExpeditionRepository
                 cancellationToken: cancellationToken));
     }
 
-    private static DateTimeOffset? TryParseDateModification(string? value)
+    private static DateTimeOffset GetNowParis()
     {
-        return DateTimeOffset.TryParse(value, out var dateModification)
-            ? dateModification
+        return ToParisOffset(DateTimeOffset.UtcNow);
+    }
+
+    private static DateTimeOffset ToParisOffset(DateTimeOffset value)
+    {
+        return TimeZoneInfo.ConvertTime(value, GetParisTimeZone());
+    }
+
+    private static DateTimeOffset? TryParseDateModificationParis(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var dateModification)
+            ? ToParisOffset(dateModification)
             : null;
+    }
+
+    private static TimeZoneInfo GetParisTimeZone()
+    {
+        try
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(ParisTimeZoneIanaId);
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(ParisTimeZoneWindowsId);
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return TimeZoneInfo.FindSystemTimeZoneById(ParisTimeZoneWindowsId);
+        }
     }
 
     private static string? NormalizeNullable(string? value)

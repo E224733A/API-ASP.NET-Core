@@ -1,12 +1,13 @@
+using System.Globalization;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Mappers;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Repositories;
 using Microsoft.AspNetCore.Http;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace API_ASP.NET_Core.Services;
 
@@ -210,7 +211,7 @@ public sealed class ExpeditionService
                 });
         }
 
-        var dateTournee = DateTime.Parse(request.DateTournee).Date;
+        var dateTournee = DateTime.Parse(request.DateTournee, CultureInfo.InvariantCulture).Date;
         var dateTourneePayload = DateOnly.FromDateTime(dateTournee);
         var dateTourneeAutorisee = _dateMetierService.GetDateTourneeExpeditionPreparable();
 
@@ -280,8 +281,8 @@ public sealed class ExpeditionService
                     IdLotVerrouillage = request.IdLotVerrouillage,
                     DateTournee = request.DateTournee,
                     StatutVerrouillage = "VERROUILLEE_BD",
-                    DateReceptionApi = result.DateReceptionApi.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
-                    DateSauvegardeSql = result.DateSauvegardeSql.ToString("yyyy-MM-dd'T'HH:mm:sszzz"),
+                    DateReceptionApi = result.DateReceptionApi.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture),
+                    DateSauvegardeSql = result.DateSauvegardeSql.ToString("yyyy-MM-dd'T'HH:mm:sszzz", CultureInfo.InvariantCulture),
                     NombreTourneesVerrouillees = result.NombreTourneesVerrouillees,
                     NombreLignesVerrouillees = result.NombreLignesVerrouillees
                 });
@@ -336,6 +337,7 @@ public sealed class ExpeditionService
     {
         var errors = new List<string>();
         DateTime? dateTourneeValide = null;
+        DateTimeOffset? dateVerrouillageDemandeeValide = null;
 
         if (request is null)
         {
@@ -358,7 +360,7 @@ public sealed class ExpeditionService
             errors.Add($"source doit être égal à \"{SourceAttendue}\".");
         }
 
-        if (!DateTime.TryParse(request.DateTournee, out var dateTournee))
+        if (!DateTime.TryParse(request.DateTournee, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTournee))
         {
             errors.Add("dateTournee est obligatoire et doit être une date valide au format yyyy-MM-dd.");
         }
@@ -367,13 +369,17 @@ public sealed class ExpeditionService
             dateTourneeValide = dateTournee.Date;
         }
 
-        if (!DateTimeOffset.TryParse(request.DateVerrouillageDemandee, out var dateVerrouillageDemandee))
+        if (!DateTimeOffset.TryParse(request.DateVerrouillageDemandee, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVerrouillageDemandee))
         {
             errors.Add("dateVerrouillageDemandee est obligatoire et doit être une date ISO 8601 avec offset.");
         }
-        else if (dateVerrouillageDemandee.Offset == TimeSpan.Zero && !request.DateVerrouillageDemandee.EndsWith("+00:00", StringComparison.Ordinal))
+        else if (!HasExplicitOffset(request.DateVerrouillageDemandee))
         {
             errors.Add("dateVerrouillageDemandee doit contenir un offset horaire explicite.");
+        }
+        else
+        {
+            dateVerrouillageDemandeeValide = dateVerrouillageDemandee;
         }
 
         if (!string.Equals(request.FuseauHoraireMetier?.Trim(), FuseauHoraireMetier, StringComparison.OrdinalIgnoreCase))
@@ -402,8 +408,16 @@ public sealed class ExpeditionService
                     .Select(ligne => TourneeMobileMapper.BuildIdLigneSource(DateOnly.FromDateTime(dateTourneeValide.Value), ligne))
                     .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-                ValidateTournees(request, idLignesPreparables, errors);
+                ValidateTournees(request, idLignesPreparables, errors, dateVerrouillageDemandeeValide);
             }
+            else
+            {
+                ValidateTourneesSansControleLignes(request, errors, dateVerrouillageDemandeeValide);
+            }
+        }
+        else
+        {
+            ValidateTourneesSansControleLignes(request, errors, dateVerrouillageDemandeeValide);
         }
 
         return errors;
@@ -412,7 +426,25 @@ public sealed class ExpeditionService
     private static void ValidateTournees(
         ExpeditionVerrouillageLotRequest request,
         HashSet<string> idLignesPreparables,
-        List<string> errors)
+        List<string> errors,
+        DateTimeOffset? dateVerrouillageDemandee)
+    {
+        ValidateTourneesCore(request, errors, dateVerrouillageDemandee, idLignesPreparables);
+    }
+
+    private static void ValidateTourneesSansControleLignes(
+        ExpeditionVerrouillageLotRequest request,
+        List<string> errors,
+        DateTimeOffset? dateVerrouillageDemandee)
+    {
+        ValidateTourneesCore(request, errors, dateVerrouillageDemandee, idLignesPreparables: null);
+    }
+
+    private static void ValidateTourneesCore(
+        ExpeditionVerrouillageLotRequest request,
+        List<string> errors,
+        DateTimeOffset? dateVerrouillageDemandee,
+        HashSet<string>? idLignesPreparables)
     {
         var idLignesGlobal = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -431,6 +463,8 @@ public sealed class ExpeditionService
             {
                 errors.Add($"{prefixTournee}.statutPreparationWeb doit être PRETE_VERROUILLAGE ou EN_PREPARATION_WEB.");
             }
+
+            ValidateDateModificationTournee(tournee, prefixTournee, errors, dateVerrouillageDemandee);
 
             if (tournee.Lignes is null || tournee.Lignes.Count == 0)
             {
@@ -463,7 +497,7 @@ public sealed class ExpeditionService
                         errors.Add($"{prefixLigne}.idLigneSource est présent dans plusieurs tournées du lot.");
                     }
 
-                    if (!idLignesPreparables.Contains(idLigne))
+                    if (idLignesPreparables is not null && !idLignesPreparables.Contains(idLigne))
                     {
                         errors.Add($"{prefixLigne}.idLigneSource n'existe pas dans les lignes préparables de la date.");
                     }
@@ -509,6 +543,35 @@ public sealed class ExpeditionService
                     }
                 }
             }
+        }
+    }
+
+    private static void ValidateDateModificationTournee(
+        ExpeditionVerrouillageTourneeRequest tournee,
+        string prefixTournee,
+        List<string> errors,
+        DateTimeOffset? dateVerrouillageDemandee)
+    {
+        if (string.IsNullOrWhiteSpace(tournee.DateModification))
+        {
+            return;
+        }
+
+        if (!DateTimeOffset.TryParse(tournee.DateModification, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateModification))
+        {
+            errors.Add($"{prefixTournee}.dateModification doit être une date ISO 8601 valide avec offset.");
+            return;
+        }
+
+        if (!HasExplicitOffset(tournee.DateModification))
+        {
+            errors.Add($"{prefixTournee}.dateModification doit contenir un offset horaire explicite.");
+            return;
+        }
+
+        if (dateVerrouillageDemandee.HasValue && dateModification > dateVerrouillageDemandee.Value.AddMinutes(5))
+        {
+            errors.Add($"{prefixTournee}.dateModification ne peut pas être postérieure à dateVerrouillageDemandee.");
         }
     }
 
@@ -566,7 +629,7 @@ public sealed class ExpeditionService
             idLotVerrouillage = NormalizeNullable(request.IdLotVerrouillage),
             source = NormalizeNullable(request.Source),
             dateTournee = NormalizeNullable(request.DateTournee),
-            dateVerrouillageDemandee = NormalizeNullable(request.DateVerrouillageDemandee),
+            dateVerrouillageDemandee = NormalizeDateTimeOffsetForFingerprint(request.DateVerrouillageDemandee),
             fuseauHoraireMetier = NormalizeNullable(request.FuseauHoraireMetier),
             tournees = request.Tournees
                 .OrderBy(tournee => tournee.CodeTournee, StringComparer.OrdinalIgnoreCase)
@@ -575,6 +638,7 @@ public sealed class ExpeditionService
                     codeTournee = NormalizeNullable(tournee.CodeTournee),
                     libelleTournee = NormalizeNullable(tournee.LibelleTournee),
                     statutPreparationWeb = NormalizeNullable(tournee.StatutPreparationWeb),
+                    dateModification = NormalizeDateTimeOffsetForFingerprint(tournee.DateModification),
                     lignes = tournee.Lignes
                         .OrderBy(ligne => ligne.IdLigneSource, StringComparer.OrdinalIgnoreCase)
                         .Select(ligne => new
@@ -584,7 +648,7 @@ public sealed class ExpeditionService
                             numClient = NormalizeNullable(ligne.Client?.NumClient),
                             codePDL = NormalizeNullable(ligne.PointLivraison?.CodePDL),
                             commentaireExceptionnel = NormalizeNullable(ligne.CommentaireExceptionnel),
-                            quantitesPrevues = ligne.QuantitesPrevues
+                            quantitesPrevues = (ligne.QuantitesPrevues ?? new List<ExpeditionQuantitePrevueRequest>())
                                 .OrderBy(quantite => quantite.CodeArticle, StringComparer.OrdinalIgnoreCase)
                                 .Select(quantite => new
                                 {
@@ -692,5 +756,43 @@ public sealed class ExpeditionService
         return string.IsNullOrWhiteSpace(value)
             ? null
             : value.Trim();
+    }
+
+    private static string? NormalizeDateTimeOffsetForFingerprint(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return DateTimeOffset.TryParse(
+            value,
+            CultureInfo.InvariantCulture,
+            DateTimeStyles.None,
+            out var parsed)
+            ? parsed.ToUniversalTime().ToString("O", CultureInfo.InvariantCulture)
+            : NormalizeNullable(value);
+    }
+
+    private static bool HasExplicitOffset(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var trimmed = value.Trim();
+        if (trimmed.EndsWith("Z", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        return trimmed.Length >= 6
+            && (trimmed[^6] == '+' || trimmed[^6] == '-')
+            && char.IsDigit(trimmed[^5])
+            && char.IsDigit(trimmed[^4])
+            && trimmed[^3] == ':'
+            && char.IsDigit(trimmed[^2])
+            && char.IsDigit(trimmed[^1]);
     }
 }
