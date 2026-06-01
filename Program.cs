@@ -1,5 +1,6 @@
 using API_ASP.NET_Core.Data;
 using API_ASP.NET_Core.Mappers;
+using API_ASP.NET_Core.Middleware;
 using API_ASP.NET_Core.Repositories;
 using API_ASP.NET_Core.Services;
 using API_ASP.NET_Core.Validators;
@@ -123,6 +124,10 @@ builder.Services.AddScoped<ExpeditionRepository>();
 builder.Services.AddScoped<ExpeditionService>();
 
 var app = builder.Build();
+
+// Middlewares globaux : traçabilité et gestion d'erreurs
+app.UseCorrelationId();
+app.UseApiExceptionHandling();
 
 if (app.Environment.IsDevelopment())
 {
