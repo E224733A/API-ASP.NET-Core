@@ -167,3 +167,22 @@ Résultat attendu :
 tcp:5000 tcp:5000
 
 Dans ce mode, 127.0.0.1:5000 côté téléphone pointe vers l’API lancée sur le PC.
+
+
+
+Le fichier `MobileSLI.csproj` fourni ici remplace la configuration originale. Les changements clés sont :
+
+* **Alignement Android 31 :** la version minimale et cible est désormais fixée à 31 (`AndroidMinSdkVersion`, `AndroidTargetSdkVersion`, `AndroidCompileSdkVersion` et `SupportedOSPlatformVersion`). Cela évite les avertissements **CA1416/CA1418** liés aux API disponibles à partir d’Android 29 et supprime la nécessité d’annotations `[SupportedOSPlatform]` sur les méthodes.
+* **Corrections SQLite :** suppression du package `SQLitePCLRaw.bundle_e_sqlite3` et ajout de `SQLitePCLRaw.bundle_green` en version 2.1.11. Ce package utilise un *page size* conforme à Android 16 et élimine l’avertissement **XA0141** concernant `libe_sqlite3.so`.
+* **Compilation des bindings XAML :** l’option `MauiEnableXamlCBindingWithSourceCompilation` est activée pour permettre à MAUI de compiler les liaisons XAML et de réduire les warnings `XC0022`/`XC0025`.
+
+Après avoir remplacé votre fichier `.csproj` par celui-ci, exécutez les commandes suivantes :
+
+```powershell
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\mobile\MobileSLI"
+Remove-Item -Recurse -Force ".\bin" -ErrorAction SilentlyContinue
+Remove-Item -Recurse -Force ".\obj" -ErrorAction SilentlyContinue
+dotnet restore --force-evaluate
+dotnet build ".\MobileSLI.csproj" -c Debug
+dotnet publish ".\MobileSLI.csproj" -f net10.0-android -c Release -p:AndroidPackageFormat=apk -p:RuntimeIdentifiers=android-arm64
+```

@@ -31,8 +31,6 @@ Version actuelle :
 | Mobile | GET | `/api/tournees/disponibles` | Lister les tournées disponibles |
 | Mobile | GET | `/api/tournees/jour` | Charger une tournée complète |
 | Mobile | POST | `/api/synchronisations` | Synchroniser le retour mobile |
-| Mobile | GET | `/api/synchronisations` | Consulter les synchronisations reçues |
-| Mobile | GET | `/api/synchronisations/{idTourneeMobile}` | Consulter le détail d'une synchronisation |
 | Expédition | GET | `/api/expedition/preparations/a-preparer` | Charger toutes les préparations à préparer |
 | Expédition | POST | `/api/expedition/preparations/verrouiller` | Verrouiller les préparations Expédition |
 

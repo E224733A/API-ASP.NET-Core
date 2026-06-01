@@ -31,28 +31,35 @@
       "ordreAffichage": 1
     },
     {
+      "codeArticle": "ROLLS_VIDES",
+      "libelle": "Rolls Vides",
+      "typeQuantite": "LIVREE_PREVUE",
+      "quantiteNullable": true,
+      "ordreAffichage": 2
+    },
+    {
       "codeArticle": "TAPIS",
       "libelle": "Tapis",
       "typeQuantite": "LIVREE_PREVUE",
       "quantiteNullable": true,
-      "ordreAffichage": 2
+      "ordreAffichage": 3
     },
     {
       "codeArticle": "SACS",
       "libelle": "Sacs",
       "typeQuantite": "LIVREE_PREVUE",
       "quantiteNullable": true,
-      "ordreAffichage": 3
+      "ordreAffichage": 4
     }
   ],
   "tournees": [],
   "regles": {
-    "heureVerrouillageMetier": "00:05",
+    "heureVerrouillageMetier": "22:35",
     "fuseauHoraireMetier": "Europe/Paris",
-    "fenetreModification": "Les préparations sont modifiables avant le verrouillage automatique autour de 00:05.",
-    "articlesAutorises": ["ROLLS", "SACS", "TAPIS"],
-    "articlesInterdits": ["ROLLS_VIDES"],
-    "exclureRollsVides": true,
+    "fenetreModification": "Les préparations sont modifiables avant le verrouillage automatique entre 22:35 et 22:55.",
+    "articlesAutorises": ["ROLLS", "ROLLS_VIDES", "TAPIS", "SACS"],
+    "articlesInterdits": [],
+    "exclureRollsVides": false,
     "quantitesNullesAutorisees": true
   }
 }
@@ -141,13 +148,14 @@ null -> l'Expédition n'a rien renseigné
   "idLotVerrouillage": "EXP-2026-05-19-0005",
   "source": "APPLICATION_WEB_EXPEDITION",
   "dateTournee": "2026-05-19",
-  "dateVerrouillageDemandee": "2026-05-19T00:05:00+02:00",
+  "dateVerrouillageDemandee": "2026-05-19T22:35:00+02:00",
   "fuseauHoraireMetier": "Europe/Paris",
   "tournees": [
     {
       "codeTournee": "2023",
       "libelleTournee": "CLISSON",
       "statutPreparationWeb": "PRETE_VERROUILLAGE",
+      "dateModification": "2026-05-19T22:30:00+02:00",
       "lignes": [
         {
           "idLigneSource": "2026-05-19|2023|2|12866|2866|0",
@@ -177,6 +185,10 @@ null -> l'Expédition n'a rien renseigné
               "quantiteLivreePrevue": 2
             },
             {
+              "codeArticle": "ROLLS_VIDES",
+              "quantiteLivreePrevue": 1
+            },
+            {
               "codeArticle": "TAPIS",
               "quantiteLivreePrevue": 0
             },
@@ -200,10 +212,12 @@ Les articles côté Expédition sont limités à :
 
 ```text
 ROLLS
+ROLLS_VIDES
 TAPIS
 SACS
 ```
 
-`ROLLS_VIDES` est explicitement interdit côté Expédition.
-
 Les valeurs `null` doivent rester visibles dans le JSON. Elles ne doivent pas être supprimées par la sérialisation.
+
+Le champ `dateModification` doit être au format ISO 8601 avec offset horaire explicite (+02:00).
+Il correspond à l'heure du dernier clic "Marquer prête pour verrouillage" côté Web Expédition.

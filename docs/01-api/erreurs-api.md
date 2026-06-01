@@ -12,6 +12,32 @@
 
 ## Erreurs Mobile
 
+### DATE_TOURNEE_EXPIREE
+
+```http
+400 Bad Request
+```
+
+Signifie que la date de tournée calculée par l'API a expiré ou n'est plus autorisée pour les opérations mobiles.
+
+### DATE_TOURNEE_NON_AUTORISEE
+
+```http
+400 Bad Request
+```
+
+Signifie que la date de tournée calculée côté API n'est pas autorisée pour des raisons métier (weekend, jour férié, etc.).
+
+### DATE_QUERY_PARAM_INTERDIT
+
+```http
+400 Bad Request
+```
+
+Signifie que la requête a inclus un paramètre `date` ou `dateTournee` dans l'URL, ce qui est explicitement interdit.
+
+La date est toujours calculée côté API avec le fuseau horaire **Europe/Paris**.
+
 ### SYNCHRONISATION_ALREADY_EXISTS
 
 ```http

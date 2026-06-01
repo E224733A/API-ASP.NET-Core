@@ -19,9 +19,22 @@ L'API ne reçoit pas de filtre `dateTournee`, `codeTournee` ou `codeLivreur` sur
 
 ### Rôle
 
-Retourne toutes les préparations à préparer pour la date calculée côté API.
+Retourne toutes les préparations à préparer pour la date préparable calculée côté API.
 
-En version actuelle, la date préparable correspond au lendemain calendaire.
+La date préparable est le **prochain jour ouvré métier** (lundi à vendredi).
+
+### Règle de calcul de la date préparable
+
+```text
+Jour courant  →  Date préparable
+lundi         →  mardi
+mardi         →  mercredi
+mercredi      →  jeudi
+jeudi         →  vendredi
+vendredi      →  lundi (samedi et dimanche ignorés)
+samedi        →  lundi
+dimanche      →  lundi
+```
 
 ### Paramètres
 
@@ -77,7 +90,7 @@ Après ce verrouillage, les données deviennent exploitables par le mobile.
   "idLotVerrouillage": "EXP-2026-05-19-0005",
   "source": "APPLICATION_WEB_EXPEDITION",
   "dateTournee": "2026-05-19",
-  "dateVerrouillageDemandee": "2026-05-19T00:05:00+02:00",
+  "dateVerrouillageDemandee": "2026-05-19T22:35:00+02:00",
   "fuseauHoraireMetier": "Europe/Paris",
   "tournees": []
 }
@@ -105,8 +118,7 @@ idLigneSource inexistant dans les lignes préparables
 client.numClient manquant
 codeArticle manquant
 codeArticle dupliqué dans une ligne
-ROLLS_VIDES
-article différent de ROLLS, TAPIS ou SACS
+article différent de ROLLS, ROLLS_VIDES, TAPIS ou SACS
 quantiteLivreePrevue négative
 ```
 
@@ -114,14 +126,9 @@ quantiteLivreePrevue négative
 
 ```text
 ROLLS
+ROLLS_VIDES
 TAPIS
 SACS
-```
-
-### Article interdit
-
-```text
-ROLLS_VIDES
 ```
 
 ### Statuts de préparation Web acceptés
@@ -169,8 +176,8 @@ EXPEDITION_LOT_PAYLOAD_MISMATCH
   "idLotVerrouillage": "EXP-2026-05-19-0005",
   "dateTournee": "2026-05-19",
   "statutVerrouillage": "VERROUILLEE_BD",
-  "dateReceptionApi": "2026-05-19T00:05:01+02:00",
-  "dateSauvegardeSql": "2026-05-19T00:05:01+02:00",
+  "dateReceptionApi": "2026-05-19T22:35:01+02:00",
+  "dateSauvegardeSql": "2026-05-19T22:35:01+02:00",
   "nombreTourneesVerrouillees": 1,
   "nombreLignesVerrouillees": 4
 }

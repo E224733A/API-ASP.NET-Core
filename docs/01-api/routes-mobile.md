@@ -15,40 +15,53 @@ Le mobile fonctionne hors connexion pendant la journée.
 
 ### Rôle
 
-Liste les tournées disponibles pour une date et un livreur.
+Liste les tournées disponibles pour la date métier serveur et un livreur.
+
+### Important : Pas de paramètre date dans l'URL
+
+❌ **La date n'est pas acceptée dans l'URL.**
+- Les paramètres `date` et `dateTournee` sont **explicitement refusés** par l'API.
+- La date est toujours calculée côté serveur avec le fuseau horaire métier **Europe/Paris**.
 
 ### Exemple
 
 ```http
-GET /api/tournees/disponibles?dateTournee=2026-05-19&codeLivreur=2
+GET /api/tournees/disponibles?codeLivreur=2
 ```
 
 ### Paramètres
 
 | Paramètre | Obligatoire | Rôle |
 |---|---:|---|
-| `dateTournee` | Oui | Date de tournée |
 | `codeLivreur` | Oui | Code livreur |
+| `date` ou `dateTournee` | ❌ Interdit | Refusé - calculé côté API |
 
 ## GET /api/tournees/jour
 
 ### Rôle
 
-Charge une tournée complète dans l'application mobile.
+Charge une tournée complète dans l'application mobile pour consultation et édition hors ligne.
+
+### Important : Pas de paramètre date dans l'URL
+
+❌ **La date n'est pas acceptée dans l'URL.**
+- Les paramètres `date` et `dateTournee` sont **explicitement refusés** par l'API.
+- La date est toujours calculée côté serveur avec le fuseau horaire métier **Europe/Paris**.
 
 ### Exemple
 
 ```http
-GET /api/tournees/jour?dateTournee=2026-05-19&codeTournee=2023&codeLivreur=2
+GET /api/tournees/jour?codeTournee=2023&codeLivreur=2
 ```
 
 ### Paramètres
 
 | Paramètre | Obligatoire | Rôle |
 |---|---:|---|
-| `dateTournee` | Oui | Date de tournée |
 | `codeTournee` | Oui | Code tournée |
 | `codeLivreur` | Oui | Code livreur |
+| `nomLivreur` | Non | Nom du livreur (complément informatif) |
+| `date` ou `dateTournee` | ❌ Interdit | Refusé - calculé côté API |
 
 ### Règle avec Expédition
 
