@@ -1,48 +1,32 @@
 using Dapper;
 using Microsoft.AspNetCore.Mvc;
 using API_ASP.NET_Core.Data;
+using API_ASP.NET_Core.Filters;
 
 namespace API_ASP.NET_Core.Controllers;
 
 /// <summary>
-/// Contrôleur de débogage SQL - **DEVELOPMENT ONLY**
+/// Contrôleur de débogage SQL - **CONFIGURATION CONTRÔLÉE**
 /// 
 /// ⚠️ SÉCURITÉ: Ce contrôleur expose les schémas SQL et est dangereux en production.
-/// Il est automatiquement désactivé hors de l'environnement Development.
+/// Il est désactivé si la configuration "DebugSql:Enabled" = false.
+/// Par défaut en développement, la valeur est true.
 /// </summary>
 [ApiController]
 [Route("api/debug/sql")]
+[DebugSqlOnly] // Protéger toutes les actions du contrôleur
 public class DebugSqlController : ControllerBase
 {
     private readonly SqlConnectionFactory _connectionFactory;
-    private readonly IWebHostEnvironment _environment;
 
-    public DebugSqlController(
-        SqlConnectionFactory connectionFactory,
-        IWebHostEnvironment environment)
+    public DebugSqlController(SqlConnectionFactory connectionFactory)
     {
         _connectionFactory = connectionFactory;
-        _environment = environment;
-    }
-
-    /// <summary>
-    /// Valide que le contrôleur n'est accessible qu'en Development.
-    /// </summary>
-    private IActionResult? ValidateDevelopmentOnly()
-    {
-        if (!_environment.IsDevelopment())
-        {
-            return NotFound(); // Masquer l'existence du contrôleur hors Development
-        }
-        return null; // OK, on peut continuer
     }
 
     [HttpGet("tables-mobile")]
     public async Task<IActionResult> GetTablesMobile()
     {
-        var validation = ValidateDevelopmentOnly();
-        if (validation != null) return validation;
-
         using var connection = _connectionFactory.CreateMobileConnection();
 
         var tables = await connection.QueryAsync<string>("""
@@ -58,9 +42,6 @@ public class DebugSqlController : ControllerBase
     [HttpGet("vues-abssolute")]
     public IActionResult GetVuesAbssoluteConnues()
     {
-        var validation = ValidateDevelopmentOnly();
-        if (validation != null) return validation;
-
         var vues = new[]
         {
             "v_tournee",
