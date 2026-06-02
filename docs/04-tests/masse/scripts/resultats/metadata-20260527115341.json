@@ -1,0 +1,14 @@
+﻿{
+    "runId":  "20260527115341",
+    "apiBaseUrl":  "http://192.168.1.233:5000",
+    "dateTournee":  "2026-05-27",
+    "codeTourneePrefix":  "K6115341",
+    "expectedTournees":  20,
+    "lineCount":  5,
+    "articlesPerLine":  4,
+    "expectedLignes":  100,
+    "expectedQuantites":  400,
+    "vus":  5,
+    "maxDuration":  "3m",
+    "generatedAt":  "2026-05-27T11:53:41"
+}

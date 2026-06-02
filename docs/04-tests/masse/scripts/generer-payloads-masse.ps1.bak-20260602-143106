@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [int]$Count = 20,
     [string]$DateTournee = "",
@@ -200,8 +200,7 @@ for ($i = 0; $i -lt $Count; $i++) {
     $payload | ConvertTo-Json -Depth 20 | Set-Content -Path $file -Encoding UTF8
 }
 
-Write-Host "Payloads gÃ©nÃ©rÃ©s : $outputDir"
+Write-Host "Payloads générés : $outputDir"
 Write-Host "DateTournee       : $DateTournee"
 Write-Host "RunId             : $RunId"
 Write-Host "CodeTourneePrefix : $codeTourneePrefix"
-

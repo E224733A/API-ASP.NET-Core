@@ -1,4 +1,4 @@
-﻿[CmdletBinding()]
+[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$ApiBaseUrl,
@@ -92,7 +92,7 @@ Write-Host "CodeTourneePrefix  : $CodeTourneePrefix"
 Write-Host "Synchronisations   : $Count"
 Write-Host "VUs                : $Vus"
 Write-Host "Lignes attendues   : $ExpectedLignes"
-Write-Host "QuantitÃ©s attendues: $ExpectedQuantites"
+Write-Host "Quantités attendues: $ExpectedQuantites"
 Write-Host ""
 
 $env:API_BASE_URL = $ApiBaseUrl
@@ -114,13 +114,12 @@ $exitCode = $LASTEXITCODE
     -ConsoleLog $consoleLogPath
 
 Write-Host ""
-Write-Host "=== Fichiers gÃ©nÃ©rÃ©s ==="
-Write-Host "MÃ©tadonnÃ©es : $metadataPath"
-Write-Host "RÃ©sumÃ© k6   : $summaryPath"
+Write-Host "=== Fichiers générés ==="
+Write-Host "Métadonnées : $metadataPath"
+Write-Host "Résumé k6   : $summaryPath"
 Write-Host "Console k6  : $consoleLogPath"
 Write-Host "Rapports    : $ReportDir"
 
 if ($exitCode -ne 0) {
-    throw "k6 a terminÃ© avec le code $exitCode. Consulter $consoleLogPath et le rapport gÃ©nÃ©rÃ©."
+    throw "k6 a terminé avec le code $exitCode. Consulter $consoleLogPath et le rapport généré."
 }
-

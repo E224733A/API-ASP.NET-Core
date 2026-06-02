@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)]
     [string]$ApiBaseUrl,
@@ -15,3 +15,4 @@ $ErrorActionPreference = "Stop"
     -Count 50 `
     -Vus $Vus `
     -DateTournee $DateTournee
+
