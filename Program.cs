@@ -110,6 +110,7 @@ builder.Services.AddSingleton<DateMetierService>();
 builder.Services.AddScoped<LivreursRepository>();
 
 builder.Services.AddScoped<TourneesRepository>();
+builder.Services.AddScoped<TourneeRequestValidator>();
 builder.Services.AddScoped<TourneesService>();
 builder.Services.AddScoped<TourneeMobileMapper>();
 
