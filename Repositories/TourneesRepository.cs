@@ -127,7 +127,7 @@ public class TourneesRepository
         const string sql = """
             SELECT
                 LTRIM(RTRIM(CAST(t.TOURNEE AS NVARCHAR(50)))) AS CodeTournee,
-                MAX(t.TOURNEE_DESC) AS LibelleTournee,
+                MAX(CAST(t.TOURNEE_DESC AS NVARCHAR(4000))) AS LibelleTournee,
                 COUNT(1) AS NombrePoints
             FROM v_tournee AS t
             WHERE TRY_CONVERT(INT, LTRIM(RTRIM(CAST(t.JOUR_TOURNEE AS NVARCHAR(50))))) = @JourTournee
