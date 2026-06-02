@@ -9,11 +9,17 @@ namespace API_ASP.NET_Core.Controllers;
 [Produces("application/json")]
 public sealed class ExpeditionPreparationsController : ControllerBase
 {
-    private readonly ExpeditionService _expeditionService;
+    // Les contrôleurs ne doivent plus contenir de logique métier directe ;
+    // ils délèguent au service de préparation et au service de verrouillage.
+    private readonly ExpeditionPreparationService _preparationService;
+    private readonly ExpeditionVerrouillageService _verrouillageService;
 
-    public ExpeditionPreparationsController(ExpeditionService expeditionService)
+    public ExpeditionPreparationsController(
+        ExpeditionPreparationService preparationService,
+        ExpeditionVerrouillageService verrouillageService)
     {
-        _expeditionService = expeditionService;
+        _preparationService = preparationService;
+        _verrouillageService = verrouillageService;
     }
 
     /// <summary>
@@ -38,7 +44,7 @@ public sealed class ExpeditionPreparationsController : ControllerBase
             });
         }
 
-        var response = await _expeditionService.GetPreparationsAPreparerAsync(cancellationToken);
+        var response = await _preparationService.GetPreparationsAPreparerAsync(cancellationToken);
         return Ok(response);
     }
 
@@ -56,7 +62,7 @@ public sealed class ExpeditionPreparationsController : ControllerBase
     {
         var adresseIp = HttpContext.Connection.RemoteIpAddress?.ToString();
 
-        var result = await _expeditionService.VerrouillerPreparationLotAsync(
+        var result = await _verrouillageService.VerrouillerPreparationLotAsync(
             request,
             adresseIp,
             cancellationToken);

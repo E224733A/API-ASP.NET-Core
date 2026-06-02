@@ -1,6 +1,7 @@
 using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Services;
+using API_ASP.NET_Core.Validators;
 using Microsoft.AspNetCore.Mvc;
 
 namespace API_ASP.NET_Core.Controllers;
@@ -22,13 +23,16 @@ public class TourneesController : ControllerBase
 {
     private readonly TourneesService _tourneesService;
     private readonly DateMetierService _dateMetierService;
+    private readonly TourneeRequestValidator _tourneeValidator;
 
     public TourneesController(
         TourneesService service,
-        DateMetierService dateMetierService)
+        DateMetierService dateMetierService,
+        TourneeRequestValidator tourneeValidator)
     {
         _tourneesService = service;
         _dateMetierService = dateMetierService;
+        _tourneeValidator = tourneeValidator;
     }
 
     /// <summary>
@@ -60,13 +64,14 @@ public class TourneesController : ControllerBase
     public async Task<ActionResult<TourneesDisponiblesResponseDto>> GetTourneesDisponibles(
         [FromQuery] string? codeLivreur)
     {
-        var parametreDateInterdit = GetParametreDateInterdit();
-
+        // Valider : aucun paramètre de date n'est accepté
+        var parametreDateInterdit = _tourneeValidator.ValidateNoDatesInQuery(Request.Query);
         if (parametreDateInterdit is not null)
         {
-            return BadRequest(BuildDateQueryForbiddenResponse(parametreDateInterdit));
+            return BadRequest(_tourneeValidator.BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
+        // Valider : codeLivreur obligatoire
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
             return BadRequest(new ApiValidationErrorResponse
@@ -136,13 +141,14 @@ public class TourneesController : ControllerBase
         [FromQuery] string? codeTournee = null,
         [FromQuery] string? nomLivreur = null)
     {
-        var parametreDateInterdit = GetParametreDateInterdit();
-
+        // Valider : aucun paramètre de date n'est accepté
+        var parametreDateInterdit = _tourneeValidator.ValidateNoDatesInQuery(Request.Query);
         if (parametreDateInterdit is not null)
         {
-            return BadRequest(BuildDateQueryForbiddenResponse(parametreDateInterdit));
+            return BadRequest(_tourneeValidator.BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
+        // Valider : codeLivreur obligatoire
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
             return BadRequest(new ApiValidationErrorResponse
@@ -155,6 +161,7 @@ public class TourneesController : ControllerBase
             });
         }
 
+        // Valider : codeTournee obligatoire
         if (string.IsNullOrWhiteSpace(codeTournee))
         {
             return BadRequest(new ApiValidationErrorResponse
@@ -185,24 +192,4 @@ public class TourneesController : ControllerBase
         return Ok(tournee);
     }
 
-    private string? GetParametreDateInterdit()
-    {
-        return Request.Query.Keys.FirstOrDefault(key =>
-            string.Equals(key, "date", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(key, "dateTournee", StringComparison.OrdinalIgnoreCase));
     }
-
-    private object BuildDateQueryForbiddenResponse(string parametreDateInterdit)
-    {
-        var dateAutorisee = _dateMetierService.GetDateTourneeAutorisee();
-
-        return new
-        {
-            statut = "VALIDATION_ERROR",
-            code = "DATE_QUERY_PARAM_INTERDIT",
-            message = "La date de tournée n'est pas acceptée dans l'URL. Elle est calculée côté API avec la date métier Europe/Paris.",
-            parametreInterdit = parametreDateInterdit,
-            dateTourneeAutorisee = dateAutorisee.ToString("yyyy-MM-dd")
-        };
-    }
-}

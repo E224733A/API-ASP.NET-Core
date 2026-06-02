@@ -123,6 +123,14 @@ builder.Services.AddScoped<SynchronisationService>();
 builder.Services.AddScoped<ExpeditionRepository>();
 builder.Services.AddScoped<ExpeditionService>();
 
+// Services supplémentaires pour respecter l’architecture MVC :
+// - service de préparation et de verrouillage qui délèguent au service existant ;
+// - validator et mapper dédiés au module Expédition.
+builder.Services.AddScoped<ExpeditionPreparationService>();
+builder.Services.AddScoped<ExpeditionVerrouillageService>();
+builder.Services.AddScoped<ExpeditionVerrouillageValidator>();
+builder.Services.AddScoped<ExpeditionMapper>();
+
 var app = builder.Build();
 
 // Middlewares globaux : traçabilité et gestion d'erreurs
