@@ -9,29 +9,26 @@ namespace API_ASP.NET_Core.Controllers;
 /// <summary>
 /// Contrôleur utilisé par l'application mobile pour consulter les tournées disponibles
 /// et charger le détail complet d'une tournée sélectionnée.
+/// 
+/// La logique de calcul de date métier et de normalisation des codes a été déplacée
+/// dans <see cref="TourneesService"/> afin de respecter l'architecture MVC et
+/// d'alléger ce contrôleur. Les validations restent toutefois réalisées ici pour
+/// garantir que les paramètres attendus sont présents et que les paramètres de date
+/// sont interdits.
 /// </summary>
-/// <remarks>
-/// Ce contrôleur correspond au flux du matin : le livreur s'identifie, consulte les tournées
-/// disponibles pour la date métier calculée côté API, puis charge une tournée complète
-/// dans l'application mobile.
-/// Après ce chargement, le mobile peut fonctionner hors connexion grâce à son stockage local SQLite.
-/// </remarks>
 [ApiController]
 [Route("api/tournees")]
 [Produces("application/json")]
 public class TourneesController : ControllerBase
 {
     private readonly TourneesService _tourneesService;
-    private readonly DateMetierService _dateMetierService;
     private readonly TourneeRequestValidator _tourneeValidator;
 
     public TourneesController(
         TourneesService service,
-        DateMetierService dateMetierService,
         TourneeRequestValidator tourneeValidator)
     {
         _tourneesService = service;
-        _dateMetierService = dateMetierService;
         _tourneeValidator = tourneeValidator;
     }
 
@@ -84,10 +81,10 @@ public class TourneesController : ControllerBase
             });
         }
 
-        var date = _dateMetierService.GetDateTourneeAutorisee();
+        // Normalisation du code pour l'affichage du message d'erreur éventuel
         var codeLivreurNormalise = codeLivreur.Trim();
 
-        var response = await _tourneesService.GetTourneesDisponiblesAsync(date, codeLivreurNormalise);
+        var response = await _tourneesService.GetTourneesDisponiblesAsync(codeLivreur);
 
         if (response is null)
         {
@@ -174,11 +171,7 @@ public class TourneesController : ControllerBase
             });
         }
 
-        var date = _dateMetierService.GetDateTourneeAutorisee();
-        var codeLivreurNormalise = codeLivreur.Trim();
-        var codeTourneeNormalise = codeTournee.Trim();
-
-        var tournee = await _tourneesService.GetTourneeAsync(date, codeLivreurNormalise, codeTourneeNormalise, nomLivreur);
+        var tournee = await _tourneesService.GetTourneeAsync(codeLivreur, codeTournee, nomLivreur);
 
         if (tournee is null)
         {
@@ -191,5 +184,4 @@ public class TourneesController : ControllerBase
 
         return Ok(tournee);
     }
-
-    }
+}

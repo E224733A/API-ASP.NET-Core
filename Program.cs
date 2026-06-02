@@ -109,6 +109,9 @@ builder.Services.AddSingleton<DateMetierService>();
 
 builder.Services.AddScoped<LivreursRepository>();
 
+// Service métier pour les livreurs. Il encapsule l'accès au dépôt et allège le contrôleur.
+builder.Services.AddScoped<LivreursService>();
+
 builder.Services.AddScoped<TourneesRepository>();
 builder.Services.AddScoped<TourneeRequestValidator>();
 builder.Services.AddScoped<TourneesService>();

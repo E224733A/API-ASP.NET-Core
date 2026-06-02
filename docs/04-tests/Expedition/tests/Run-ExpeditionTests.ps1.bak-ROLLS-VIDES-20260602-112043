@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $false)]
     [string]$BaseUrl = "http://127.0.0.1:5000",
 
@@ -279,8 +279,8 @@ if ($getResponse.StatusCode -eq 200) {
             $articles = @($script:GetResponseJson.regles.articlesAutorises)
         }
 
-        Write-TestResult -Name "ROLLS_VIDES autorise dans les regles" -Success (($articles -contains "ROLLS_VIDES") -and -not ($script:GetResponseJson.regles.articlesInterdits -contains "ROLLS_VIDES") -and ($script:GetResponseJson.regles.exclureRollsVides -eq $false))
-        Write-TestResult -Name "Articles Expedition autorises" -Success (($articles -contains "ROLLS") -and ($articles -contains "ROLLS_VIDES") -and ($articles -contains "TAPIS") -and ($articles -contains "SACS"))
+        Write-TestResult -Name "ROLLS_VIDES interdit dans les regles" -Success ($script:GetResponseJson.regles.articlesInterdits -contains "ROLLS_VIDES")
+        Write-TestResult -Name "Articles Expedition autorises" -Success (($articles -contains "ROLLS") -and ($articles -contains "TAPIS") -and ($articles -contains "SACS"))
     }
     else {
         Write-TestResult -Name "GET JSON parseable" -Success $false -Details "Le contenu de la reponse GET n'est pas un JSON valide."
@@ -343,7 +343,7 @@ else {
             $rollsVidesPayload = New-ExpeditionPayloadFromGet -GetJson $script:GetResponseJson -IdLotVerrouillage "TEST-EXPEDITION-$timestamp-ROLLS-VIDES" -Mode "ROLLS_VIDES"
             $rollsVidesBody = $rollsVidesPayload | ConvertTo-Json -Depth 100
             $rollsVidesResponse = Invoke-ApiRaw -Method "POST" -Uri "$BaseUrl/api/expedition/preparations/verrouiller" -Body $rollsVidesBody
-            Assert-Status -Name "POST avec ROLLS_VIDES autorise" -Response $rollsVidesResponse -ExpectedStatusCodes @(200)
+            Assert-Status -Name "POST avec ROLLS_VIDES interdit" -Response $rollsVidesResponse -ExpectedStatusCodes @(400)
 
             $negativePayload = New-ExpeditionPayloadFromGet -GetJson $script:GetResponseJson -IdLotVerrouillage "TEST-EXPEDITION-$timestamp-NEGATIVE" -Mode "NEGATIVE"
             $negativeBody = $negativePayload | ConvertTo-Json -Depth 100
@@ -370,4 +370,3 @@ if ($script:FailedTests -gt 0) {
 }
 
 exit 0
-

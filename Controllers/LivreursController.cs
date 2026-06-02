@@ -1,7 +1,7 @@
 // Controllers/LivreursController.cs
 using Microsoft.AspNetCore.Mvc;
 using API_ASP.NET_Core.Models;
-using API_ASP.NET_Core.Repositories;
+using API_ASP.NET_Core.Services;
 
 namespace API_ASP.NET_Core.Controllers;
 
@@ -17,11 +17,11 @@ namespace API_ASP.NET_Core.Controllers;
 [Produces("application/json")]
 public class LivreursController : ControllerBase
 {
-    private readonly LivreursRepository _livreursRepository;
+    private readonly LivreursService _livreursService;
 
-    public LivreursController(LivreursRepository livreursRepository)
+    public LivreursController(LivreursService livreursService)
     {
-        _livreursRepository = livreursRepository;
+        _livreursService = livreursService;
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public class LivreursController : ControllerBase
     [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<IEnumerable<LivreurDto>>> GetAll()
     {
-        var livreurs = await _livreursRepository.GetAllAsync();
+        var livreurs = await _livreursService.GetAllAsync();
         return Ok(livreurs);
     }
 }

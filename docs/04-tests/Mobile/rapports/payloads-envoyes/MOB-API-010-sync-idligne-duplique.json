@@ -1,23 +1,23 @@
 ﻿{
     "schemaVersion":  "1.2",
-    "idSynchronisation":  "260cd00d-17b2-4dbd-b151-9da9b1840cc3",
-    "dateTournee":  "2026-05-27",
-    "codeTournee":  "M14094710",
+    "idSynchronisation":  "8dd9db25-1845-4d53-94ef-355665af1d7c",
+    "dateTournee":  "2026-06-02",
+    "codeTournee":  "M11521610",
     "libelleTournee":  "TEST API MOBILE MOB-API-010",
     "livreur":  {
                     "codeLivreur":  "2",
                     "nomLivreur":  "DAVID LEBAS"
                 },
     "mobile":  {
-                   "nomAppareil":  "Test PowerShell 20260527140947",
+                   "nomAppareil":  "Test PowerShell 20260602115216",
                    "versionApplication":  "1.0.0-test",
-                   "dateChargementMobile":  "2026-05-27T07:30:00+02:00",
-                   "dateEnvoiMobile":  "2026-05-27T16:45:00+02:00"
+                   "dateChargementMobile":  "2026-06-02T07:30:00+02:00",
+                   "dateEnvoiMobile":  "2026-06-02T16:45:00+02:00"
                },
-    "commentaireGlobal":  "TEST API MOBILE AUTOMATISE 20260527140947 MOB-API-010",
+    "commentaireGlobal":  "TEST API MOBILE AUTOMATISE 20260602115216 MOB-API-010",
     "lignes":  [
                    {
-                       "idLigneSource":  "2026-05-27|M14094710|3|DUPLICATE|PDL|1",
+                       "idLigneSource":  "2026-06-02|M11521610|2|DUPLICATE|PDL|1",
                        "ordreArret":  1,
                        "horaire":  1,
                        "client":  {
@@ -35,16 +35,16 @@
                                               "codePostal":  "85230"
                                           },
                        "tournee":  {
-                                       "codeTournee":  "M14094710",
+                                       "codeTournee":  "M11521610",
                                        "libelleTournee":  "TEST API MOBILE MOB-API-010",
-                                       "jourTournee":  3,
-                                       "jourLibelle":  "Mercredi",
+                                       "jourTournee":  2,
+                                       "jourLibelle":  "Mardi",
                                        "schemaLivraison":  "1W1"
                                    },
                        "retour":  {
-                                      "jourTourneeRetour":  3,
-                                      "jourRetourLibelle":  "Mercredi",
-                                      "codeTourneeRetour":  "M14094710",
+                                      "jourTourneeRetour":  2,
+                                      "jourRetourLibelle":  "Mardi",
+                                      "codeTourneeRetour":  "M11521610",
                                       "libelleTourneeRetour":  "TEST API MOBILE MOB-API-010"
                                   },
                        "infosLivreur":  {
@@ -63,7 +63,7 @@
                                       "precisionLivreur":  "Test API v1.2",
                                       "statutPassage":  "FAIT",
                                       "commentaireLivreur":  null,
-                                      "heureValidation":  "2026-05-27T09:12:00+02:00",
+                                      "heureValidation":  "2026-06-02T09:12:00+02:00",
                                       "estValidee":  true,
                                       "quantites":  [
                                                         {
@@ -91,7 +91,7 @@
                                   }
                    },
                    {
-                       "idLigneSource":  "2026-05-27|M14094710|3|DUPLICATE|PDL|1",
+                       "idLigneSource":  "2026-06-02|M11521610|2|DUPLICATE|PDL|1",
                        "ordreArret":  2,
                        "horaire":  1,
                        "client":  {
@@ -109,16 +109,16 @@
                                               "codePostal":  "85230"
                                           },
                        "tournee":  {
-                                       "codeTournee":  "M14094710",
+                                       "codeTournee":  "M11521610",
                                        "libelleTournee":  "TEST API MOBILE MOB-API-010",
-                                       "jourTournee":  3,
-                                       "jourLibelle":  "Mercredi",
+                                       "jourTournee":  2,
+                                       "jourLibelle":  "Mardi",
                                        "schemaLivraison":  "1W1"
                                    },
                        "retour":  {
-                                      "jourTourneeRetour":  3,
-                                      "jourRetourLibelle":  "Mercredi",
-                                      "codeTourneeRetour":  "M14094710",
+                                      "jourTourneeRetour":  2,
+                                      "jourRetourLibelle":  "Mardi",
+                                      "codeTourneeRetour":  "M11521610",
                                       "libelleTourneeRetour":  "TEST API MOBILE MOB-API-010"
                                   },
                        "infosLivreur":  {
@@ -137,7 +137,7 @@
                                       "precisionLivreur":  "Test API v1.2",
                                       "statutPassage":  "FAIT",
                                       "commentaireLivreur":  null,
-                                      "heureValidation":  "2026-05-27T09:12:00+02:00",
+                                      "heureValidation":  "2026-06-02T09:12:00+02:00",
                                       "estValidee":  true,
                                       "quantites":  [
                                                         {
