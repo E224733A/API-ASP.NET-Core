@@ -115,6 +115,7 @@ builder.Services.AddScoped<TourneeMobileMapper>();
 
 builder.Services.AddScoped<SynchronisationsRepository>();
 builder.Services.AddScoped<SynchronisationTourneeValidator>();
+builder.Services.AddScoped<SynchronisationMapper>();
 builder.Services.AddScoped<SynchronisationService>();
 
 // Module Expédition : 2 routes API seulement.

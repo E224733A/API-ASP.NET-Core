@@ -1,30 +1,53 @@
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Services;
+using API_ASP.NET_Core.Mappers;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Data.SqlClient;
 
 namespace API_ASP.NET_Core.Controllers;
 
+/// <summary>
+/// Contrôleur HTTP dédié aux synchronisations de tournées mobiles.
+/// Il se contente d'orchestrer la réception de la requête et de déléguer
+/// la logique métier au <see cref="SynchronisationService"/>. Toute logique
+/// de validation ou d'accès aux données est déportée dans les services
+/// et validateurs appropriés.
+/// </summary>
 [ApiController]
 [Route("api/synchronisations")]
 public sealed class SynchronisationsController : ControllerBase
 {
     private readonly SynchronisationService _synchronisationService;
+    private readonly SynchronisationMapper _mapper;
     private readonly ILogger<SynchronisationsController> _logger;
 
+    /// <summary>
+    /// Initialise une nouvelle instance de <see cref="SynchronisationsController"/>.
+    /// </summary>
+    /// <param name="synchronisationService">Service métier pour enregistrer les synchronisations.</param>
+    /// <param name="mapper">Mapper pour les conversions élémentaires.</param>
+    /// <param name="logger">Logger pour tracer les événements.</param>
     public SynchronisationsController(
         SynchronisationService synchronisationService,
+        SynchronisationMapper mapper,
         ILogger<SynchronisationsController> logger)
     {
         _synchronisationService = synchronisationService;
+        _mapper = mapper;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Enregistre une synchronisation mobile.
+    /// </summary>
+    /// <param name="request">Payload JSON envoyé par le mobile.</param>
+    /// <param name="cancellationToken">Jeton d'annulation asynchrone.</param>
+    /// <returns>Une réponse HTTP correspondant au résultat de la synchronisation.</returns>
     [HttpPost]
     public async Task<IActionResult> PostSynchronisation(
         [FromBody] SynchronisationTourneeRequest? request,
         CancellationToken cancellationToken)
     {
+        // Validation HTTP minimale : le corps de requête ne doit pas être nul.
         if (request is null)
         {
             return BadRequest(new
@@ -63,36 +86,9 @@ public sealed class SynchronisationsController : ControllerBase
                 _ => StatusCode(result.StatusCode, result.Body)
             };
         }
-        catch (SqlException exception) when (exception.Number is 2601 or 2627)
-        {
-            /*
-             * Sécurité finale contre les doubles envois.
-             *
-             * Même si le service contrôle avant insertion, deux requêtes peuvent
-             * arriver presque en même temps. La contrainte SQL unique filtrée
-             * reste donc la protection définitive :
-             *
-             * UX_Mobile_Tournee_EnvoiUnique
-             * DateTournee + CodeTournee
-             * WHERE StatutSynchronisation = 'ENVOYEE'
-             */
-            _logger.LogWarning(
-                exception,
-                "Double envoi détecté par la contrainte SQL pour la tournée {CodeTournee} du {DateTournee}.",
-                request.CodeTournee,
-                request.DateTournee);
-
-            return Conflict(new
-            {
-                statut = "CONFLICT",
-                code = "TOURNEE_ALREADY_SENT",
-                message = "Cette tournée a déjà été envoyée pour cette date.",
-                dateTournee = FormatDateTournee(request.DateTournee),
-                codeTournee = request.CodeTournee
-            });
-        }
         catch (Exception exception)
         {
+            // Toute exception non gérée est considérée comme une erreur interne.
             _logger.LogError(
                 exception,
                 "Erreur technique lors de la synchronisation de la tournée {CodeTournee} du {DateTournee}.",
@@ -108,20 +104,5 @@ public sealed class SynchronisationsController : ControllerBase
                     message = "Une erreur technique est survenue pendant le traitement de la synchronisation."
                 });
         }
-    }
-
-    private static string FormatDateTournee(object? dateTournee)
-    {
-        if (dateTournee is DateTime dateTime)
-        {
-            return dateTime.ToString("yyyy-MM-dd");
-        }
-
-        if (DateTime.TryParse(Convert.ToString(dateTournee), out var parsedDate))
-        {
-            return parsedDate.ToString("yyyy-MM-dd");
-        }
-
-        return Convert.ToString(dateTournee) ?? string.Empty;
     }
 }
