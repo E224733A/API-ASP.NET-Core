@@ -79,7 +79,7 @@ public sealed class ExpeditionRepository
     }
 
     public async Task<ExpeditionVerrouillageLotSaveResult> EnregistrerVerrouillageLotAsync(
-        ExpeditionVerrouillageLotRequest request,
+        ExpeditionVerrouillageLotCommand command,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
         string empreintePayload,
@@ -92,11 +92,11 @@ public sealed class ExpeditionRepository
         using var transaction = connection.BeginTransaction();
 
         var now = GetNowParis();
-        var nombreTournees = request.Tournees.Count;
-        var nombreLignes = request.Tournees.Sum(tournee => tournee.Lignes?.Count ?? 0);
-        var nombreQuantites = request.Tournees
-            .SelectMany(tournee => tournee.Lignes ?? new List<ExpeditionVerrouillageLigneRequest>())
-            .SelectMany(ligne => ligne.QuantitesPrevues ?? new List<ExpeditionQuantitePrevueRequest>())
+        var nombreTournees = command.Tournees.Count;
+        var nombreLignes = command.Tournees.Sum(tournee => tournee.Lignes.Count);
+        var nombreQuantites = command.Tournees
+            .SelectMany(tournee => tournee.Lignes)
+            .SelectMany(ligne => ligne.QuantitesPrevues)
             .Count(quantite => quantite.QuantiteLivreePrevue.HasValue);
 
         try
@@ -151,7 +151,7 @@ public sealed class ExpeditionRepository
                         EmpreintePayload = empreintePayload,
                         DateTournee = dateTournee.Date,
                         CodeTournee = "GLOBAL",
-                        LibelleTournee = $"Lot global Expédition {request.IdLotVerrouillage}",
+                        LibelleTournee = $"Lot global Expédition {command.IdLotVerrouillage}",
                         NombrePreparations = nombreTournees,
                         NombreLignes = nombreLignes,
                         NombreQuantites = nombreQuantites,
@@ -162,7 +162,7 @@ public sealed class ExpeditionRepository
                     transaction,
                     cancellationToken: cancellationToken));
 
-            foreach (var tournee in request.Tournees)
+            foreach (var tournee in command.Tournees)
             {
                 var idPreparationExpedition = await UpsertPreparationExpeditionAsync(
                     connection,
@@ -195,7 +195,7 @@ public sealed class ExpeditionRepository
                     await EnregistrerCommentaireLigneAsync(
                         connection,
                         transaction,
-                        request,
+                        command,
                         tournee,
                         ligne,
                         dateTournee,
@@ -206,7 +206,7 @@ public sealed class ExpeditionRepository
                 await EnregistrerHistoriqueTourneeAsync(
                     connection,
                     transaction,
-                    request,
+                    command,
                     tournee,
                     idPreparationExpedition,
                     dateTournee,
@@ -219,7 +219,7 @@ public sealed class ExpeditionRepository
             await EnregistrerLogVerrouillageAsync(
                 connection,
                 transaction,
-                request,
+                command,
                 dateTournee,
                 idLotVerrouillageTechnique,
                 empreintePayload,
@@ -278,7 +278,7 @@ public sealed class ExpeditionRepository
     private static async Task<long> UpsertPreparationExpeditionAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        ExpeditionVerrouillageTourneeRequest tournee,
+        ExpeditionVerrouillageTourneeCommand tournee,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
         string empreintePayload,
@@ -391,11 +391,11 @@ public sealed class ExpeditionRepository
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
         long idPreparationExpedition,
-        ExpeditionVerrouillageLigneRequest ligne,
+        ExpeditionVerrouillageLigneCommand ligne,
         DateTimeOffset now,
         CancellationToken cancellationToken)
     {
-        if (ligne.QuantitesPrevues is null || ligne.QuantitesPrevues.Count == 0)
+        if (ligne.QuantitesPrevues.Count == 0)
         {
             return;
         }
@@ -446,8 +446,8 @@ public sealed class ExpeditionRepository
                         OrdreArret = ligne.OrdreArret,
                         NumClient = ligne.Client.NumClient.Trim(),
                         NomClient = NormalizeNullable(ligne.Client.NomClient),
-                        CodePDL = NormalizeNullable(ligne.PointLivraison?.CodePDL),
-                        DescriptionPDL = NormalizeNullable(ligne.PointLivraison?.DescriptionPDL),
+                        CodePDL = NormalizeNullable(ligne.PointLivraison.CodePDL),
+                        DescriptionPDL = NormalizeNullable(ligne.PointLivraison.DescriptionPDL),
                         CodeArticle = quantite.CodeArticle.Trim().ToUpperInvariant(),
                         LibelleArticle = quantite.CodeArticle.Trim().ToUpperInvariant(),
                         QuantiteLivreePrevue = quantite.QuantiteLivreePrevue.Value,
@@ -461,9 +461,9 @@ public sealed class ExpeditionRepository
     private static async Task EnregistrerCommentaireLigneAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        ExpeditionVerrouillageLotRequest request,
-        ExpeditionVerrouillageTourneeRequest tournee,
-        ExpeditionVerrouillageLigneRequest ligne,
+        ExpeditionVerrouillageLotCommand command,
+        ExpeditionVerrouillageTourneeCommand tournee,
+        ExpeditionVerrouillageLigneCommand ligne,
         DateTime dateTournee,
         DateTimeOffset now,
         CancellationToken cancellationToken)
@@ -532,9 +532,9 @@ public sealed class ExpeditionRepository
                     CodeTournee = tournee.CodeTournee.Trim(),
                     IdLigneSource = ligne.IdLigneSource.Trim(),
                     NumClient = ligne.Client.NumClient.Trim(),
-                    CodePDL = NormalizeNullable(ligne.PointLivraison?.CodePDL),
+                    CodePDL = NormalizeNullable(ligne.PointLivraison.CodePDL),
                     Commentaire = ligne.CommentaireExceptionnel.Trim(),
-                    CreePar = NormalizeNullable(ligne.DerniereModification?.Utilisateur) ?? NormalizeNullable(request.Source),
+                    CreePar = NormalizeNullable(ligne.DerniereModification?.Utilisateur) ?? NormalizeNullable(command.Source),
                     Now = now
                 },
                 transaction,
@@ -544,8 +544,8 @@ public sealed class ExpeditionRepository
     private static async Task EnregistrerHistoriqueTourneeAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        ExpeditionVerrouillageLotRequest request,
-        ExpeditionVerrouillageTourneeRequest tournee,
+        ExpeditionVerrouillageLotCommand command,
+        ExpeditionVerrouillageTourneeCommand tournee,
         long idPreparationExpedition,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
@@ -580,7 +580,7 @@ public sealed class ExpeditionRepository
                     IdPreparationExpedition = idPreparationExpedition,
                     DateTournee = dateTournee.Date,
                     CodeTournee = tournee.CodeTournee.Trim(),
-                    Commentaire = $"Lot global Expédition verrouillé : {request.IdLotVerrouillage} ({idLotVerrouillageTechnique:D})",
+                    Commentaire = $"Lot global Expédition verrouillé : {command.IdLotVerrouillage} ({idLotVerrouillageTechnique:D})",
                     AdresseIP = NormalizeNullable(adresseIp),
                     Now = now
                 },
@@ -591,7 +591,7 @@ public sealed class ExpeditionRepository
     private static async Task EnregistrerLogVerrouillageAsync(
         Microsoft.Data.SqlClient.SqlConnection connection,
         Microsoft.Data.SqlClient.SqlTransaction transaction,
-        ExpeditionVerrouillageLotRequest request,
+        ExpeditionVerrouillageLotCommand command,
         DateTime dateTournee,
         Guid idLotVerrouillageTechnique,
         string empreintePayload,
@@ -621,7 +621,7 @@ public sealed class ExpeditionRepository
                 """,
                 new
                 {
-                    DetailTechnique = $"DateTournee={dateTournee:yyyy-MM-dd}; IdLotVerrouillageMetier={request.IdLotVerrouillage}; IdLotVerrouillageTechnique={idLotVerrouillageTechnique:D}; EmpreintePayload={empreintePayload}",
+                    DetailTechnique = $"DateTournee={dateTournee:yyyy-MM-dd}; IdLotVerrouillageMetier={command.IdLotVerrouillage}; IdLotVerrouillageTechnique={idLotVerrouillageTechnique:D}; EmpreintePayload={empreintePayload}",
                     AdresseIP = NormalizeNullable(adresseIp),
                     Now = now
                 },
