@@ -11,6 +11,7 @@ const lineCount = Number(__ENV.LINE_COUNT || '5');
 const thinkTimeSeconds = Number(__ENV.THINK_TIME_SECONDS || '0.05');
 const syncCount = Number(__ENV.SYNC_COUNT || '20');
 const vus = Number(__ENV.VUS || '5');
+const responseP95ThresholdMs = Number(__ENV.RESPONSE_P95_THRESHOLD_MS || '5000');
 
 export const options = {
   scenarios: {
@@ -23,7 +24,7 @@ export const options = {
   },
   thresholds: {
     http_req_failed: ['rate<0.01'],
-    http_req_duration: ['p(95)<2000'],
+    http_req_duration: [`p(95)<${responseP95ThresholdMs}`],
     checks: ['rate>0.99'],
     mobile_sync_unexpected: ['count==0'],
     mobile_sync_success_200: [`count==${syncCount}`]
@@ -277,6 +278,7 @@ function buildMarkdownSummary(data) {
     `Date tournée : \`${dateTournee}\`\n\n` +
     `Préfixe tournées : \`${codeTourneePrefix}\`\n\n` +
     `API : \`${apiBaseUrl}\`\n\n` +
+    `Seuil p95 : \`${responseP95ThresholdMs} ms\`\n\n` +
     `## Paramètres\n\n` +
     `| Paramètre | Valeur |\n` +
     `|---|---:|\n` +

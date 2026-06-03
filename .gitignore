@@ -7,3 +7,19 @@ obj/
 *.rsuser
 
 appsettings.Development.json
+
+# ============================================================
+# Artefacts generes par les campagnes de tests
+# ============================================================
+# Les scripts, matrices, payloads sources et fichiers SQL de test restent versionnes.
+# Seuls les resultats produits localement par les executions sont ignores.
+
+docs/04-tests/**/rapports/**
+!docs/04-tests/**/rapports/.gitkeep
+!docs/04-tests/**/rapports/modele-*.md
+
+docs/04-tests/**/resultats/**
+!docs/04-tests/**/resultats/.gitkeep
+
+docs/04-tests/**/payloads/generated/**
+!docs/04-tests/**/payloads/generated/.gitkeep

@@ -1,1 +1,0 @@
-﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["L'identifiant source de ligne est présent plusieurs fois dans la synchronisation."],"details":[{"champ":"lignes[1].idLigneSource","message":"L'identifiant source de ligne est présent plusieurs fois dans la synchronisation."}]}

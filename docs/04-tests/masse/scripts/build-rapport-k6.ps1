@@ -12,24 +12,29 @@ param(
 $ErrorActionPreference = "Stop"
 
 if (-not (Test-Path $SummaryJson)) {
-    throw "RÃ©sumÃ© k6 introuvable : $SummaryJson"
+    throw "Résumé k6 introuvable : $SummaryJson"
 }
 
 if (-not (Test-Path $MetadataJson)) {
-    throw "MÃ©tadonnÃ©es introuvables : $MetadataJson"
+    throw "Métadonnées k6 introuvables : $MetadataJson"
 }
 
 $Root = Split-Path -Parent $PSScriptRoot
 $ReportDir = Join-Path $Root "rapports"
-New-Item -ItemType Directory -Force $ReportDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 
-$summary = Get-Content $SummaryJson -Raw | ConvertFrom-Json
-$metadata = Get-Content $MetadataJson -Raw | ConvertFrom-Json
+$summary = Get-Content -Path $SummaryJson -Raw -Encoding UTF8 | ConvertFrom-Json
+$metadata = Get-Content -Path $MetadataJson -Raw -Encoding UTF8 | ConvertFrom-Json
 
 function Get-MetricValue {
     param(
+        [Parameter(Mandatory = $true)]
         [object]$Summary,
+
+        [Parameter(Mandatory = $true)]
         [string]$MetricName,
+
+        [Parameter(Mandatory = $true)]
         [string]$ValueName
     )
 
@@ -59,91 +64,101 @@ function Format-Number {
     }
 }
 
-$httpReqs = Get-MetricValue $summary "http_reqs" "count"
-$durationAvg = Get-MetricValue $summary "http_req_duration" "avg"
-$durationP95 = Get-MetricValue $summary "http_req_duration" "p(95)"
-$checksRate = Get-MetricValue $summary "checks" "rate"
-$failedRate = Get-MetricValue $summary "http_req_failed" "rate"
-$successes = Get-MetricValue $summary "mobile_sync_success_200" "count"
-$validation400 = Get-MetricValue $summary "mobile_sync_validation_400" "count"
-$conflict409 = Get-MetricValue $summary "mobile_sync_conflict_409" "count"
-$server500 = Get-MetricValue $summary "mobile_sync_server_error_500" "count"
-$unexpected = Get-MetricValue $summary "mobile_sync_unexpected" "count"
+$httpReqs = Get-MetricValue -Summary $summary -MetricName "http_reqs" -ValueName "count"
+$durationAvg = Get-MetricValue -Summary $summary -MetricName "http_req_duration" -ValueName "avg"
+$durationP95 = Get-MetricValue -Summary $summary -MetricName "http_req_duration" -ValueName "p(95)"
+$checksRate = Get-MetricValue -Summary $summary -MetricName "checks" -ValueName "rate"
+$failedRate = Get-MetricValue -Summary $summary -MetricName "http_req_failed" -ValueName "rate"
+$successes = Get-MetricValue -Summary $summary -MetricName "mobile_sync_success_200" -ValueName "count"
+$validation400 = Get-MetricValue -Summary $summary -MetricName "mobile_sync_validation_400" -ValueName "count"
+$conflict409 = Get-MetricValue -Summary $summary -MetricName "mobile_sync_conflict_409" -ValueName "count"
+$server500 = Get-MetricValue -Summary $summary -MetricName "mobile_sync_server_error_500" -ValueName "count"
+$unexpected = Get-MetricValue -Summary $summary -MetricName "mobile_sync_unexpected" -ValueName "count"
 
+if ($null -eq $httpReqs) { $httpReqs = 0 }
 if ($null -eq $successes) { $successes = 0 }
 if ($null -eq $validation400) { $validation400 = 0 }
 if ($null -eq $conflict409) { $conflict409 = 0 }
 if ($null -eq $server500) { $server500 = 0 }
 if ($null -eq $unexpected) { $unexpected = 0 }
+if ($null -eq $checksRate) { $checksRate = 0 }
+if ($null -eq $failedRate) { $failedRate = 0 }
 
 $expected = [int]$metadata.expectedTournees
 $success = ([int]$successes -eq $expected -and [int]$server500 -eq 0 -and [int]$unexpected -eq 0)
+
 $conclusion = if ($success) {
-    "Test de masse rÃ©ussi cÃ´tÃ© API. Toutes les synchronisations attendues sont acceptÃ©es. La vÃ©rification SQL doit confirmer les volumes sauvegardÃ©s."
-} else {
-    "Test de masse Ã  analyser. Le nombre de succÃ¨s ou d'erreurs ne correspond pas au rÃ©sultat attendu. VÃ©rifier le journal k6 et les logs API."
+    "Le test de masse est réussi côté API : toutes les synchronisations attendues sont acceptées, aucune erreur serveur n'a été détectée. La vérification SQL doit confirmer les volumes sauvegardés."
+}
+else {
+    "Le test de masse est à analyser : le nombre de succès ou d'erreurs ne correspond pas au résultat attendu. Vérifier le journal k6 et les logs API."
 }
 
 $reportPath = Join-Path $ReportDir "rapport-k6-masse-$($metadata.runId)-powershell.md"
 
-$report = @"
-# Rapport k6 - tests de masse API Mobile SLI
+# Construction sans here-string et sans paramètre de type collection.
+# Cela évite les erreurs de terminateur @" / "@ et l'erreur PowerShell
+# "Impossible de lier l'argument au paramètre Lines, car il s'agit d'une collection vide".
+$lines = New-Object 'System.Collections.Generic.List[string]'
 
-## Campagne
+$lines.Add("# Rapport k6 - tests de masse API Mobile SLI") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Campagne") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("| Élément | Valeur |") | Out-Null
+$lines.Add("|---|---|") | Out-Null
+$lines.Add("| RunId | ``$($metadata.runId)`` |") | Out-Null
+$lines.Add("| API | ``$($metadata.apiBaseUrl)`` |") | Out-Null
+$lines.Add("| Date tournée | ``$($metadata.dateTournee)`` |") | Out-Null
+$lines.Add("| Préfixe tournées | ``$($metadata.codeTourneePrefix)`` |") | Out-Null
+$lines.Add("| Synchronisations attendues | $($metadata.expectedTournees) |") | Out-Null
+$lines.Add("| Lignes attendues | $($metadata.expectedLignes) |") | Out-Null
+$lines.Add("| Quantités attendues | $($metadata.expectedQuantites) |") | Out-Null
+$lines.Add("| VUs k6 | $($metadata.vus) |") | Out-Null
+$lines.Add("| Seuil p95 | $($metadata.responseP95ThresholdMs) ms |") | Out-Null
+$lines.Add("| Généré le | $($metadata.generatedAt) |") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Résultats HTTP") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("| Indicateur | Valeur |") | Out-Null
+$lines.Add("|---|---:|") | Out-Null
+$lines.Add("| Requêtes HTTP | $(Format-Number -Value $httpReqs -Decimals 0) |") | Out-Null
+$lines.Add("| Succès HTTP 200 | $(Format-Number -Value $successes -Decimals 0) |") | Out-Null
+$lines.Add("| Erreurs validation HTTP 400 | $(Format-Number -Value $validation400 -Decimals 0) |") | Out-Null
+$lines.Add("| Conflits HTTP 409 | $(Format-Number -Value $conflict409 -Decimals 0) |") | Out-Null
+$lines.Add("| Erreurs serveur HTTP 500 | $(Format-Number -Value $server500 -Decimals 0) |") | Out-Null
+$lines.Add("| Réponses inattendues | $(Format-Number -Value $unexpected -Decimals 0) |") | Out-Null
+$lines.Add("| Taux de requêtes échouées k6 | $(Format-Number -Value ([double]$failedRate * 100) -Decimals 2) % |") | Out-Null
+$lines.Add("| Taux de checks OK | $(Format-Number -Value ([double]$checksRate * 100) -Decimals 2) % |") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Temps de réponse") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("| Indicateur | Valeur |") | Out-Null
+$lines.Add("|---|---:|") | Out-Null
+$lines.Add("| Temps moyen | $(Format-Number -Value $durationAvg -Decimals 2) ms |") | Out-Null
+$lines.Add("| p95 | $(Format-Number -Value $durationP95 -Decimals 2) ms |") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Conclusion") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add($conclusion) | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Fichiers associés") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("| Fichier | Rôle |") | Out-Null
+$lines.Add("|---|---|") | Out-Null
+$lines.Add("| ``$SummaryJson`` | Résumé JSON k6 |") | Out-Null
+$lines.Add("| ``$MetadataJson`` | Métadonnées de campagne |") | Out-Null
+$lines.Add("| ``$ConsoleLog`` | Journal console k6 |") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("## Vérification SQL à effectuer") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add("Lancer ensuite :") | Out-Null
+$lines.Add("") | Out-Null
+$lines.Add('```powershell') | Out-Null
+$lines.Add('.\scripts\run-verification-sql-masse.ps1 -ServerInstance "NOM_SERVEUR_SQL" -Database "NOM_BASE_SQL"') | Out-Null
+$lines.Add('```') | Out-Null
 
-| Ã‰lÃ©ment | Valeur |
-|---|---|
-| RunId | `$($metadata.runId)` |
-| API | `$($metadata.apiBaseUrl)` |
-| Date tournÃ©e | `$($metadata.dateTournee)` |
-| PrÃ©fixe tournÃ©es | `$($metadata.codeTourneePrefix)` |
-| Synchronisations attendues | $($metadata.expectedTournees) |
-| Lignes attendues | $($metadata.expectedLignes) |
-| QuantitÃ©s attendues | $($metadata.expectedQuantites) |
-| VUs k6 | $($metadata.vus) |
-| GÃ©nÃ©rÃ© le | $($metadata.generatedAt) |
+$report = $lines -join [Environment]::NewLine
+Set-Content -Path $reportPath -Value $report -Encoding UTF8
 
-## RÃ©sultats HTTP
-
-| Indicateur | Valeur |
-|---|---:|
-| RequÃªtes HTTP | $(Format-Number $httpReqs 0) |
-| SuccÃ¨s HTTP 200 | $(Format-Number $successes 0) |
-| Erreurs validation HTTP 400 | $(Format-Number $validation400 0) |
-| Conflits HTTP 409 | $(Format-Number $conflict409 0) |
-| Erreurs serveur HTTP 500 | $(Format-Number $server500 0) |
-| RÃ©ponses inattendues | $(Format-Number $unexpected 0) |
-| Taux de requÃªtes Ã©chouÃ©es k6 | $(Format-Number ([double]$failedRate * 100) 2) % |
-| Taux de checks OK | $(Format-Number ([double]$checksRate * 100) 2) % |
-
-## Temps de rÃ©ponse
-
-| Indicateur | Valeur |
-|---|---:|
-| Temps moyen | $(Format-Number $durationAvg 2) ms |
-| p95 | $(Format-Number $durationP95 2) ms |
-
-## Conclusion
-
-$conclusion
-
-## Fichiers associÃ©s
-
-| Fichier | RÃ´le |
-|---|---|
-| `$SummaryJson` | RÃ©sumÃ© JSON k6 |
-| `$MetadataJson` | MÃ©tadonnÃ©es de campagne |
-| `$ConsoleLog` | Journal console k6 |
-
-## VÃ©rification SQL Ã  effectuer
-
-Lancer ensuite :
-
-```powershell
-.\scripts\run-verification-sql-masse.ps1 -ServerInstance "NOM_SERVEUR_SQL" -Database "NOM_BASE_SQL"
-```
-"@
-
-$report | Set-Content -Path $reportPath -Encoding UTF8
-Write-Host "Rapport PowerShell gÃ©nÃ©rÃ© : $reportPath"
-
+Write-Host "Rapport PowerShell généré : $reportPath"

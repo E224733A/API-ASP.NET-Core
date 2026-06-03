@@ -1,1 +1,0 @@
-﻿{"statut":"VALIDATION_ERROR","message":"La synchronisation contient des données invalides.","errors":["La quantité livrée prévue doit être positive ou nulle."],"details":[{"champ":"lignes[0].saisie.quantites[0].quantiteLivreePrevue","message":"La quantité livrée prévue doit être positive ou nulle."}]}

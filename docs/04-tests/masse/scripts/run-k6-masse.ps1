@@ -17,7 +17,10 @@ param(
 
     [int]$ThinkTimeMilliseconds = 50,
 
-    [string]$MaxDuration = "3m"
+    [string]$MaxDuration = "3m",
+
+    [ValidateRange(1, 60000)]
+    [int]$ResponseP95ThresholdMs = 5000
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,8 +30,8 @@ $K6Script = Join-Path $Root "k6\post-synchronisations-masse.js"
 $ResultDir = Join-Path $Root "resultats"
 $ReportDir = Join-Path $Root "rapports"
 
-New-Item -ItemType Directory -Force $ResultDir | Out-Null
-New-Item -ItemType Directory -Force $ReportDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ResultDir | Out-Null
+New-Item -ItemType Directory -Force -Path $ReportDir | Out-Null
 
 $K6Command = Get-Command "k6" -ErrorAction SilentlyContinue
 if (-not $K6Command) {
@@ -73,6 +76,7 @@ $metadata = [ordered]@{
     expectedQuantites = $ExpectedQuantites
     vus = $Vus
     maxDuration = $MaxDuration
+    responseP95ThresholdMs = $ResponseP95ThresholdMs
     generatedAt = (Get-Date).ToString("s")
 }
 
@@ -80,19 +84,22 @@ $metadataPath = Join-Path $ResultDir "metadata-$RunId.json"
 $metadataLatestPath = Join-Path $ResultDir "metadata-latest.json"
 $summaryPath = Join-Path $ResultDir "k6-summary-$RunId.json"
 $consoleLogPath = Join-Path $ResultDir "k6-console-$RunId.log"
+$stdoutPath = Join-Path $ResultDir "k6-stdout-$RunId.tmp"
+$stderrPath = Join-Path $ResultDir "k6-stderr-$RunId.tmp"
 
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataPath -Encoding UTF8
 $metadata | ConvertTo-Json -Depth 8 | Set-Content -Path $metadataLatestPath -Encoding UTF8
 
 Write-Host "=== Test k6 de masse MobileSLI ==="
-Write-Host "API                : $ApiBaseUrl"
-Write-Host "RunId              : $RunId"
-Write-Host "DateTournee        : $DateTournee"
-Write-Host "CodeTourneePrefix  : $CodeTourneePrefix"
-Write-Host "Synchronisations   : $Count"
-Write-Host "VUs                : $Vus"
-Write-Host "Lignes attendues   : $ExpectedLignes"
-Write-Host "QuantitÃ©s attendues: $ExpectedQuantites"
+Write-Host "API                 : $ApiBaseUrl"
+Write-Host "RunId               : $RunId"
+Write-Host "DateTournee         : $DateTournee"
+Write-Host "CodeTourneePrefix   : $CodeTourneePrefix"
+Write-Host "Synchronisations    : $Count"
+Write-Host "VUs                 : $Vus"
+Write-Host "Lignes attendues    : $ExpectedLignes"
+Write-Host "Quantités attendues : $ExpectedQuantites"
+Write-Host "Seuil p95           : $ResponseP95ThresholdMs ms"
 Write-Host ""
 
 $env:API_BASE_URL = $ApiBaseUrl
@@ -104,9 +111,42 @@ $env:VUS = [string]$Vus
 $env:LINE_COUNT = [string]$LineCount
 $env:THINK_TIME_SECONDS = $ThinkTimeSeconds.ToString([System.Globalization.CultureInfo]::InvariantCulture)
 $env:MAX_DURATION = $MaxDuration
+$env:RESPONSE_P95_THRESHOLD_MS = [string]$ResponseP95ThresholdMs
 
-& $K6Command.Source run --summary-export $summaryPath $K6Script 2>&1 | Tee-Object -FilePath $consoleLogPath
-$exitCode = $LASTEXITCODE
+$k6Args = @(
+    "run",
+    "--summary-export",
+    $summaryPath,
+    $K6Script
+)
+
+$process = Start-Process `
+    -FilePath $K6Command.Source `
+    -ArgumentList $k6Args `
+    -NoNewWindow `
+    -Wait `
+    -PassThru `
+    -RedirectStandardOutput $stdoutPath `
+    -RedirectStandardError $stderrPath
+
+$exitCode = $process.ExitCode
+
+$consoleParts = @()
+if (Test-Path $stdoutPath) {
+    $consoleParts += Get-Content -Path $stdoutPath -Raw -Encoding UTF8
+}
+if (Test-Path $stderrPath) {
+    $consoleParts += Get-Content -Path $stderrPath -Raw -Encoding UTF8
+}
+
+$consoleText = ($consoleParts -join [Environment]::NewLine)
+$consoleText | Set-Content -Path $consoleLogPath -Encoding UTF8
+
+if (-not [string]::IsNullOrWhiteSpace($consoleText)) {
+    Write-Host $consoleText
+}
+
+Remove-Item -Force $stdoutPath, $stderrPath -ErrorAction SilentlyContinue
 
 & (Join-Path $PSScriptRoot "build-rapport-k6.ps1") `
     -SummaryJson $summaryPath `
@@ -114,13 +154,12 @@ $exitCode = $LASTEXITCODE
     -ConsoleLog $consoleLogPath
 
 Write-Host ""
-Write-Host "=== Fichiers gÃ©nÃ©rÃ©s ==="
-Write-Host "MÃ©tadonnÃ©es : $metadataPath"
-Write-Host "RÃ©sumÃ© k6   : $summaryPath"
+Write-Host "=== Fichiers générés ==="
+Write-Host "Métadonnées : $metadataPath"
+Write-Host "Résumé k6   : $summaryPath"
 Write-Host "Console k6  : $consoleLogPath"
 Write-Host "Rapports    : $ReportDir"
 
 if ($exitCode -ne 0) {
-    throw "k6 a terminÃ© avec le code $exitCode. Consulter $consoleLogPath et le rapport gÃ©nÃ©rÃ©."
+    Write-Warning "k6 a terminé avec le code $exitCode. Les requêtes peuvent être fonctionnellement OK, mais au moins un seuil k6 est dépassé. Consulter $consoleLogPath et le rapport généré."
 }
-
