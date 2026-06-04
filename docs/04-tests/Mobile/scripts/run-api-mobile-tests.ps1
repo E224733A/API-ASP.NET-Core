@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $false)]
     [string]$ApiBaseUrl = 'http://192.168.1.233:5000',
 
@@ -30,16 +30,11 @@ function Get-ScriptDirectory {
 
 function Join-Url {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$BaseUrl,
-
-        [Parameter(Mandatory = $true)]
-        [string]$RelativeUrl
+        [Parameter(Mandatory = $true)][string]$BaseUrl,
+        [Parameter(Mandatory = $true)][string]$relativeUrl
     )
 
-    $cleanBase = $BaseUrl.TrimEnd('/')
-    $cleanRelative = $RelativeUrl.TrimStart('/')
-    return $cleanBase + '/' + $cleanRelative
+    return $BaseUrl.TrimEnd('/') + '/' + $RelativeUrl.TrimStart('/')
 }
 
 function Get-FrenchDayNumber {
@@ -58,7 +53,7 @@ function Get-FrenchDayNumber {
 }
 
 function Get-FrenchDayName {
-    param([Parameter(Mandatory = $true)][datetime]$Date)
+    param([Parameter(Mandatory = $true)][datetime]$date)
 
     switch ($Date.DayOfWeek.ToString()) {
         'Monday' { return 'Lundi' }
@@ -74,14 +69,9 @@ function Get-FrenchDayName {
 
 function Set-JsonProperty {
     param(
-        [Parameter(Mandatory = $true)]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Name,
-
-        [Parameter(Mandatory = $false)]
-        [object]$Value
+        [Parameter(Mandatory = $true)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $false)][object]$Value
     )
 
     if ($null -eq $Object) {
@@ -98,11 +88,8 @@ function Set-JsonProperty {
 
 function Get-JsonPropertyText {
     param(
-        [Parameter(Mandatory = $false)]
-        [object]$Object,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Name
+        [Parameter(Mandatory = $false)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$name
     )
 
     if ($null -eq $Object) {
@@ -122,13 +109,41 @@ function Get-JsonPropertyText {
     return ''
 }
 
+function Test-JsonArrayProperty {
+    param(
+        [Parameter(Mandatory = $false)][object]$Object,
+        [Parameter(Mandatory = $true)][string]$Name
+    )
+
+    if ($null -eq $Object) {
+        return $false
+    }
+
+    if (-not ($Object.PSObject.Properties.Name -contains $Name)) {
+        return $false
+    }
+
+    $value = $Object.$Name
+
+    if ($null -eq $value) {
+        return $false
+    }
+
+    if ($value -is [System.Array]) {
+        return $true
+    }
+
+    if (($value -is [System.Collections.IEnumerable]) -and (-not ($value -is [string])) {
+        return $true
+    }
+
+    return $false
+}
+
 function Find-PayloadFile {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$Root,
-
-        [Parameter(Mandatory = $true)]
-        [string]$FileName
+        [Parameter(Mandatory = $true)][string]$root,
+        [Parameter(Mandatory = $true)][string]$FileName
     )
 
     $directPath = Join-Path $Root $FileName
@@ -137,7 +152,8 @@ function Find-PayloadFile {
         return $directPath
     }
 
-    $match = Get-ChildItem -Path $Root -Recurse -File -Filter $FileName -ErrorAction SilentlyContinue | Select-Object -First 1
+    $leafName = Split-Path -Leaf $FileName
+    $match = Get-ChildItem -Path $Root -Recurse -File -Filter $leafName -ErrorAction SilentlyContinue | Select-Object -First 1
 
     if ($null -ne $match) {
         return $match.FullName
@@ -155,11 +171,8 @@ function Read-JsonFile {
 
 function Write-JsonFile {
     param(
-        [Parameter(Mandatory = $true)]
-        [object]$Value,
-
-        [Parameter(Mandatory = $true)]
-        [string]$Path
+        [Parameter(Mandatory = $true)][object]$Value,
+        [Parameter(Mandatory = $true)][string]$Path
     )
 
     $json = $Value | ConvertTo-Json -Depth 100
@@ -167,7 +180,7 @@ function Write-JsonFile {
 }
 
 function Convert-BodyToJsonObject {
-    param([Parameter(Mandatory = $false)][string]$Body)
+    param([Parameter(Mandatory = $false)][string]$body)
 
     if ([string]::IsNullOrWhiteSpace($Body)) {
         return $null
@@ -181,13 +194,11 @@ function Convert-BodyToJsonObject {
     }
 }
 
-function Invoke-JsonPost {
+function Invoke-ApiRequest {
     param(
-        [Parameter(Mandatory = $true)]
-        [string]$Url,
-
-        [Parameter(Mandatory = $true)]
-        [string]$JsonBody
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$Method,
+        [Parameter(Mandatory = $false)][string]$JsonBody = ''
     )
 
     $statusCode = 0
@@ -195,7 +206,13 @@ function Invoke-JsonPost {
     $errorMessage = ''
 
     try {
-        $response = Invoke-WebRequest -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' -Body $JsonBody -UseBasicParsing
+        if ([string]::Equals($Method, 'GET', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $response = Invoke-WebRequest -Uri $Url -Method Get -UseBasicParsing
+        }
+        else {
+            $response = Invoke-WebRequest -Uri $Url -Method Post -ContentType 'application/json; charset=utf-8' -Body $JsonBody -UseBasicParsing
+        }
+
         $statusCode = [int]$response.StatusCode
         $responseBody = [string]$response.Content
     }
@@ -238,26 +255,13 @@ function Invoke-JsonPost {
 
 function Update-MobilePayloadForTestRun {
     param(
-        [Parameter(Mandatory = $true)]
-        [object]$Payload,
-
-        [Parameter(Mandatory = $true)]
-        [object]$TestCase,
-
-        [Parameter(Mandatory = $true)]
-        [string]$DateTourneeText,
-
-        [Parameter(Mandatory = $true)]
-        [datetime]$DateTourneeValue,
-
-        [Parameter(Mandatory = $true)]
-        [string]$CodeTournee,
-
-        [Parameter(Mandatory = $true)]
-        [string]$IdSynchronisation,
-
-        [Parameter(Mandatory = $true)]
-        [string]$RunId
+        [Parameter(Mandatory = $true)][object]$Payload,
+        [Parameter(Mandatory = $true)][object]$TestCase,
+        [Parameter(Mandatory = $true)][string]$DateTourneeText,
+        [Parameter(Mandatory = $true)][datetime]$DateTourneeValue,
+        [Parameter(Mandatory = $true)][string]$CodeTournee,
+        [Parameter(Mandatory = $true)][string]$IdSynchronisation,
+        [Parameter(Mandatory = $true)][string]$RunId
     )
 
     $jourNumero = Get-FrenchDayNumber -Date $DateTourneeValue
@@ -265,7 +269,7 @@ function Update-MobilePayloadForTestRun {
 
     Set-JsonProperty -Object $Payload -Name 'idSynchronisation' -Value $IdSynchronisation
     Set-JsonProperty -Object $Payload -Name 'dateTournee' -Value $DateTourneeText
-    Set-JsonProperty -Object $Payload -Name 'codeTournee' -Value $CodeTournee
+    Set-JsonProperty -Object $Payload -Name 'codeTournee' -Value $CodeTourne
     Set-JsonProperty -Object $Payload -Name 'libelleTournee' -Value ('TEST API MOBILE ' + $TestCase.Id)
     Set-JsonProperty -Object $Payload -Name 'commentaireGlobal' -Value ('TEST API MOBILE AUTOMATISE ' + $RunId + ' ' + $TestCase.Id)
 
@@ -274,6 +278,18 @@ function Update-MobilePayloadForTestRun {
         Set-JsonProperty -Object $Payload.mobile -Name 'versionApplication' -Value '1.0.0-test'
         Set-JsonProperty -Object $Payload.mobile -Name 'dateChargementMobile' -Value ($DateTourneeText + 'T07:30:00+02:00')
         Set-JsonProperty -Object $Payload.mobile -Name 'dateEnvoiMobile' -Value ($DateTourneeText + 'T16:45:00+02:00')
+    }
+
+    if ($null -ne $Payload.trajet) {
+        $dateDepartMobile = Get-JsonPropertyText -Object $Payload.trajet -Name 'dateDepartMobile'
+        if (-not [string]::IsNullOrWhiteSpace($dateDepartMobile)) {
+            Set-JsonProperty -Object $Payload.trajet -Name 'dateDepartMobile' -Value ($DateTourneeText + 'T07:45:00+02:00')
+        }
+
+        $dateArriveeMobile = Get-JsonPropertyText -Object $Payload.trajet -Name 'dateArriveeMobile'
+        if (-not [string]::IsNullOrWhiteSpace($dateArriveeMobile)) {
+            Set-JsonProperty -Object $Payload.trajet -Name 'dateArriveeMobile' -Value ($DateTourneeText + 'T16:30:00+02:00')
+        }
     }
 
     $lignes = @($Payload.lignes)
@@ -304,13 +320,13 @@ function Update-MobilePayloadForTestRun {
 
         $idLigneSource = $DateTourneeText + '|' + $CodeTournee + '|' + $jourNumero + '|' + $numClient + '|' + $codePDL + '|' + $lineIndexForSource
         if ($TestCase.Mode -eq 'DuplicateLine') {
-            $idLigneSource = $DateTourneeText + '|' + $CodeTournee + '|' + $jourNumero + '|DUPLICATE|PDL|1'
+            $idLigneSource = $DateTourneeText + '|' + $CodeTournee + '|' + $jourNumero + '|DUPLICATE|PDT|1'
         }
 
         Set-JsonProperty -Object $ligne -Name 'idLigneSource' -Value $idLigneSource
 
         if ($null -ne $ligne.tournee) {
-            Set-JsonProperty -Object $ligne.tournee -Name 'codeTournee' -Value $CodeTournee
+            Set-JsonProperty -Object $ligne.tournee -Name 'codeTournee' -Value $CodeTourne
             Set-JsonProperty -Object $ligne.tournee -Name 'libelleTournee' -Value ('TEST API MOBILE ' + $TestCase.Id)
             Set-JsonProperty -Object $ligne.tournee -Name 'jourTournee' -Value $jourNumero
             Set-JsonProperty -Object $ligne.tournee -Name 'jourLibelle' -Value $jourLibelle
@@ -339,12 +355,17 @@ function New-TestCase {
         [Parameter(Mandatory = $true)][string]$Id,
         [Parameter(Mandatory = $true)][int]$Order,
         [Parameter(Mandatory = $true)][string]$Scenario,
-        [Parameter(Mandatory = $true)][string]$FileName,
+        [Parameter(Mandatory = $false)][string]$FileName = '',
         [Parameter(Mandatory = $true)][int]$ExpectedHttp,
-        [Parameter(Mandatory = $true)][string]$ExpectedStatut,
+        [Parameter(Mandatory = $false)][string]$ExpectedStatut = '',
         [Parameter(Mandatory = $false)][string]$ExpectedCode = '',
         [Parameter(Mandatory = $false)][string]$Mode = 'Normal',
-        [Parameter(Mandatory = $false)][string]$CodeSuffix = ''
+        [Parameter(Mandatory = $false)][string]$CodeSuffix = '',
+        [Parameter(Mandatory = $false)][string]$Method = 'POST',
+        [Parameter(Mandatory = $false)][string]$RelativeUrl = '',
+        [Parameter(Mandatory = $false)][switch]$RequiresJson,
+        [Parameter(Mandatory = $false)][switch]$requiresSchemaVersion,
+        [Parameter(Mandatory = $false)][switch]$RequiresCamionsArray
     )
 
     return [pscustomobject]@{
@@ -357,6 +378,11 @@ function New-TestCase {
         ExpectedCode = $ExpectedCode
         Mode = $Mode
         CodeSuffix = $CodeSuffix
+        Method = $Method
+        RelativeUrl = $RelativeUrl
+        RequiresJson = [bool]$requiresJson
+        RequiresSchemaVersion = [bool]$RequiresSchemaVersion
+        RequiresCamionsArray = [bool]$RequiresCamionsArray
     }
 }
 
@@ -415,12 +441,29 @@ $testCases = @(
     (New-TestCase -Id 'MOB-API-015' -Order 15 -Scenario 'quantiteLivreePrevue zero acceptee' -FileName 'sync-prevu-zero.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '15'),
     (New-TestCase -Id 'MOB-API-016' -Order 16 -Scenario 'ROLLS_VIDES livre accepte' -FileName 'sync-valide-rolls-vides.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '16'),
     (New-TestCase -Id 'MOB-API-017' -Order 17 -Scenario 'ROLLS_VIDES avec quantite livree positive accepte' -FileName 'sync-rolls-vides-livree-invalide.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '17'),
-    (New-TestCase -Id 'MOB-API-018' -Order 18 -Scenario 'ROLLS_VIDES avec quantite prevue positive accepte' -FileName 'sync-rolls-vides-prevue-invalide.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '18')
+    (New-TestCase -Id 'MOB-API-018' -Order 18 -Scenario 'ROLLS_VIDES avec quantite prevue positive accepte' -FileName 'sync-rolls-vides-prevue-invalide.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '18'),
+
+    # Tests preparatoires couvrant la future version 1.3 trajet/camion.
+    # Ils peuvent rester KO tant que l'API 1.3 et la route GET /api/camions/disponibles ne sont pas encore codees.
+    (New-TestCase -Id 'MOB-API-019' -Order 19 -Scenario 'GET camions disponibles' -ExpectedHttp 200 -Method 'GET' -RelativeUrl '/api/camions/disponibles' -RequiresJson -RequiresSchemaVersion -RequiresCamionsArray),
+    (New-TestCase -Id 'MOB-API-020' -Order 20 -Scenario 'schemaVersion 1.3 avec trajet et camion complet' -FileName 'valides/sync-valide-v13-trajet-camion.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '20'),
+    (New-TestCase -Id 'MOB-API-021' -Order 21 -Scenario 'schemaVersion 1.3 sans objet trajet' -FileName 'invalides/sync-v13-sans-trajet.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '21'),
+    (New-TestCase -Id 'MOB-API-022' -Order 22 -Scenario 'schemaVersion 1.3 avec trajet sans camion' -FileName 'invalides/sync-v13-sans-camion.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '22'),
+    (New-TestCase -Id 'MOB-API-023' -Order 23 -Scenario 'schemaVersion 1.3 avec camion sans idCamion' -FileName 'invalides/sync-v13-sans-id-camion.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '23'),
+    (New-TestCase -Id 'MOB-API-024' -Order 24 -Scenario 'schemaVersion 1.3 sans kilometrageDepart' -FileName 'invalides/sync-v13-sans-km-depart.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '24'),
+    (New-TestCase -Id 'MOB-API-025' -Order 25 -Scenario 'schemaVersion 1.3 sans kilometrageArrivee' -FileName 'invalides/sync-v13-sans-km-arrivee.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '25'),
+    (New-TestCase -Id 'MOB-API-026' -Order 26 -Scenario 'schemaVersion 1.3 avec kilometrageDepart negatif' -FileName 'invalides/sync-v13-km-depart-negatif.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '26'),
+    (New-TestCase -Id 'MOB-API-027' -Order 27 -Scenario 'schemaVersion 1.3 avec kilometrageArrivee negatif' -FileName 'invalides/sync-v13-km-arrivee-negatif.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '27'),
+    (New-TestCase -Id 'MOB-API-028' -Order 28 -Scenario 'schemaVersion 1.3 avec kilometrageArrivee inferieur au depart' -FileName 'invalides/sync-v13-km-arrivee-inferieur-depart.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '28'),
+    (New-TestCase -Id 'MOB-API-029' -Order 29 -Scenario 'schemaVersion 1.3 sans dateDepartMobile' -FileName 'invalides/sync-v13-sans-date-depart.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '29'),
+    (New-TestCase -Id 'MOB-API-030' -Order 30 -Scenario 'schemaVersion 1.3 sans dateArriveeMobile' -FileName 'invalides/sync-v13-sans-date-arrivee.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '30'),
+    (New-TestCase -Id 'MOB-API-031' -Order 31 -Scenario 'schemaVersion 1.2 sans trajet compatible phase transitoire' -FileName 'valides/sync-v12-sans-trajet-compatible.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '31')
 )
 
 Write-Host ''
-Write-Host '=== Tests API Mobile SLI v1.2 ==='
-Write-Host ('API          : ' + $apiUrl)
+Write-Host '=== Tests API Mobile SLI v1.2 / v1.3 ==='
+Write-Host ('API          : ' + $ApiBaseUrl.TrimEnd('/'))
+Write-Host ('POST sync    : ' + $apiUrl)
 Write-Host ('Payloads     : ' + $PayloadsRoot)
 Write-Host ('Rapports     : ' + $ReportsRoot)
 Write-Host ('Date tournee : ' + $dateTourneeText)
@@ -430,59 +473,73 @@ Write-Host ''
 $results = @()
 
 foreach ($testCase in ($testCases | Sort-Object Order)) {
-    $payloadPath = Find-PayloadFile -Root $PayloadsRoot -FileName $testCase.FileName
-
-    if ([string]::IsNullOrWhiteSpace($payloadPath)) {
-        $result = [pscustomobject]@{
-            Id = $testCase.Id
-            Scenario = $testCase.Scenario
-            FileName = $testCase.FileName
-            ExpectedHttp = $testCase.ExpectedHttp
-            ActualHttp = 0
-            ExpectedStatut = $testCase.ExpectedStatut
-            ActualStatut = ''
-            ExpectedCode = $testCase.ExpectedCode
-            ActualCode = ''
-            Result = 'SKIPPED'
-            Message = 'Payload introuvable'
-            SentPayloadFile = ''
-            ResponseFile = ''
-        }
-        $results += $result
-        Write-Host ('SKIP ' + $testCase.Id + ' - payload introuvable : ' + $testCase.FileName) -ForegroundColor Yellow
-        continue
+    $targetUrl = $apiUrl
+    if (-not [string]::IsNullOrWhiteSpace($testCase.RelativeUrl)) {
+        $targetUrl = Join-Url -BaseUrl $ApiBaseUrl -RelativeUrl $testCase.RelativeUrl
     }
 
-    $payload = Read-JsonFile -Path $payloadPath
-    $codeTournee = $runCodePrefix + $testCase.CodeSuffix
-    $idSynchronisation = [guid]::NewGuid().ToString()
-
-    if ($testCase.Mode -eq 'BaseSuccess') {
-        $codeTournee = $baseSuccessCodeTournee
-        $idSynchronisation = $baseSuccessIdSynchronisation
-    }
-
-    if ($testCase.Mode -eq 'TechnicalDuplicate') {
-        $codeTournee = $baseSuccessCodeTournee
-        $idSynchronisation = $baseSuccessIdSynchronisation
-    }
-
-    if ($testCase.Mode -eq 'BusinessDuplicate') {
-        $codeTournee = $baseSuccessCodeTournee
-        $idSynchronisation = [guid]::NewGuid().ToString()
-    }
-
-    $payload = Update-MobilePayloadForTestRun -Payload $payload -TestCase $testCase -DateTourneeText $dateTourneeText -DateTourneeValue $dateTourneeValue -CodeTournee $codeTournee -IdSynchronisation $idSynchronisation -RunId $runId
-
+    $sentPayloadFile = ''
     $safeId = $testCase.Id.Replace('/', '-').Replace('\', '-')
-    $sentPayloadFile = Join-Path $sentPayloadsDirectory ($safeId + '-' + $testCase.FileName)
-    $responseFile = Join-Path $responsesDirectory ($safeId + '-response.json')
+    $safeFileName = ([string]$testCase.FileName).Replace('/', '-').Replace('\', '-')
+    if ([string]::IsNullOrWhiteSpace($safeFileName)) {
+        $safeFileName = 'request'
+    }
 
-    Write-JsonFile -Value $payload -Path $sentPayloadFile
-    $jsonBody = Get-Content -Path $sentPayloadFile -Raw -Encoding UTF8
+    $responseFile = Join-Path $responsesDirectory ($safeId + '-response.json')
+    $jsonBody = ''
+
+    if ([string]::Equals($testCase.Method, 'POST', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $payloadPath = Find-PayloadFile -Root $PayloadsRoot -FileName $testCase.FileName
+
+        if ([string]::IsNullOrWhiteSpace($payloadPath)) {
+            $result = [pscustomobject]@ {
+                Id = $testCase.Id
+                Scenario = $testCase.Scenario
+                FileName = $testCase.FileName
+                ExpectedHttp = $testCase.ExpectedHttp
+                ActualHttp = 0
+                ExpectedStatut = $testCase.ExpectedStatut
+                ActualStatut = ''
+                ExpectedCode = $testCase.ExpectedCode
+                ActualCode = ''
+                Result = 'SKIPPED'
+                Message = 'Payload introuvable'
+                SentPayloadFile = ''
+                ResponseFile = ''
+            }
+            $results += $result
+            Write-Host ('SKIP ' + $testCase.Id + ' - payload introuvable : ' + $testCase.FileName) -ForegroundColor Yellow
+            continue
+        }
+
+        $payload = Read-JsonFile -Path $payloadPath
+        $codeTournee = $runCodePrefix + $testCase.CodeSuffix
+        $idSynchronisation = [guid]::NewGuid().ToString()
+
+        if ($testCase.Mode -eq 'BaseSuccess') {
+            $codeTournee = $baseSuccessCodeTournee
+            $idSynchronisation = $baseSuccessIdSynchronisation
+        }
+
+        if ($testCase.Mode -eq 'TechnicalDuplicate') {
+            $codeTournee = $baseSuccessCodeTournee
+            $idSynchronisation = $baseSuccessIdSynchronisation
+        }
+
+        if ($testCase.Mode -eq 'BusinessDuplicate') {
+            $codeTournee = $baseSuccessCodeTournee
+            $idSynchronisation = [guid]::NewGuid().ToString()
+        }
+
+        $payload = Update-MobilePayloadForTestRun -Payload $payload -TestCase $testCase -DateTourneeText $dateTourneeText -DateTourneeValue $dateTourneeValue -CodeTournee $codeTournee -IdSynchronisation $idSynchronisation -RunId $runId
+
+        $sentPayloadFile = Join-Path $sentPayloadsDirectory ($safeId + '-' + $safeFileName)
+        Write-JsonFile -Value $payload -Path $sentPayloadFile
+        $jsonBody = Get-Content -Path $sentPayloadFile -Raw -Encoding UTF8
+    }
 
     Write-Host ('RUN  ' + $testCase.Id + ' - ' + $testCase.Scenario)
-    $response = Invoke-JsonPost -Url $apiUrl -JsonBody $jsonBody
+    $response = Invoke-ApiRequest -Url $targetUrl -Method $testCase.Method -JsonBody $jsonBody
     Set-Content -Path $responseFile -Value $response.Body -Encoding UTF8
 
     $responseJson = Convert-BodyToJsonObject -Body $response.Body
@@ -492,6 +549,9 @@ foreach ($testCase in ($testCases | Sort-Object Order)) {
     $httpOk = $response.StatusCode -eq $testCase.ExpectedHttp
     $statutOk = $true
     $codeOk = $true
+    $jsonOk = $true
+    $schemaVersionOk = $true
+    $camionsArrayOk = $true
 
     if (-not [string]::IsNullOrWhiteSpace($testCase.ExpectedStatut)) {
         $statutOk = [string]::Equals($actualStatut, $testCase.ExpectedStatut, [System.StringComparison]::OrdinalIgnoreCase)
@@ -501,20 +561,46 @@ foreach ($testCase in ($testCases | Sort-Object Order)) {
         $codeOk = [string]::Equals($actualCode, $testCase.ExpectedCode, [System.StringComparison]::OrdinalIgnoreCase)
     }
 
+    if ($testCase.RequiresJson) {
+        $jsonOk = $null -ne $responseJson
+    }
+
+    if ($testCase.RequiresSchemaVersion) {
+        $schemaVersion = Get-JsonPropertyText -Object $responseJson -Name 'schemaVersion'
+        $schemaVersionOk = -not [string]::IsNullOrWhiteSpace($schemaVersion)
+    }
+
+    if ($testCase.RequiresCamionsArray) {
+        $camionsArrayOk = Test-JsonArrayProperty -Object $responseJson -Name 'camions'
+    }
+
     $resultStatus = 'OK'
-    if (-not ($httpOk -and $statutOk -and $codeOk)) {
+    if (-not ($httpOk -and $statutOk -and $codeOk -and $jsonOk -and $schemaVersionOk -and $camionsArrayOk)) {
         $resultStatus = 'KO'
     }
 
     $message = ''
     if ($resultStatus -eq 'KO') {
         $message = 'Attendu HTTP=' + $testCase.ExpectedHttp + ', statut=' + $testCase.ExpectedStatut + ', code=' + $testCase.ExpectedCode + '. Obtenu HTTP=' + $response.StatusCode + ', statut=' + $actualStatut + ', code=' + $actualCode + '.'
+
+        if ($testCase.RequiresJson -and (-not $jsonOk)) {
+            $message = $message + ' JSON non parseable.'
+        }
+
+        if ($testCase.RequiresSchemaVersion -and (-not $schemaVersionOk)) {
+            $message = $message + ' schemaVersion absent.'
+        }
+
+        if ($testCase.RequiresCamionsArray -and (-not $camionsArrayOk)) {
+            $message = $message + ' camions absent ou non tableau.'
+        }
+
         if (-not [string]::IsNullOrWhiteSpace($response.ErrorMessage)) {
             $message = $message + ' Erreur=' + $response.ErrorMessage
         }
     }
 
-    $result = [pscustomobject]@{
+    $result = [pscustomobject]@ {
         Id = $testCase.Id
         Scenario = $testCase.Scenario
         FileName = $testCase.FileName
@@ -557,11 +643,13 @@ $koCount = @($results | Where-Object { $_.Result -eq 'KO' }).Count
 $skippedCount = @($results | Where-Object { $_.Result -eq 'SKIPPED' }).Count
 
 $reportLines = @()
-$reportLines += '# Rapport tests API Mobile SLI v1.2'
+$reportLines += '# Rapport tests API Mobile SLI v1.2 / v1.3'
 $reportLines += ''
 $reportLines += ('Date execution : ' + (Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))
 $reportLines += ''
-$reportLines += ('API testee : ' + $apiUrl)
+$reportLines += ('API testee : ' + $ApiBaseUrl.TrimEnd('/'))
+$reportLines += ''
+$reportLines += ('Endpoint POST synchronisation : ' + $apiUrl)
 $reportLines += ''
 $reportLines += ('Date tournee utilisee : ' + $dateTourneeText)
 $reportLines += ''
@@ -617,8 +705,12 @@ if ($failedResults.Count -gt 0) {
         $reportLines += ''
         $reportLines += $failed.Message
         $reportLines += ''
-        $reportLines += ('Payload envoye : ' + $failed.SentPayloadFile)
-        $reportLines += ''
+
+        if (-not [string]::IsNullOrWhiteSpace($failed.SentPayloadFile)) {
+            $reportLines += ('Payload envoye : ' + $failed.SentPayloadFile)
+            $reportLines += ''
+        }
+
         $reportLines += ('Reponse API : ' + $failed.ResponseFile)
         $reportLines += ''
     }
@@ -629,7 +721,7 @@ $reportLines | Set-Content -Path $mdPath -Encoding UTF8
 Write-Host ''
 Write-Host '=== Fin des tests API Mobile ==='
 Write-Host ('Total   : ' + $totalCount)
-Write-Host ('OK      : ' + $okCount) -ForegroundColor Green
+Write-Host ('OK       : ' + $okCount) -ForegroundColor Green
 Write-Host ('KO      : ' + $koCount) -ForegroundColor Red
 Write-Host ('SKIPPED : ' + $skippedCount) -ForegroundColor Yellow
 Write-Host ''
@@ -643,4 +735,3 @@ if ($koCount -gt 0) {
 }
 
 exit 0
-
