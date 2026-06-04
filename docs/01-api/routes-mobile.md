@@ -12,19 +12,22 @@ Les routes mobile servent à :
 
 Le mobile fonctionne hors connexion pendant la journée.
 
-Cette documentation prépare l'ajout du choix camion et des kilométrages avant codage. Elle ne présente pas le développement comme terminé : le code API, les scripts SQL, les payloads JSON de tests et le mobile MAUI restent à modifier et à valider dans des lots séparés.
-
 ## Contrat 1.3 strict
 
-Le contrat mobile final documenté est strictement en `schemaVersion` `1.3`.
+Le contrat mobile final pour `POST /api/synchronisations` est strictement en `schemaVersion` `1.3`.
 
 ```text
 schemaVersion doit être exactement "1.3".
-schemaVersion "1.2" doit être refusé.
-Toute autre schemaVersion doit être refusée.
+schemaVersion "1.2" est refusé.
+Toute autre schemaVersion est refusée.
+trajet est obligatoire.
+trajet.camion est obligatoire.
+trajet.camion.idCamion est obligatoire.
+trajet.kilometrageDepart est obligatoire.
+trajet.kilometrageArrivee est obligatoire.
+trajet.dateDepartMobile est obligatoire.
+trajet.dateArriveeMobile est obligatoire.
 ```
-
-Pour `POST /api/synchronisations`, l'API devra refuser les synchronisations en `schemaVersion` `1.2`.
 
 ## GET /api/tournees/disponibles
 
@@ -90,8 +93,6 @@ Une préparation encore en brouillon côté Web Expédition ne doit pas apparaî
 
 Liste les camions disponibles pour permettre au mobile de proposer un choix camion avant le départ tournée.
 
-Cette route est une nouvelle route à ajouter lors du développement de la version camion / kilométrages.
-
 ### Exemple
 
 ```http
@@ -100,36 +101,57 @@ GET /api/camions/disponibles
 
 ### Paramètres
 
-Aucun paramètre obligatoire documenté à ce stade.
+Aucun paramètre n'est nécessaire.
 
-### Réponse attendue
+Les paramètres suivants sont explicitement refusés avec `HTTP 400` et `VALIDATION_ERROR` :
+
+| Paramètre | Statut |
+|---|---|
+| `date` | Refusé |
+| `dateTournee` | Refusé |
+
+### Réponse
 
 ```json
 {
   "schemaVersion": "1.3",
   "camions": [
     {
-      "idCamion": "12",
-      "codeCamion": "12",
-      "libelleCamion": "Camion 12",
-      "immatriculation": "AB-123-CD",
+      "idCamion": "DY-662-QN",
+      "codeCamion": "DY-662-QN",
+      "libelleCamion": "VL RENAULT",
+      "immatriculation": "DY-662-QN",
       "estActif": true
     }
   ]
 }
 ```
 
-### Règles prévues
+### Règles de normalisation
 
 ```text
-schemaVersion obligatoire dans la réponse.
-schemaVersion doit valoir "1.3".
-camions[] présent dans la réponse.
-idCamion obligatoire pour chaque camion retourné.
-codeCamion affichable dans le mobile.
-libelleCamion affichable dans le mobile.
-immatriculation affichable si disponible.
-estActif indique si le camion peut être proposé.
+schemaVersion vaut toujours "1.3".
+camions[] est toujours présent.
+trim des chaînes.
+les camions sans idCamion sont exclus.
+estActif vaut true par défaut si la source ne fournit pas l'information.
+tri stable par codeCamion, immatriculation, idCamion.
+immatriculation et libelleCamion peuvent être null.
+```
+
+### Source SQL camion
+
+Source SQL confirmée côté API :
+
+```sql
+[lavinprosli].[dbo].[v_Truck]
+```
+
+Mapping :
+
+```text
+CODE        -> idCamion, codeCamion, immatriculation
+DESCRIPTION -> libelleCamion
 ```
 
 ## POST /api/synchronisations
@@ -151,7 +173,8 @@ L'API refuse :
 
 ```text
 schemaVersion manquant
-schemaVersion non supporté
+schemaVersion différent de "1.3"
+schemaVersion "1.2"
 idSynchronisation manquant
 idSynchronisation déjà reçu
 dateTournee manquant
@@ -161,8 +184,6 @@ mobile manquant
 lignes[] vide
 ligne sans idLigneSource
 idLigneSource dupliqué dans la requête
-client manquant
-pointLivraison manquant
 saisie manquante
 statutPassage manquant
 A_FAIRE dans l'envoi final
@@ -198,9 +219,9 @@ En `schemaVersion` `1.3`, le mobile doit envoyer le camion utilisé et les infor
 }
 ```
 
-### Règles de validation trajet à ajouter
+### Règles de validation trajet
 
-L'API devra refuser :
+L'API refuse :
 
 ```text
 schemaVersion différent de "1.3"
@@ -218,7 +239,7 @@ trajet.kilometrageArrivee < trajet.kilometrageDepart
 trajet.dateArriveeMobile < trajet.dateDepartMobile
 ```
 
-L'API devra accepter :
+L'API accepte :
 
 ```text
 schemaVersion 1.3 avec trajet complet et cohérent
@@ -232,8 +253,6 @@ mobile.dateEnvoiMobile      -> trace l'envoi technique du payload final à l'API
 trajet.dateDepartMobile     -> correspond au départ métier après chargement de la tournée.
 trajet.dateArriveeMobile    -> correspond à l'arrivée métier avant ou au moment de l'envoi final à l'API.
 ```
-
-En première version, `trajet.dateDepartMobile` peut être identique à `mobile.dateChargementMobile`, et `trajet.dateArriveeMobile` peut être identique à `mobile.dateEnvoiMobile`.
 
 Ces champs sont séparés dans le contrat pour clarifier le métier.
 
