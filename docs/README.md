@@ -27,15 +27,17 @@ Le mobile et le Web Expédition ne se connectent jamais directement à SQL Serve
 
 ```text
 API ASP.NET Core = point d'entrée unique
-Mobile = GET tournée + POST synchronisation
+Mobile = GET tournée + GET camions + POST synchronisation
 Web Expédition = GET global + POST verrouillage
 GET Expédition = aucun filtre accepté
 POST Expédition = idempotent avec idLotVerrouillage
 Mobile = lit uniquement les préparations verrouillées en SQL Server
-Anti-doublon mobile = DateTournee + CodeTournee
+Anti-doublon mobile = IdSynchronisation + DateTournee + CodeTournee
 Articles Expédition = ROLLS, TAPIS, SACS
-ROLLS_VIDES = interdit côté Expédition
-schemaVersion = 1.2
+ROLLS_VIDES = interdit côté Expédition, accepté côté retour mobile
+schemaVersion synchronisation mobile = 1.3 uniquement
+schemaVersion 1.2 = refusé sur POST /api/synchronisations
+Trajet camion = obligatoire sur POST /api/synchronisations
 ```
 
 ## Routes principales
@@ -48,10 +50,24 @@ schemaVersion = 1.2
 | Livreurs | GET | `/api/livreurs` | Lister les livreurs connus |
 | Mobile | GET | `/api/tournees/disponibles` | Lister les tournées disponibles pour une date et un livreur |
 | Mobile | GET | `/api/tournees/jour` | Charger une tournée complète |
-| Mobile | POST | `/api/synchronisations` | Envoyer le retour mobile |
+| Mobile | GET | `/api/camions/disponibles` | Lister les camions disponibles pour le choix camion |
+| Mobile | POST | `/api/synchronisations` | Envoyer le retour mobile strict 1.3 avec trajet camion |
 | Mobile | GET | `/api/synchronisations` | Consulter les synchronisations reçues |
 | Expédition | GET | `/api/expedition/preparations/a-preparer` | Charger toutes les préparations à préparer |
 | Expédition | POST | `/api/expedition/preparations/verrouiller` | Verrouiller les préparations Expédition |
+
+## Validation connue
+
+Dernières validations communiquées par exécution locale/utilisateur :
+
+```text
+Build Release API : réussi.
+Tests API Mobile : 31/31 OK sur http://srvapi1.sli.local:5000.
+Test k6 1.3 : 20/20 HTTP 200 SUCCESS sur http://srvapi1.sli.local:5000 avec trajet camion.
+GET /api/camions/disponibles : schemaVersion = "1.3" et camions[] retourné.
+```
+
+Les commandes exactes doivent être relancées après toute modification de code ou de configuration.
 
 ## Lecture minimum conseillée
 
