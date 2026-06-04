@@ -26,14 +26,30 @@ public sealed class CamionsController : ControllerBase
     /// Cette route ne modifie aucune donnée. Elle renvoie un contrat JSON mobile
     /// contenant schemaVersion et camions[].
     ///
+    /// La date n'est pas acceptée depuis le mobile.
+    /// Les paramètres date et dateTournee sont explicitement refusés.
+    ///
     /// Exemple :
     /// GET /api/camions/disponibles
     /// </remarks>
     [HttpGet("disponibles")]
     [ProducesResponseType(typeof(CamionsDisponiblesResponseDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiValidationErrorResponse), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ApiTechnicalErrorResponse), StatusCodes.Status500InternalServerError)]
     public async Task<ActionResult<CamionsDisponiblesResponseDto>> GetCamionsDisponibles()
     {
+        if (Request.Query.ContainsKey("date") || Request.Query.ContainsKey("dateTournee"))
+        {
+            return BadRequest(new ApiValidationErrorResponse
+            {
+                Statut = "VALIDATION_ERROR",
+                Errors = new[]
+                {
+                    "Les paramètres date et dateTournee ne sont pas acceptés sur cette route."
+                }
+            });
+        }
+
         var response = await _camionsService.GetCamionsDisponiblesAsync();
         return Ok(response);
     }
