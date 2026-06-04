@@ -49,10 +49,56 @@ Application Web Expédition -> API ASP.NET Core -> Tables Mobile_Expedition*
 |---|---|
 | Vues ABSSolute | Source métier en lecture seule |
 | Tables `Mobile_Tournee*` | Données envoyées par le mobile en fin de tournée |
+| `Mobile_Tournee` | En-tête de synchronisation mobile |
+| `Mobile_TourneeCamion` | Camion, kilométrages et dates de trajet associés à une synchronisation mobile |
+| `Mobile_TourneeLigne` | Lignes de tournée synchronisées par le mobile |
+| `Mobile_TourneeLigneQuantite` | Quantités synchronisées par ligne mobile |
 | Tables `Mobile_Expedition*` | Données verrouillées par le module Expédition |
 | `Mobile_ArticleSaisissable` | Référentiel commun des articles suivis |
 | `Mobile_CommentaireExceptionnel` | Commentaires ponctuels lus par le mobile |
 | `Mobile_LogSynchronisation` | Audit technique et métier |
+
+## Stockage du contrat mobile 1.3
+
+### En-tête de synchronisation
+
+`dbo.Mobile_Tournee` conserve l'en-tête de synchronisation mobile :
+
+```text
+schemaVersion
+idSynchronisation
+dateTournee
+codeTournee
+livreur
+mobile
+date d'envoi
+statut de synchronisation
+```
+
+### Trajet camion
+
+`dbo.Mobile_TourneeCamion` conserve le trajet camion envoyé en `schemaVersion` `1.3` :
+
+```text
+IdTourneeMobile
+IdCamionSource
+CodeCamion
+LibelleCamion
+Immatriculation
+KilometrageDepart
+KilometrageArrivee
+DateDepartMobile
+DateArriveeMobile
+DateCreation
+```
+
+Règle de cardinalité :
+
+```text
+Un seul Mobile_TourneeCamion par IdTourneeMobile.
+```
+
+Le repository insère `Mobile_TourneeCamion` dans la même transaction SQL que `Mobile_Tournee`, avant les lignes et avant le commit final.
 
 ## Documents
 
@@ -62,6 +108,8 @@ Application Web Expédition -> API ASP.NET Core -> Tables Mobile_Expedition*
 | `expedition-sql.md` | Tables liées au module Expédition |
 | `migrations.md` | Règles d'organisation des scripts SQL |
 | `complete/BDD_sli_v13_complete.sql` | Script complet de recréation en développement/test |
+| `migrations/20260604_ajout_mobile_tournee_camion.sql` | Migration non destructive de `Mobile_TourneeCamion` |
+| `../04-tests/masse/sql/nettoyage-run-k6-mobile-13-trajet-camion.sql` | Nettoyage ciblé des runs k6 mobile 1.3 |
 
 ## Règles importantes
 
@@ -75,9 +123,11 @@ Les vues et tables internes ABSSolute ne doivent pas être modifiées par le pro
 
 Une préparation Expédition non verrouillée ne doit jamais alimenter `GET /api/tournees/jour`.
 
+`Mobile_TourneeCamion` ne remplace pas `Mobile_Tournee` : elle complète la synchronisation avec le camion et les kilométrages.
+
 ## Ordre de validation recommandé
 
-Après exécution du script complet :
+Après exécution du script complet ou d'une migration :
 
 ```text
 1. Vérifier les tables Mobile_* créées.
@@ -89,5 +139,8 @@ Après exécution du script complet :
 7. Vérifier les tables Mobile_Expedition*.
 8. Tester GET /api/tournees/jour.
 9. Vérifier que quantiteLivreePrevue remonte côté mobile.
-10. Tester POST /api/synchronisations.
+10. Tester GET /api/camions/disponibles.
+11. Tester POST /api/synchronisations en schemaVersion 1.3.
+12. Vérifier l'insertion dans Mobile_TourneeCamion.
+13. Lancer le test k6 mobile 1.3.
 ```
