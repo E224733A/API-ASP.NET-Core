@@ -33,12 +33,22 @@ GET Expédition = aucun filtre accepté
 POST Expédition = idempotent avec idLotVerrouillage
 Mobile = lit uniquement les préparations verrouillées en SQL Server
 Anti-doublon mobile = IdSynchronisation + DateTournee + CodeTournee
-Articles Expédition = ROLLS, TAPIS, SACS
-ROLLS_VIDES = interdit côté Expédition, accepté côté retour mobile
-schemaVersion synchronisation mobile = 1.3 uniquement
-schemaVersion 1.2 = refusé sur POST /api/synchronisations
+Articles Expédition = ROLLS, ROLLS_VIDES, TAPIS, SACS
+ROLLS_VIDES = autorisé côté Expédition et côté retour mobile
+Contrat POST synchronisation mobile = schemaVersion 1.3 uniquement
+Contrat Expédition GET/POST = schemaVersion 1.2
+schemaVersion 1.2 = refusé uniquement sur POST /api/synchronisations mobile
 Trajet camion = obligatoire sur POST /api/synchronisations
 ```
+
+## Séparation des contrats
+
+```text
+Contrat mobile de synchronisation : POST /api/synchronisations -> schemaVersion 1.3 strict.
+Contrat Expédition : GET /api/expedition/preparations/a-preparer et POST /api/expedition/preparations/verrouiller -> schemaVersion 1.2.
+```
+
+Le passage du contrat mobile de synchronisation en `1.3` ne modifie pas le contrat Expédition.
 
 ## Routes principales
 
