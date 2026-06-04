@@ -3,6 +3,8 @@ import { check, sleep } from 'k6';
 import exec from 'k6/execution';
 import { Counter } from 'k6/metrics';
 
+const schemaVersion = '1.3';
+const trajetCamionInclus = true;
 const apiBaseUrl = (__ENV.API_BASE_URL || 'http://localhost:5120').replace(/\/$/, '');
 const dateTournee = __ENV.DATE_TOURNEE || failConfiguration('DATE_TOURNEE manquant. Utiliser le lanceur PowerShell.');
 const runId = __ENV.RUN_ID || String(Date.now());
@@ -74,6 +76,25 @@ function dayLabel(day) {
     7: 'Dimanche'
   };
   return labels[day] || 'Jour inconnu';
+}
+
+function buildTrajet(sequence) {
+  const numero = pad(sequence, 3);
+  const kilometrageDepart = 100000 + sequence * 100;
+  const kilometrageArrivee = kilometrageDepart + 50 + lineCount;
+
+  return {
+    camion: {
+      idCamion: `K6-CAMION-${numero}`,
+      codeCamion: `K6-${numero}`,
+      libelleCamion: `Camion test masse ${numero}`,
+      immatriculation: `K6-${numero}`
+    },
+    kilometrageDepart,
+    kilometrageArrivee,
+    dateDepartMobile: `${dateTournee}T07:45:00+02:00`,
+    dateArriveeMobile: `${dateTournee}T16:45:00+02:00`
+  };
 }
 
 function buildQuantites(lineIndex) {
@@ -176,7 +197,7 @@ function buildPayload(index) {
   }
 
   return {
-    schemaVersion: '1.2',
+    schemaVersion,
     idSynchronisation: guidFor(index),
     dateTournee,
     codeTournee,
@@ -191,6 +212,7 @@ function buildPayload(index) {
       dateChargementMobile: `${dateTournee}T07:30:00+02:00`,
       dateEnvoiMobile: `${dateTournee}T16:45:00+02:00`
     },
+    trajet: buildTrajet(sequence),
     commentaireGlobal: `Test de masse k6 ${runId}`,
     lignes
   };
@@ -282,6 +304,8 @@ function buildMarkdownSummary(data) {
     `## Paramètres\n\n` +
     `| Paramètre | Valeur |\n` +
     `|---|---:|\n` +
+    `| SchemaVersion utilisée | ${schemaVersion} |\n` +
+    `| Trajet camion inclus | ${trajetCamionInclus ? 'oui' : 'non'} |\n` +
     `| Synchronisations attendues | ${syncCount} |\n` +
     `| VUs k6 | ${vus} |\n` +
     `| Lignes par tournée | ${lineCount} |\n` +
@@ -290,6 +314,7 @@ function buildMarkdownSummary(data) {
     `| Indicateur | Valeur |\n` +
     `|---|---:|\n` +
     `| Requêtes HTTP | ${formatNumber(httpReqs, 0)} |\n` +
+    `| Synchronisations attendues | ${syncCount} |\n` +
     `| Succès HTTP 200 | ${formatNumber(successes, 0)} |\n` +
     `| Validations HTTP 400 | ${formatNumber(validations, 0)} |\n` +
     `| Conflits HTTP 409 | ${formatNumber(conflicts, 0)} |\n` +
@@ -301,7 +326,7 @@ function buildMarkdownSummary(data) {
     `| Taux de requêtes échouées k6 | ${formatNumber(Number(failedRate) * 100)} % |\n\n` +
     `## Conclusion automatique\n\n` +
     (success
-      ? `Le test de masse est réussi côté API : toutes les synchronisations valides attendues ont été acceptées et aucune erreur serveur n'a été détectée. La vérification SQL doit confirmer les volumes sauvegardés.\n`
+      ? `Le test de masse est réussi côté API : toutes les synchronisations valides attendues ont été acceptées et aucune erreur serveur n'a été détectée. La vérification SQL doit confirmer les volumes sauvegardés, y compris dbo.Mobile_TourneeCamion.\n`
       : `Le test de masse nécessite une analyse : le nombre de succès ou d'erreurs ne correspond pas au résultat attendu. Vérifier le journal console, le résumé JSON et la base SQL.\n`);
 }
 
