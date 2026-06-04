@@ -2,7 +2,7 @@
 
 ## Version
 
-Le contrat mobile final documenté pour le choix camion et les kilométrages est strictement en `schemaVersion` `1.3`.
+Le contrat mobile final de synchronisation est strictement en `schemaVersion` `1.3`.
 
 ```json
 {
@@ -10,14 +10,14 @@ Le contrat mobile final documenté pour le choix camion et les kilométrages est
 }
 ```
 
-Cette documentation prépare le développement du contrat `1.3`. Elle ne signifie pas que le code API, les scripts SQL, les payloads JSON de tests ou l'application mobile MAUI sont déjà modifiés.
+`schemaVersion` `1.2` est refusé pour `POST /api/synchronisations`.
 
 ## Contrat 1.3 strict
 
 ```text
 schemaVersion doit être exactement "1.3".
-schemaVersion "1.2" doit être refusé.
-Toute autre schemaVersion doit être refusée.
+schemaVersion "1.2" est refusé.
+Toute autre schemaVersion est refusée.
 trajet obligatoire.
 trajet.camion obligatoire.
 trajet.camion.idCamion obligatoire.
@@ -31,27 +31,34 @@ trajet.kilometrageArrivee >= trajet.kilometrageDepart.
 trajet.dateArriveeMobile >= trajet.dateDepartMobile.
 ```
 
-L'API devra refuser explicitement les synchronisations mobiles en `schemaVersion` `1.2` lorsque ce contrat sera codé.
-
 ## GET /api/camions/disponibles
 
 ### Rôle
 
 Retourne au mobile la liste des camions disponibles pour permettre au livreur de sélectionner le camion utilisé avant le départ.
 
-Cette route est une nouvelle route à ajouter lors du développement de la version camion / kilométrages.
+### Paramètres
 
-### Réponse attendue
+Aucun paramètre n'est nécessaire.
+
+Les paramètres suivants sont explicitement refusés avec une erreur `VALIDATION_ERROR` :
+
+```text
+date
+dateTournee
+```
+
+### Réponse
 
 ```json
 {
   "schemaVersion": "1.3",
   "camions": [
     {
-      "idCamion": "12",
-      "codeCamion": "12",
-      "libelleCamion": "Camion 12",
-      "immatriculation": "AB-123-CD",
+      "idCamion": "DY-662-QN",
+      "codeCamion": "DY-662-QN",
+      "libelleCamion": "VL RENAULT",
+      "immatriculation": "DY-662-QN",
       "estActif": true
     }
   ]
@@ -64,9 +71,44 @@ Cette route est une nouvelle route à ajouter lors du développement de la versi
 idCamion        -> identifiant stable du camion côté API / base
 codeCamion      -> code métier lisible
 libelleCamion   -> libellé affichable dans le mobile
-immatriculation -> plaque du véhicule, si disponible
-estActif        -> indique si le camion peut être proposé au mobile
+immatriculation -> plaque du véhicule ou code camion si la source ne fournit pas de colonne distincte
+estActif        -> true par défaut si la source ne fournit pas de colonne d'activité
 ```
+
+### Normalisation
+
+```text
+trim des chaînes.
+exclusion des camions sans idCamion.
+estActif = true par défaut.
+tri stable par codeCamion, immatriculation, idCamion.
+null accepté pour immatriculation et libelleCamion.
+schemaVersion toujours égal à "1.3".
+```
+
+### Source SQL camion
+
+Source SQL confirmée côté API :
+
+```sql
+[lavinprosli].[dbo].[v_Truck]
+```
+
+Colonnes utilisées :
+
+```text
+CODE        -> idCamion, codeCamion, immatriculation
+DESCRIPTION -> libelleCamion
+```
+
+Colonnes confirmées mais non utilisées pour identifier le camion :
+
+```text
+DEFAULTDRIVERNUMBER
+DEFAULTDRIVERNAME
+```
+
+Ces deux colonnes décrivent le chauffeur par défaut, pas le camion.
 
 ## GET /api/tournees/jour
 
@@ -233,15 +275,15 @@ En `schemaVersion` `1.3`, la synchronisation doit contenir une section `trajet` 
 
 ```text
 schemaVersion doit être exactement "1.3".
-schemaVersion "1.2" doit être refusé.
-Toute autre schemaVersion doit être refusée.
+schemaVersion "1.2" est refusé.
+Toute autre schemaVersion est refusée.
 trajet obligatoire.
 trajet.camion obligatoire.
 trajet.camion.idCamion obligatoire.
 trajet.kilometrageDepart obligatoire.
 trajet.kilometrageArrivee obligatoire.
-trajet.dateDepartMobile obligatoire.
-trajet.dateArriveeMobile obligatoire.
+trajet.dateDepartMobile obligatoire et valide.
+trajet.dateArriveeMobile obligatoire et valide.
 trajet.kilometrageDepart >= 0.
 trajet.kilometrageArrivee >= 0.
 trajet.kilometrageArrivee >= trajet.kilometrageDepart.
@@ -257,7 +299,7 @@ trajet.dateDepartMobile     -> correspond au départ métier après chargement d
 trajet.dateArriveeMobile    -> correspond à l'arrivée métier avant ou au moment de l'envoi final à l'API.
 ```
 
-En première version, ces dates peuvent être identiques aux dates mobile, mais elles sont séparées dans le contrat pour clarifier le métier.
+Ces dates sont séparées dans le contrat pour clarifier le métier.
 
 ## Statuts de passage
 
