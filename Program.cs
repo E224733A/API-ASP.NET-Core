@@ -117,6 +117,10 @@ builder.Services.AddScoped<TourneeRequestValidator>();
 builder.Services.AddScoped<TourneesService>();
 builder.Services.AddScoped<TourneeMobileMapper>();
 
+// Module Camions : GET /api/camions/disponibles.
+builder.Services.AddScoped<CamionsRepository>();
+builder.Services.AddScoped<CamionsService>();
+
 builder.Services.AddScoped<SynchronisationsRepository>();
 builder.Services.AddScoped<SynchronisationTourneeValidator>();
 builder.Services.AddScoped<SynchronisationMapper>();
