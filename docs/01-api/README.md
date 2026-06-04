@@ -10,14 +10,25 @@ L'API est le point d'entrée unique entre :
 - les vues ABSSolute en lecture seule ;
 - les tables `Mobile_*` dédiées au projet.
 
-## Version de contrat
+## Version de contrat mobile
 
-Version actuelle :
+Version actuelle pour `POST /api/synchronisations` :
 
 ```json
 {
-  "schemaVersion": "1.2"
+  "schemaVersion": "1.3"
 }
+```
+
+Le contrat de synchronisation mobile est strict :
+
+```text
+schemaVersion = "1.3" uniquement.
+schemaVersion = "1.2" refusé.
+trajet obligatoire.
+camion obligatoire.
+kilométrages départ/arrivée obligatoires.
+dates départ/arrivée obligatoires.
 ```
 
 ## Routes principales
@@ -30,7 +41,8 @@ Version actuelle :
 | Livreurs | GET | `/api/livreurs` | Lister les livreurs |
 | Mobile | GET | `/api/tournees/disponibles` | Lister les tournées disponibles |
 | Mobile | GET | `/api/tournees/jour` | Charger une tournée complète |
-| Mobile | POST | `/api/synchronisations` | Synchroniser le retour mobile |
+| Mobile | GET | `/api/camions/disponibles` | Lister les camions disponibles |
+| Mobile | POST | `/api/synchronisations` | Synchroniser le retour mobile strict 1.3 avec trajet camion |
 | Expédition | GET | `/api/expedition/preparations/a-preparer` | Charger toutes les préparations à préparer |
 | Expédition | POST | `/api/expedition/preparations/verrouiller` | Verrouiller les préparations Expédition |
 
@@ -52,18 +64,21 @@ Controllers/
 ├── HealthController.cs
 ├── LivreursController.cs
 ├── TourneesController.cs
+├── CamionsController.cs
 ├── SynchronisationsController.cs
 ├── ExpeditionPreparationsController.cs
 └── DebugSqlController.cs
 
 Services/
 ├── TourneesService.cs
+├── CamionsService.cs
 ├── SynchronisationService.cs
 └── ExpeditionService.cs
 
 Repositories/
 ├── LivreursRepository.cs
 ├── TourneesRepository.cs
+├── CamionsRepository.cs
 ├── SynchronisationsRepository.cs
 └── ExpeditionRepository.cs
 
@@ -80,5 +95,8 @@ Validators/
 Le GET Expédition est global.
 Le POST Expédition est idempotent avec idLotVerrouillage.
 Le mobile lit uniquement les préparations verrouillées.
-L'anti-doublon mobile est DateTournee + CodeTournee.
+L'anti-doublon mobile technique est IdSynchronisation.
+L'anti-doublon mobile métier est DateTournee + CodeTournee.
+Le POST /api/synchronisations exige schemaVersion = "1.3".
+Le POST /api/synchronisations exige un trajet camion complet.
 ```
