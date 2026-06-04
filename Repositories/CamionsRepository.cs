@@ -1,4 +1,5 @@
 using API_ASP.NET_Core.Data;
+using Dapper;
 
 namespace API_ASP.NET_Core.Repositories;
 
@@ -18,16 +19,11 @@ public sealed record CamionRecord
 /// Repository SQL dédié aux camions.
 /// </summary>
 /// <remarks>
-/// Cette classe doit rester limitée à l'accès SQL. La normalisation des données
+/// Cette classe reste limitée à l'accès SQL. La normalisation des données
 /// est réalisée dans <see cref="Services.CamionsService"/>.
 /// </remarks>
 public sealed class CamionsRepository
 {
-    /// <summary>
-    /// Nom de vue à confirmer avant activation de la route.
-    /// </summary>
-    public const string TODO_NOM_VUE_CAMIONS_A_CONFIRMER = "TODO_NOM_VUE_CAMIONS_A_CONFIRMER";
-
     private readonly SqlConnectionFactory _connectionFactory;
 
     public CamionsRepository(SqlConnectionFactory connectionFactory)
@@ -38,15 +34,39 @@ public sealed class CamionsRepository
     /// <summary>
     /// Retourne les camions disponibles depuis la vue SQL métier confirmée.
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Levée tant que le nom réel de la vue camion et ses colonnes n'ont pas été confirmés.
-    /// </exception>
-    public Task<IReadOnlyList<CamionRecord>> GetCamionsDisponiblesAsync()
+    /// <remarks>
+    /// Source confirmée : [lavinprosli].[dbo].[v_Truck].
+    /// Colonnes confirmées : CODE, DESCRIPTION, DEFAULTDRIVERNUMBER, DEFAULTDRIVERNAME.
+    ///
+    /// Mapping retenu :
+    /// - CODE est utilisé comme identifiant source du camion ;
+    /// - CODE est également exposé comme code camion, car aucune autre colonne de code camion
+    ///   distincte n'est disponible dans la vue confirmée ;
+    /// - DESCRIPTION est exposé comme libellé camion ;
+    /// - CODE est exposé comme immatriculation, car les valeurs observées correspondent
+    ///   au format d'une immatriculation ;
+    /// - EstActif vaut true par défaut, car la vue confirmée ne fournit pas de colonne d'activité.
+    ///
+    /// DEFAULTDRIVERNUMBER et DEFAULTDRIVERNAME ne sont pas utilisés pour identifier le camion :
+    /// ils décrivent le chauffeur par défaut et non le camion lui-même.
+    /// </remarks>
+    public async Task<IReadOnlyList<CamionRecord>> GetCamionsDisponiblesAsync()
     {
-        _ = _connectionFactory;
+        using var connection = _connectionFactory.CreateAbssoluteConnection();
 
-        throw new InvalidOperationException(
-            "Source SQL camion non configurée : le nom réel de la vue camion ABSSolute n'a pas été confirmé. " +
-            "Remplacer TODO_NOM_VUE_CAMIONS_A_CONFIRMER dans CamionsRepository par la vue réelle et mapper les colonnes confirmées avant d'utiliser GET /api/camions/disponibles.");
+        const string sql = """
+            SELECT DISTINCT
+                LTRIM(RTRIM(CAST(CODE AS NVARCHAR(50)))) AS IdCamion,
+                LTRIM(RTRIM(CAST(CODE AS NVARCHAR(50)))) AS CodeCamion,
+                NULLIF(LTRIM(RTRIM(CAST(DESCRIPTION AS NVARCHAR(150)))), N'') AS LibelleCamion,
+                LTRIM(RTRIM(CAST(CODE AS NVARCHAR(50)))) AS Immatriculation,
+                CAST(1 AS bit) AS EstActif
+            FROM [lavinprosli].[dbo].[v_Truck]
+            WHERE CODE IS NOT NULL
+              AND LTRIM(RTRIM(CAST(CODE AS NVARCHAR(50)))) <> N'';
+            """;
+
+        var camions = await connection.QueryAsync<CamionRecord>(sql);
+        return camions.ToList();
     }
 }
