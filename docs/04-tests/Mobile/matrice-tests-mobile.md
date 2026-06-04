@@ -1,15 +1,13 @@
 # Matrice de tests API Mobile SLI v1.3 strict
 
-Cette matrice couvre le contrat mobile final prévu en `schemaVersion` `1.3` strict pour le choix camion et les kilométrages.
-
-Cette mise à jour est documentaire. Elle ne signifie pas que le code API, les scripts SQL, les fichiers de tests automatisés, les payloads JSON ou l'application mobile MAUI sont déjà modifiés.
+Cette matrice couvre le contrat mobile final en `schemaVersion` `1.3` strict pour le choix camion, le trajet et les kilométrages.
 
 ## Contrat 1.3 strict
 
 ```text
 schemaVersion doit être exactement "1.3".
-schemaVersion "1.2" doit être refusé.
-Toute autre schemaVersion doit être refusée.
+schemaVersion "1.2" est refusé.
+Toute autre schemaVersion est refusée.
 trajet obligatoire.
 trajet.camion obligatoire.
 trajet.camion.idCamion obligatoire.
@@ -23,9 +21,23 @@ kilometrageArrivee >= kilometrageDepart.
 dateArriveeMobile >= dateDepartMobile.
 ```
 
-Les scénarios `MOB-API-001` à `MOB-API-018` restent présents. Les payloads valides associés à ces scénarios devront être prévus en `schemaVersion` `1.3` avec un bloc `trajet` valide, sauf pour les scénarios qui testent explicitement `schemaVersion`.
+## Couverture
 
-Aucun payload JSON n'est modifié dans ce lot documentaire.
+```text
+MOB-API-001 à MOB-API-018 : scénarios historiques conservés et adaptés au contrat 1.3.
+MOB-API-019 : GET /api/camions/disponibles.
+MOB-API-020 à MOB-API-031 : scénarios camion/trajet et refus de schemaVersion 1.2.
+k6 : test de masse POST /api/synchronisations en schemaVersion 1.3 avec trajet camion.
+```
+
+Dernière exécution communiquée par test local/utilisateur :
+
+```text
+Tests API Mobile : 31/31 OK sur http://srvapi1.sli.local:5000.
+Test k6 1.3 : 20/20 HTTP 200 SUCCESS sur http://srvapi1.sli.local:5000 avec trajet camion.
+```
+
+Les tests doivent être relancés après toute modification de code, de contrat ou de base.
 
 ## Scénarios
 
@@ -46,19 +58,19 @@ Aucun payload JSON n'est modifié dans ce lot documentaire.
 | MOB-API-013 | quantites vide | sync-quantites-vide.json | Invalide | 400 | VALIDATION_ERROR | |
 | MOB-API-014 | quantiteLivreePrevue negative | sync-quantite-prevue-negative.json | Invalide | 400 | VALIDATION_ERROR | |
 | MOB-API-015 | quantiteLivreePrevue zero acceptee en 1.3 avec trajet valide | sync-prevu-zero.json | Valide | 200 | SUCCESS | |
-| MOB-API-016 | ROLLS_VIDES livre accepte en 1.3 avec trajet valide | sync-valide-rolls-vides.json | Valide | 200 | SUCCESS | |
-| MOB-API-017 | ROLLS_VIDES avec quantite livree positive accepte en 1.3 avec trajet valide | sync-rolls-vides-livree-invalide.json | Valide | 200 | SUCCESS | |
-| MOB-API-018 | ROLLS_VIDES avec quantite prevue positive accepte en 1.3 avec trajet valide | sync-rolls-vides-prevue-invalide.json | Valide | 200 | SUCCESS | |
-| MOB-API-019 | GET camions disponibles valide | get-camions-disponibles.json | Valide | 200 | SUCCESS | |
-| MOB-API-020 | Synchronisation 1.3 valide avec trajet camion | sync-v13-valide-trajet-camion.json | Valide | 200 | SUCCESS | |
+| MOB-API-016 | ROLLS_VIDES livre accepte en 1.3 avec trajet valide | sync-valide-rolls-vides-livree.json | Valide | 200 | SUCCESS | |
+| MOB-API-017 | ROLLS_VIDES avec quantite prevue positive accepte en 1.3 avec trajet valide | sync-valide-rolls-vides-prevue.json | Valide | 200 | SUCCESS | |
+| MOB-API-018 | ROLLS_VIDES recupere uniquement accepte en 1.3 avec trajet valide | sync-valide-rolls-vides.json | Valide | 200 | SUCCESS | |
+| MOB-API-019 | GET camions disponibles valide avec schemaVersion 1.3 et camions[] | GET /api/camions/disponibles | Valide | 200 | | |
+| MOB-API-020 | Synchronisation 1.3 valide avec trajet camion | sync-valide-v13-trajet-camion.json | Valide | 200 | SUCCESS | |
 | MOB-API-021 | Synchronisation 1.3 sans trajet | sync-v13-sans-trajet.json | Invalide | 400 | VALIDATION_ERROR | |
 | MOB-API-022 | Synchronisation 1.3 sans camion | sync-v13-sans-camion.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-023 | Synchronisation 1.3 sans idCamion | sync-v13-sans-idcamion.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-024 | Synchronisation 1.3 sans kilometrageDepart | sync-v13-sans-kilometrage-depart.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-025 | Synchronisation 1.3 sans kilometrageArrivee | sync-v13-sans-kilometrage-arrivee.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-026 | Synchronisation 1.3 kilometrageDepart negatif | sync-v13-kilometrage-depart-negatif.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-027 | Synchronisation 1.3 kilometrageArrivee negatif | sync-v13-kilometrage-arrivee-negatif.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-028 | Synchronisation 1.3 kilometrageArrivee inferieur au depart | sync-v13-kilometrage-arrivee-inferieur-depart.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-029 | Synchronisation 1.3 sans dateDepartMobile | sync-v13-sans-date-depart-mobile.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-030 | Synchronisation 1.3 sans dateArriveeMobile | sync-v13-sans-date-arrivee-mobile.json | Invalide | 400 | VALIDATION_ERROR | |
-| MOB-API-031 | Synchronisation schemaVersion 1.2 refusee | sync-v12-refusee.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-023 | Synchronisation 1.3 sans idCamion | sync-v13-sans-id-camion.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-024 | Synchronisation 1.3 sans kilometrageDepart | sync-v13-sans-km-depart.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-025 | Synchronisation 1.3 sans kilometrageArrivee | sync-v13-sans-km-arrivee.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-026 | Synchronisation 1.3 kilometrageDepart negatif | sync-v13-km-depart-negatif.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-027 | Synchronisation 1.3 kilometrageArrivee negatif | sync-v13-km-arrivee-negatif.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-028 | Synchronisation 1.3 kilometrageArrivee inferieur au depart | sync-v13-km-arrivee-inferieur-depart.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-029 | Synchronisation 1.3 sans dateDepartMobile | sync-v13-sans-date-depart.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-030 | Synchronisation 1.3 sans dateArriveeMobile | sync-v13-sans-date-arrivee.json | Invalide | 400 | VALIDATION_ERROR | |
+| MOB-API-031 | Synchronisation schemaVersion 1.2 refusee | sync-schema-version-12-refusee.json | Invalide | 400 | VALIDATION_ERROR | |
