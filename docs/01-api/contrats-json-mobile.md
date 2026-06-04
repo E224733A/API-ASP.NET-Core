@@ -2,29 +2,36 @@
 
 ## Version
 
+Le contrat mobile final documenté pour le choix camion et les kilométrages est strictement en `schemaVersion` `1.3`.
+
 ```json
 {
-  "schemaVersion": "1.2"
+  "schemaVersion": "1.3"
 }
 ```
 
-## Transition 1.2 -> 1.3
+Cette documentation prépare le développement du contrat `1.3`. Elle ne signifie pas que le code API, les scripts SQL, les payloads JSON de tests ou l'application mobile MAUI sont déjà modifiés.
 
-Cette section prépare l'évolution du contrat mobile avant codage.
-
-État documenté :
+## Contrat 1.3 strict
 
 ```text
-schemaVersion 1.2 -> contrat existant, accepté temporairement avec trajet optionnel
-schemaVersion 1.3 -> contrat cible, accepté avec trajet obligatoire lorsque la migration sera codée
+schemaVersion doit être exactement "1.3".
+schemaVersion "1.2" doit être refusé.
+Toute autre schemaVersion doit être refusée.
+trajet obligatoire.
+trajet.camion obligatoire.
+trajet.camion.idCamion obligatoire.
+trajet.kilometrageDepart obligatoire.
+trajet.kilometrageArrivee obligatoire.
+trajet.dateDepartMobile obligatoire.
+trajet.dateArriveeMobile obligatoire.
+trajet.kilometrageDepart >= 0.
+trajet.kilometrageArrivee >= 0.
+trajet.kilometrageArrivee >= trajet.kilometrageDepart.
+trajet.dateArriveeMobile >= trajet.dateDepartMobile.
 ```
 
-Points importants :
-
-- la version `1.2` reste compatible avec les synchronisations existantes ;
-- l'objet `trajet` est optionnel en `1.2` pour permettre une transition progressive ;
-- l'objet `trajet` devient obligatoire en `1.3` ;
-- cette documentation prépare la migration et ne signifie pas que le code API est déjà modifié.
+L'API devra refuser explicitement les synchronisations mobiles en `schemaVersion` `1.2` lorsque ce contrat sera codé.
 
 ## GET /api/camions/disponibles
 
@@ -38,7 +45,7 @@ Cette route est une nouvelle route à ajouter lors du développement de la versi
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "camions": [
     {
       "idCamion": "12",
@@ -165,14 +172,14 @@ null -> l'Expédition n'a rien renseigné
 
 Le mobile envoie le résultat final de la tournée au retour dépôt.
 
-### Structure minimale 1.2 existante
+### Structure attendue 1.3 stricte
 
 ```json
 {
-  "schemaVersion": "1.2",
+  "schemaVersion": "1.3",
   "idSynchronisation": "11111111-1111-1111-1111-111111111111",
-  "dateTournee": "2026-05-19",
-  "codeTournee": "2023",
+  "dateTournee": "2026-06-04",
+  "codeTournee": "4001",
   "libelleTournee": "CLISSON",
   "livreur": {
     "codeLivreur": "2",
@@ -181,15 +188,27 @@ Le mobile envoie le résultat final de la tournée au retour dépôt.
   "mobile": {
     "nomAppareil": "Telephone SLI",
     "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-05-19T07:00:00+02:00",
-    "dateEnvoiMobile": "2026-05-19T17:00:00+02:00"
+    "dateChargementMobile": "2026-06-04T07:30:00+02:00",
+    "dateEnvoiMobile": "2026-06-04T16:45:00+02:00"
+  },
+  "trajet": {
+    "camion": {
+      "idCamion": "12",
+      "codeCamion": "12",
+      "libelleCamion": "Camion 12",
+      "immatriculation": "AB-123-CD"
+    },
+    "kilometrageDepart": 128100,
+    "kilometrageArrivee": 128450,
+    "dateDepartMobile": "2026-06-04T07:30:00+02:00",
+    "dateArriveeMobile": "2026-06-04T16:45:00+02:00"
   },
   "commentaireGlobal": null,
   "lignes": []
 }
 ```
 
-### Section trajet cible 1.3
+### Section trajet obligatoire
 
 En `schemaVersion` `1.3`, la synchronisation doit contenir une section `trajet` permettant de tracer le camion utilisé et les kilométrages de départ et d'arrivée.
 
@@ -210,59 +229,35 @@ En `schemaVersion` `1.3`, la synchronisation doit contenir une section `trajet` 
 }
 ```
 
-### Exemple cible 1.3 avec trajet
-
-```json
-{
-  "schemaVersion": "1.3",
-  "idSynchronisation": "11111111-1111-1111-1111-111111111111",
-  "dateTournee": "2026-06-04",
-  "codeTournee": "2023",
-  "libelleTournee": "CLISSON",
-  "livreur": {
-    "codeLivreur": "2",
-    "nomLivreur": "DAVID LEBAS"
-  },
-  "mobile": {
-    "nomAppareil": "Telephone SLI",
-    "versionApplication": "1.0.0",
-    "dateChargementMobile": "2026-06-04T07:00:00+02:00",
-    "dateEnvoiMobile": "2026-06-04T17:00:00+02:00"
-  },
-  "trajet": {
-    "camion": {
-      "idCamion": "12",
-      "codeCamion": "12",
-      "libelleCamion": "Camion 12",
-      "immatriculation": "AB-123-CD"
-    },
-    "kilometrageDepart": 128100,
-    "kilometrageArrivee": 128450,
-    "dateDepartMobile": "2026-06-04T07:30:00+02:00",
-    "dateArriveeMobile": "2026-06-04T16:45:00+02:00"
-  },
-  "commentaireGlobal": null,
-  "lignes": []
-}
-```
-
-### Règles de validation trajet
+### Règles de validation
 
 ```text
-schemaVersion 1.2 accepté temporairement avec trajet optionnel
-schemaVersion 1.3 accepté avec trajet obligatoire
-trajet obligatoire en 1.3
-trajet.camion obligatoire en 1.3
-trajet.camion.idCamion obligatoire en 1.3
-trajet.kilometrageDepart obligatoire en 1.3
-trajet.kilometrageArrivee obligatoire en 1.3
-trajet.dateDepartMobile obligatoire en 1.3
-trajet.dateArriveeMobile obligatoire en 1.3
-trajet.kilometrageDepart >= 0
-trajet.kilometrageArrivee >= 0
-trajet.kilometrageArrivee >= trajet.kilometrageDepart
-trajet.dateArriveeMobile >= trajet.dateDepartMobile
+schemaVersion doit être exactement "1.3".
+schemaVersion "1.2" doit être refusé.
+Toute autre schemaVersion doit être refusée.
+trajet obligatoire.
+trajet.camion obligatoire.
+trajet.camion.idCamion obligatoire.
+trajet.kilometrageDepart obligatoire.
+trajet.kilometrageArrivee obligatoire.
+trajet.dateDepartMobile obligatoire.
+trajet.dateArriveeMobile obligatoire.
+trajet.kilometrageDepart >= 0.
+trajet.kilometrageArrivee >= 0.
+trajet.kilometrageArrivee >= trajet.kilometrageDepart.
+trajet.dateArriveeMobile >= trajet.dateDepartMobile.
 ```
+
+## Dates mobile et dates trajet
+
+```text
+mobile.dateChargementMobile -> trace le chargement technique de la tournée.
+mobile.dateEnvoiMobile      -> trace l'envoi technique du payload.
+trajet.dateDepartMobile     -> correspond au départ métier après chargement de la tournée.
+trajet.dateArriveeMobile    -> correspond à l'arrivée métier avant ou au moment de l'envoi final à l'API.
+```
+
+En première version, ces dates peuvent être identiques aux dates mobile, mais elles sont séparées dans le contrat pour clarifier le métier.
 
 ## Statuts de passage
 
