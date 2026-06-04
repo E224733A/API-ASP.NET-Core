@@ -5,6 +5,9 @@ namespace API_ASP.NET_Core.Validators;
 
 public sealed class SynchronisationTourneeValidator
 {
+    private const string SchemaVersionHistoriqueRefusee = "1.2";
+    private const string SchemaVersionAvecTrajet = "1.3";
+
     private static readonly HashSet<string> StatutsAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "FAIT",
@@ -22,13 +25,24 @@ public sealed class SynchronisationTourneeValidator
             return new SynchronisationValidationResult(errors);
         }
 
-        if (string.IsNullOrWhiteSpace(request.SchemaVersion))
+        var schemaVersion = request.SchemaVersion?.Trim();
+
+        if (string.IsNullOrWhiteSpace(schemaVersion))
         {
             errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma est obligatoire."));
         }
-        else if (!string.Equals(request.SchemaVersion.Trim(), "1.2", StringComparison.OrdinalIgnoreCase))
+        else if (string.Equals(schemaVersion, SchemaVersionHistoriqueRefusee, StringComparison.OrdinalIgnoreCase))
         {
-            errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma supportée est 1.2."));
+            errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma 1.2 n'est plus acceptée pour la synchronisation. La version supportée est 1.3."));
+        }
+        else if (!string.Equals(schemaVersion, SchemaVersionAvecTrajet, StringComparison.OrdinalIgnoreCase))
+        {
+            errors.Add(new SynchronisationValidationError("schemaVersion", "La version de schéma supportée est 1.3."));
+        }
+
+        if (string.Equals(schemaVersion, SchemaVersionAvecTrajet, StringComparison.OrdinalIgnoreCase))
+        {
+            ValidateTrajet(request.Trajet, errors);
         }
 
         if (!TryParseGuid(request.IdSynchronisation, out _))
@@ -172,6 +186,75 @@ public sealed class SynchronisationTourneeValidator
         }
 
         return new SynchronisationValidationResult(errors);
+    }
+
+    private static void ValidateTrajet(
+        SynchronisationTrajetRequest? trajet,
+        ICollection<SynchronisationValidationError> errors)
+    {
+        if (trajet is null)
+        {
+            errors.Add(new SynchronisationValidationError("trajet", "trajet obligatoire"));
+            return;
+        }
+
+        if (trajet.Camion is null)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.camion", "trajet.camion obligatoire"));
+        }
+        else if (string.IsNullOrWhiteSpace(trajet.Camion.IdCamion))
+        {
+            errors.Add(new SynchronisationValidationError("trajet.camion.idCamion", "trajet.camion.idCamion obligatoire"));
+        }
+
+        if (!trajet.KilometrageDepart.HasValue)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.kilometrageDepart", "trajet.kilometrageDepart obligatoire"));
+        }
+        else if (trajet.KilometrageDepart.Value < 0)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.kilometrageDepart", "Le kilométrage de départ doit être positif ou nul."));
+        }
+
+        if (!trajet.KilometrageArrivee.HasValue)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.kilometrageArrivee", "trajet.kilometrageArrivee obligatoire"));
+        }
+        else if (trajet.KilometrageArrivee.Value < 0)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.kilometrageArrivee", "Le kilométrage d'arrivée doit être positif ou nul."));
+        }
+
+        if (trajet.KilometrageDepart.HasValue
+            && trajet.KilometrageArrivee.HasValue
+            && trajet.KilometrageArrivee.Value >= 0
+            && trajet.KilometrageDepart.Value >= 0
+            && trajet.KilometrageArrivee.Value < trajet.KilometrageDepart.Value)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.kilometrageArrivee", "Le kilométrage d'arrivée doit être supérieur ou égal au kilométrage de départ."));
+        }
+
+        var dateDepartValide = TryParseDateTimeOffsetNullable(trajet.DateDepartMobile, out var dateDepartMobile);
+        var dateArriveeValide = TryParseDateTimeOffsetNullable(trajet.DateArriveeMobile, out var dateArriveeMobile);
+
+        if (!dateDepartValide)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.dateDepartMobile", "trajet.dateDepartMobile obligatoire"));
+        }
+
+        if (!dateArriveeValide)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.dateArriveeMobile", "trajet.dateArriveeMobile obligatoire"));
+        }
+
+        if (dateDepartValide
+            && dateArriveeValide
+            && dateDepartMobile.HasValue
+            && dateArriveeMobile.HasValue
+            && dateArriveeMobile.Value < dateDepartMobile.Value)
+        {
+            errors.Add(new SynchronisationValidationError("trajet.dateArriveeMobile", "La date d'arrivée mobile doit être supérieure ou égale à la date de départ mobile."));
+        }
     }
 
     public static DateTime ParseDateTournee(object? value)
