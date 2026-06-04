@@ -131,6 +131,8 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
             ?? throw new InvalidOperationException("Le livreur a été validé mais reste null.");
         var mobile = request.Mobile
             ?? throw new InvalidOperationException("Les informations mobile ont été validées mais restent null.");
+        var trajet = request.Trajet
+            ?? throw new InvalidOperationException("Le trajet a été validé mais reste null.");
         var lignes = request.Lignes
             ?? throw new InvalidOperationException("Les lignes ont été validées mais restent null.");
         var dateChargementMobile = ParseDateTimeOffsetOrNull(mobile.DateChargementMobile);
@@ -160,6 +162,13 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
                 dateChargementMobile,
                 dateEnvoiMobile,
                 adresseIp,
+                cancellationToken);
+
+            await InsertTourneeCamionAsync(
+                connection,
+                (SqlTransaction)transaction,
+                idTourneeMobile,
+                trajet,
                 cancellationToken);
 
             var nombreLignes = 0;
@@ -443,6 +452,71 @@ VALUES
 
         var result = await command.ExecuteScalarAsync(cancellationToken);
         return Convert.ToInt64(result);
+    }
+
+    private async Task InsertTourneeCamionAsync(
+        SqlConnection connection,
+        SqlTransaction transaction,
+        long idTourneeMobile,
+        SynchronisationTrajetRequest trajet,
+        CancellationToken cancellationToken)
+    {
+        var camion = trajet.Camion
+            ?? throw new InvalidOperationException("Le camion du trajet a été validé mais reste null.");
+
+        if (string.IsNullOrWhiteSpace(camion.IdCamion))
+        {
+            throw new InvalidOperationException("L'identifiant camion du trajet a été validé mais reste vide.");
+        }
+
+        var kilometrageDepart = trajet.KilometrageDepart
+            ?? throw new InvalidOperationException("Le kilométrage de départ a été validé mais reste null.");
+        var kilometrageArrivee = trajet.KilometrageArrivee
+            ?? throw new InvalidOperationException("Le kilométrage d'arrivée a été validé mais reste null.");
+        var dateDepartMobile = ParseDateTimeOffsetOrNull(trajet.DateDepartMobile)
+            ?? throw new InvalidOperationException("La date de départ mobile a été validée mais reste invalide.");
+        var dateArriveeMobile = ParseDateTimeOffsetOrNull(trajet.DateArriveeMobile)
+            ?? throw new InvalidOperationException("La date d'arrivée mobile a été validée mais reste invalide.");
+
+        const string sql = @"
+INSERT INTO dbo.Mobile_TourneeCamion
+    (
+        IdTourneeMobile,
+        IdCamionSource,
+        CodeCamion,
+        LibelleCamion,
+        Immatriculation,
+        KilometrageDepart,
+        KilometrageArrivee,
+        DateDepartMobile,
+        DateArriveeMobile
+    )
+VALUES
+    (
+        @IdTourneeMobile,
+        @IdCamionSource,
+        @CodeCamion,
+        @LibelleCamion,
+        @Immatriculation,
+        @KilometrageDepart,
+        @KilometrageArrivee,
+        @DateDepartMobile,
+        @DateArriveeMobile
+    );
+";
+
+        await using var command = new SqlCommand(sql, connection, transaction);
+        command.Parameters.Add("@IdTourneeMobile", SqlDbType.BigInt).Value = idTourneeMobile;
+        command.Parameters.Add("@IdCamionSource", SqlDbType.NVarChar, 50).Value = camion.IdCamion.Trim();
+        command.Parameters.Add("@CodeCamion", SqlDbType.NVarChar, 50).Value = ToDbValue(camion.CodeCamion);
+        command.Parameters.Add("@LibelleCamion", SqlDbType.NVarChar, 150).Value = ToDbValue(camion.LibelleCamion);
+        command.Parameters.Add("@Immatriculation", SqlDbType.NVarChar, 50).Value = ToDbValue(camion.Immatriculation);
+        command.Parameters.Add("@KilometrageDepart", SqlDbType.Int).Value = kilometrageDepart;
+        command.Parameters.Add("@KilometrageArrivee", SqlDbType.Int).Value = kilometrageArrivee;
+        command.Parameters.Add("@DateDepartMobile", SqlDbType.DateTimeOffset).Value = dateDepartMobile;
+        command.Parameters.Add("@DateArriveeMobile", SqlDbType.DateTimeOffset).Value = dateArriveeMobile;
+
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     private async Task<long> InsertLigneAsync(
