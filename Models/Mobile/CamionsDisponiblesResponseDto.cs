@@ -1,5 +1,3 @@
-using API_ASP.NET_Core.Constants;
-
 namespace API_ASP.NET_Core.Models;
 
 /// <summary>
@@ -7,10 +5,12 @@ namespace API_ASP.NET_Core.Models;
 /// </summary>
 public sealed class CamionsDisponiblesResponseDto
 {
+    private const string SchemaVersionCamionsDisponibles = "1.3";
+
     /// <summary>
-    /// Version du schéma JSON mobile.
+    /// Version du schéma JSON mobile pour la route GET /api/camions/disponibles.
     /// </summary>
-    public string SchemaVersion { get; init; } = SchemaVersions.SynchronisationActuelle;
+    public string SchemaVersion { get; init; } = SchemaVersionCamionsDisponibles;
 
     /// <summary>
     /// Liste normalisée des camions disponibles.
