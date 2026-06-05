@@ -1,18 +1,20 @@
 # Contrats JSON - Mobile
 
-## Version
+## Versions mobiles
 
-Le contrat mobile final de synchronisation est strictement en `schemaVersion` `1.3`.
+Le projet utilise deux contrats mobiles distincts :
 
-```json
-{
-  "schemaVersion": "1.3"
-}
+```text
+GET /api/tournees/jour          -> schemaVersion inchangé, actuellement "1.2".
+POST /api/synchronisations      -> schemaVersion strictement "1.3".
+GET /api/camions/disponibles    -> schemaVersion "1.3".
 ```
 
-`schemaVersion` `1.2` est refusé pour `POST /api/synchronisations`.
+Le champ optionnel `pointLivraison.lienAdresseLivraison` est ajouté uniquement au JSON de chargement des tournées mobile. Il ne change pas `schemaVersion`.
 
-## Contrat 1.3 strict
+`schemaVersion` `1.2` est refusé uniquement pour `POST /api/synchronisations`.
+
+## Contrat POST synchronisation 1.3 strict
 
 ```text
 schemaVersion doit être exactement "1.3".
@@ -130,6 +132,8 @@ chargement
 lignes[]
 ```
 
+Le `schemaVersion` du chargement tournée n'est pas modifié par l'ajout de `lienAdresseLivraison`.
+
 ## Ligne mobile
 
 Chaque ligne représente un point de livraison.
@@ -147,6 +151,76 @@ retour
 infosLivreur
 saisie
 ```
+
+## pointLivraison.lienAdresseLivraison
+
+### Rôle
+
+`lienAdresseLivraison` est un champ optionnel destiné au mobile pour ouvrir une aide de navigation vers l'adresse de livraison.
+
+Ce champ ne doit pas être renvoyé dans `POST /api/synchronisations`.
+
+### Exemple
+
+```json
+{
+  "pointLivraison": {
+    "codePDL": "PDL001",
+    "descriptionPDL": "Entrée principale",
+    "adresseLigne1": "10 Rue Exemple",
+    "adresseLigne2": null,
+    "adresseLigne3": null,
+    "ville": "Nantes",
+    "codePostal": "44000",
+    "lienAdresseLivraison": "https://www.google.com/maps/search/?api=1&query=Nantes"
+  }
+}
+```
+
+### Règles
+
+```text
+champ optionnel.
+chaîne non vide si lien disponible.
+null si lien désactivé, absent ou invalide.
+aucune erreur si CodePDL est vide.
+aucune erreur si la source finale n'est pas disponible.
+ne change pas schemaVersion.
+ne change pas POST /api/synchronisations.
+```
+
+### Configuration API
+
+```json
+{
+  "LiensAdresseLivraison": {
+    "Enabled": true,
+    "Mode": "Hardcoded",
+    "HardcodedUrl": "https://www.google.com/maps/search/?api=1&query=Nantes"
+  }
+}
+```
+
+Modes disponibles :
+
+```text
+Disabled   -> retourne toujours null.
+Hardcoded  -> retourne l'URL de test configurée si CodePDL est présent.
+Repository -> prépare la future source métier ABSSolute par CodePDL.
+```
+
+### Source finale prévue
+
+La source finale n'est pas encore disponible. Le mode `Repository` est préparé pour une vue ou requête ABSSolute retournant au minimum :
+
+```text
+CodePDL
+LienAdresseLivraison
+EstActif
+DateModification
+```
+
+La jointure métier prévue se fait par `CodePDL`.
 
 ## idLigneSource
 
