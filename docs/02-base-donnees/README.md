@@ -100,6 +100,22 @@ Un seul Mobile_TourneeCamion par IdTourneeMobile.
 
 Le repository insère `Mobile_TourneeCamion` dans la même transaction SQL que `Mobile_Tournee`, avant les lignes et avant le commit final.
 
+## Scripts de nettoyage de tests
+
+Les scripts de nettoyage sont à utiliser uniquement sur base de développement/test, après vérification de l'aperçu.
+
+| Fichier | Rôle |
+|---|---|
+| `../04-tests/masse/sql/nettoyage-run-k6-mobile-13-trajet-camion.sql` | Nettoyage ciblé des runs k6 mobile 1.3 avec trajet camion |
+| `../04-tests/Expedition/sql/nettoyage-tests-expedition-run-write.sql` | Nettoyage ciblé des écritures créées par `Run-ExpeditionTests.ps1 -RunWriteTests` |
+
+Sécurité commune :
+
+```text
+@ExecuteDelete = 0 -> aperçu uniquement
+@ExecuteDelete = 1 -> suppression réelle
+```
+
 ## Documents
 
 | Fichier | Rôle |
@@ -109,7 +125,6 @@ Le repository insère `Mobile_TourneeCamion` dans la même transaction SQL que `
 | `migrations.md` | Règles d'organisation des scripts SQL |
 | `complete/BDD_sli_v13_complete.sql` | Script complet de recréation en développement/test |
 | `migrations/20260604_ajout_mobile_tournee_camion.sql` | Migration non destructive de `Mobile_TourneeCamion` |
-| `../04-tests/masse/sql/nettoyage-run-k6-mobile-13-trajet-camion.sql` | Nettoyage ciblé des runs k6 mobile 1.3 |
 
 ## Règles importantes
 
