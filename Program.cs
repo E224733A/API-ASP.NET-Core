@@ -57,7 +57,8 @@ builder.Services.AddSwaggerGen(options =>
         API ASP.NET Core utilisée par l'application mobile MobileSLI des livreurs
         et par le module web Expédition.
 
-        Contrat JSON mobile actuel : schemaVersion = "1.2".
+        Contrat GET mobile de chargement : schemaVersion = "1.2".
+        Contrat POST mobile de synchronisation : schemaVersion = "1.3".
         Contrat JSON Expédition actuel : schemaVersion = "1.2".
 
         Règle centrale de date métier :
