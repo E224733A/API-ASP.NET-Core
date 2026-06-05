@@ -55,7 +55,7 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
 
             return LienAdresseLivraisonUrlValidator.NormalizeUrl(url);
         }
-        catch (SqlException exception)
+        catch (Exception exception) when (exception is SqlException or InvalidOperationException)
         {
             _logger.LogWarning(
                 exception,
