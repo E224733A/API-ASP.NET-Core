@@ -12,7 +12,8 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<TourneeLigneRecord> lignes,
         IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
-        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl = null)
     {
         if (lignes.Count == 0)
         {
@@ -28,7 +29,8 @@ public sealed class TourneeMobileMapper
                 ligne,
                 articles,
                 commentairesExceptionnels,
-                preRemplissages))
+                preRemplissages,
+                liensAdresseLivraisonParCodePdl))
             .ToList();
 
         return new TourneeMobileDto
@@ -36,15 +38,11 @@ public sealed class TourneeMobileMapper
             SchemaVersion = SchemaVersions.SynchronisationActuelle,
             DateTournee = dateTournee.ToString("yyyy-MM-dd"),
             DateModifiable = false,
-
             JourTournee = premiereLigne.JourTournee,
             JourLibelle = GetJourLibelle(premiereLigne.JourTournee),
-
             CodeTournee = premiereLigne.CodeTournee,
             LibelleTournee = premiereLigne.LibelleTournee,
-
             StatutSynchronisation = "NON_ENVOYEE",
-
             Livreur = new LivreurDto
             {
                 CodeLivreur = livreur.CodeLivreur,
@@ -52,13 +50,11 @@ public sealed class TourneeMobileMapper
                     ? "Inconnu"
                     : livreur.NomLivreur
             },
-
             Chargement = new ChargementDto
             {
                 DateGenerationApi = DateTimeOffset.Now,
                 NombrePointsEnvoyes = lignesDto.Count
             },
-
             ArticlesSaisissables = articles,
             Lignes = lignesDto
         };
@@ -69,7 +65,8 @@ public sealed class TourneeMobileMapper
         TourneeLigneRecord ligne,
         IReadOnlyList<ArticleSaisissableDto> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
-        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages)
+        IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
     {
         var idLigneSource = BuildIdLigneSource(dateTournee, ligne);
         var commentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentairesExceptionnels);
@@ -80,14 +77,12 @@ public sealed class TourneeMobileMapper
             IdLigneSource = idLigneSource,
             OrdreArret = ligne.OrdreArret,
             Horaire = ligne.Horaire,
-
             Client = new ClientDto
             {
                 NumClient = ligne.NumClient,
                 NomClient = ligne.NomClient,
                 NomAffiche = ligne.NomAffiche
             },
-
             PointLivraison = new PointLivraisonDto
             {
                 CodePDL = ligne.CodePDL,
@@ -96,9 +91,9 @@ public sealed class TourneeMobileMapper
                 AdresseLigne2 = ligne.AdresseLigne2,
                 AdresseLigne3 = ligne.AdresseLigne3,
                 Ville = ligne.Ville,
-                CodePostal = ligne.CodePostal
+                CodePostal = ligne.CodePostal,
+                LienAdresseLivraison = FindLienAdresseLivraison(ligne.CodePDL, liensAdresseLivraisonParCodePdl)
             },
-
             Tournee = new TourneeInfoDto
             {
                 CodeTournee = ligne.CodeTournee,
@@ -107,7 +102,6 @@ public sealed class TourneeMobileMapper
                 JourLibelle = GetJourLibelle(ligne.JourTournee),
                 SchemaLivraison = ligne.SchemaLivraison
             },
-
             Retour = new RetourInfoDto
             {
                 JourTourneeRetour = ligne.JourTourneeRetour,
@@ -115,7 +109,6 @@ public sealed class TourneeMobileMapper
                 CodeTourneeRetour = ligne.CodeTourneeRetour,
                 LibelleTourneeRetour = ligne.LibelleTourneeRetour
             },
-
             InfosLivreur = new InfosLivreurDto
             {
                 Instructions = NormalizeNullable(ligne.Instructions),
@@ -133,7 +126,6 @@ public sealed class TourneeMobileMapper
                     : null,
                 MotifFermeture = NormalizeNullable(ligne.MotifFermeture)
             },
-
             Saisie = new SaisieMobileDto
             {
                 PrecisionLivreur = null,
@@ -146,6 +138,20 @@ public sealed class TourneeMobileMapper
                     .ToList()
             }
         };
+    }
+
+    private static string? FindLienAdresseLivraison(
+        string? codePdl,
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
+    {
+        if (string.IsNullOrWhiteSpace(codePdl) || liensAdresseLivraisonParCodePdl is null)
+        {
+            return null;
+        }
+
+        return liensAdresseLivraisonParCodePdl.TryGetValue(codePdl.Trim(), out var lien)
+            ? NormalizeNullable(lien)
+            : null;
     }
 
     private static QuantiteSaisieMobileDto MapQuantiteInitiale(
