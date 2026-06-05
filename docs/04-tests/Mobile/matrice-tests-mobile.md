@@ -2,6 +2,8 @@
 
 Cette matrice couvre le contrat mobile final en `schemaVersion` `1.3` strict pour le choix camion, le trajet et les kilométrages.
 
+Elle documente aussi le contrôle du champ optionnel `pointLivraison.lienAdresseLivraison` ajouté au GET de chargement de tournée mobile, sans changement de `schemaVersion`.
+
 ## Contrat 1.3 strict
 
 ```text
@@ -27,6 +29,7 @@ dateArriveeMobile >= dateDepartMobile.
 MOB-API-001 à MOB-API-018 : scénarios historiques conservés et adaptés au contrat 1.3.
 MOB-API-019 : GET /api/camions/disponibles.
 MOB-API-020 à MOB-API-031 : scénarios camion/trajet et refus de schemaVersion 1.2.
+MOB-API-LIEN-001 à MOB-API-LIEN-002 : contrôles dédiés au champ optionnel lienAdresseLivraison sur GET /api/tournees/jour.
 k6 : test de masse POST /api/synchronisations en schemaVersion 1.3 avec trajet camion.
 ```
 
@@ -39,7 +42,7 @@ Test k6 1.3 : 20/20 HTTP 200 SUCCESS sur http://srvapi1.sli.local:5000 avec traj
 
 Les tests doivent être relancés après toute modification de code, de contrat ou de base.
 
-## Scénarios
+## Scénarios POST synchronisation et GET camions
 
 | ID | Scenario | Fichier | Type | HTTP attendu | Statut attendu | Code attendu |
 |---|---|---|---|---:|---|---|
@@ -74,3 +77,31 @@ Les tests doivent être relancés après toute modification de code, de contrat 
 | MOB-API-029 | Synchronisation 1.3 sans dateDepartMobile | sync-v13-sans-date-depart.json | Invalide | 400 | VALIDATION_ERROR | |
 | MOB-API-030 | Synchronisation 1.3 sans dateArriveeMobile | sync-v13-sans-date-arrivee.json | Invalide | 400 | VALIDATION_ERROR | |
 | MOB-API-031 | Synchronisation schemaVersion 1.2 refusee | sync-schema-version-12-refusee.json | Invalide | 400 | VALIDATION_ERROR | |
+
+## Scénarios GET chargement tournée - lienAdresseLivraison
+
+| ID | Scenario | Script | Type | HTTP attendu | Attendu |
+|---|---|---|---|---:|---|
+| MOB-API-LIEN-001 | GET tournée en mode Hardcoded | scripts/test-lien-adresse-livraison.ps1 | Valide | 200 | schemaVersion inchangé, JSON parseable, lienAdresseLivraison présent et URL absolue |
+| MOB-API-LIEN-002 | GET tournée en mode Disabled | scripts/test-lien-adresse-livraison.ps1 | Valide | 200 | schemaVersion inchangé, JSON parseable, lienAdresseLivraison null |
+
+Commande type en mode Hardcoded :
+
+```powershell
+.\docs\04-tests\Mobile\scripts\test-lien-adresse-livraison.ps1 `
+  -ApiBaseUrl "http://srvapi1.sli.local:5000" `
+  -CodeLivreur "2" `
+  -CodeTournee "4001" `
+  -ExpectedSchemaVersion "1.2" `
+  -ExpectLienAdresseLivraison
+```
+
+Commande type en mode Disabled :
+
+```powershell
+.\docs\04-tests\Mobile\scripts\test-lien-adresse-livraison.ps1 `
+  -ApiBaseUrl "http://srvapi1.sli.local:5000" `
+  -CodeLivreur "2" `
+  -CodeTournee "4001" `
+  -ExpectedSchemaVersion "1.2"
+```
