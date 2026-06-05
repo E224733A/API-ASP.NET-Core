@@ -12,8 +12,9 @@ Ce dossier contient des exemples JSON et des tests PowerShell pour les routes Ex
 - Le GET Expédition est global.
 - Le GET Expédition ne prend pas `dateTournee`, `codeTournee` ou `codeLivreur`.
 - Le JSON retourné contient des tournées et des lignes exploitables par le Web Expédition.
-- Les articles autorisés sont `ROLLS`, `SACS` et `TAPIS`.
-- `ROLLS_VIDES` est interdit côté Expédition.
+- Le contrat Expédition reste en `schemaVersion = "1.2"`.
+- Les articles autorisés sont `ROLLS`, `ROLLS_VIDES`, `SACS` et `TAPIS`.
+- `ROLLS_VIDES` est autorisé côté Expédition.
 - Les quantités prévues peuvent être nulles avant saisie.
 - Le verrouillage passe par un `idLotVerrouillage`.
 - Les quantités négatives doivent être refusées.
@@ -23,26 +24,68 @@ Ce dossier contient des exemples JSON et des tests PowerShell pour les routes Ex
 Depuis PowerShell :
 
 ```powershell
-cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core"
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\API\API-ASP.NET-Core"
 $env:ASPNETCORE_ENVIRONMENT="Development"
-dotnet run --no-launch-profile --urls "http://127.0.0.1:5120"
+dotnet run --no-launch-profile --urls "http://127.0.0.1:5000"
 ```
 
 Dans un second terminal :
 
 ```powershell
-cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core\docs\04-tests\Expedition"
-.\tests\Run-ExpeditionTests.ps1 -BaseUrl "http://127.0.0.1:5120"
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\API\API-ASP.NET-Core"
+.\docs\04-tests\Expedition\tests\Run-ExpeditionTests.ps1 -BaseUrl "http://127.0.0.1:5000"
+```
+
+Pour tester l'API serveur actuellement utilisée :
+
+```powershell
+.\docs\04-tests\Expedition\tests\Run-ExpeditionTests.ps1 -BaseUrl "http://srvapi1.sli.local:5000"
 ```
 
 Pour lancer aussi les tests POST qui écrivent en base :
 
 ```powershell
-.\tests\Run-ExpeditionTests.ps1 -BaseUrl "http://127.0.0.1:5120" -RunWriteTests
+.\docs\04-tests\Expedition\tests\Run-ExpeditionTests.ps1 -BaseUrl "http://srvapi1.sli.local:5000" -RunWriteTests
 ```
 
 ## Attention
 
 Les tests GET sont non destructifs.
 
-Les tests POST peuvent écrire dans les tables de préparation Expédition. Il faut les lancer sur une base de développement ou de test.
+Les tests POST avec `-RunWriteTests` écrivent dans les tables de préparation Expédition. Il faut les lancer sur une base de développement ou de test.
+
+## Nettoyage SQL après `-RunWriteTests`
+
+Un script de nettoyage ciblé est fourni ici :
+
+```text
+sql/nettoyage-tests-expedition-run-write.sql
+```
+
+Il cible les lots créés par les tests dont le libellé commence par :
+
+```text
+Lot global Expédition TEST-EXPEDITION-
+```
+
+Le script est sécurisé par défaut :
+
+```sql
+DECLARE @ExecuteDelete bit = 0;
+```
+
+Pour supprimer réellement après vérification de l'aperçu :
+
+```sql
+DECLARE @ExecuteDelete bit = 1;
+```
+
+Tables couvertes par le nettoyage :
+
+```text
+dbo.Mobile_ExpeditionPreparationLigne
+dbo.Mobile_ExpeditionPreparationHistorique
+dbo.Mobile_ExpeditionPreparation
+dbo.Mobile_ExpeditionLotVerrouillage
+dbo.Mobile_LogSynchronisation
+```
