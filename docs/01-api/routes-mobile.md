@@ -12,7 +12,17 @@ Les routes mobile servent à :
 
 Le mobile fonctionne hors connexion pendant la journée.
 
-## Contrat 1.3 strict
+## Versions de contrat
+
+```text
+GET /api/tournees/jour       -> schemaVersion inchangé, actuellement "1.2".
+POST /api/synchronisations   -> schemaVersion strictement "1.3".
+GET /api/camions/disponibles -> schemaVersion "1.3".
+```
+
+Le champ optionnel `pointLivraison.lienAdresseLivraison` est ajouté uniquement dans le JSON de chargement des tournées mobile. Il ne change pas `schemaVersion`.
+
+## Contrat POST synchronisation 1.3 strict
 
 Le contrat mobile final pour `POST /api/synchronisations` est strictement en `schemaVersion` `1.3`.
 
@@ -86,6 +96,69 @@ GET /api/tournees/jour?codeTournee=2023&codeLivreur=2
 Le mobile doit lire uniquement des préparations Expédition verrouillées en SQL Server.
 
 Une préparation encore en brouillon côté Web Expédition ne doit pas apparaître dans le chargement mobile.
+
+### Champ optionnel pointLivraison.lienAdresseLivraison
+
+`pointLivraison.lienAdresseLivraison` peut être renvoyé pour permettre au mobile d'afficher un bouton d'ouverture d'adresse.
+
+Exemple :
+
+```json
+{
+  "pointLivraison": {
+    "codePDL": "PDL001",
+    "descriptionPDL": "Entrée principale",
+    "adresseLigne1": "10 Rue Exemple",
+    "adresseLigne2": null,
+    "adresseLigne3": null,
+    "ville": "Nantes",
+    "codePostal": "44000",
+    "lienAdresseLivraison": "https://www.google.com/maps/search/?api=1&query=Nantes"
+  }
+}
+```
+
+Règles :
+
+```text
+champ optionnel.
+null si désactivé, absent ou invalide.
+aucune erreur si CodePDL est vide.
+aucune erreur si la source finale n'est pas disponible.
+ne modifie pas schemaVersion.
+ne modifie pas POST /api/synchronisations.
+```
+
+Configuration :
+
+```json
+{
+  "LiensAdresseLivraison": {
+    "Enabled": true,
+    "Mode": "Hardcoded",
+    "HardcodedUrl": "https://www.google.com/maps/search/?api=1&query=Nantes"
+  }
+}
+```
+
+Modes :
+
+```text
+Disabled   -> retourne toujours null.
+Hardcoded  -> retourne l'URL de test configurée si CodePDL est présent.
+Repository -> prépare la future source métier ABSSolute par CodePDL.
+```
+
+Source finale prévue en mode `Repository` :
+
+```text
+CodePDL
+LienAdresseLivraison
+EstActif
+DateModification
+```
+
+La jointure métier prévue se fait par `CodePDL`.
 
 ## GET /api/camions/disponibles
 
