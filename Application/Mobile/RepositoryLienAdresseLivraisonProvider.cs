@@ -8,7 +8,7 @@ namespace API_ASP.NET_Core.Application.Mobile;
 /// <summary>
 /// Provider final basé sur la vue SQL réutilisable :
 /// [lavinprosli].[dbo].[v_Mobile_AdresseLivraison].
-/// La vue doit exposer uniquement : CodePDL et AdresseLivraison.
+/// La vue doit exposer NUM_CLI, CodePDL et AdresseLivraison.
 /// AdresseLivraison doit contenir un lien Google Maps déjà construit.
 /// </summary>
 public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivraisonProvider
@@ -28,13 +28,19 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
     }
 
     public async Task<string?> GetLienAdresseLivraisonAsync(
+        string? numCli,
         string? codePdl,
         CancellationToken cancellationToken = default)
     {
-        if (!_options.Enabled || string.IsNullOrWhiteSpace(codePdl))
+        if (!_options.Enabled
+            || string.IsNullOrWhiteSpace(numCli)
+            || string.IsNullOrWhiteSpace(codePdl))
         {
             return null;
         }
+
+        var trimmedNumCli = numCli.Trim();
+        var trimmedCodePdl = codePdl.Trim();
 
         try
         {
@@ -44,7 +50,8 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
                 SELECT TOP (1)
                     NULLIF(LTRIM(RTRIM(CAST(AdresseLivraison AS NVARCHAR(2048)))), N'') AS AdresseLivraison
                 FROM [lavinprosli].[dbo].[v_Mobile_AdresseLivraison]
-                WHERE LTRIM(RTRIM(CAST(CodePDL AS NVARCHAR(100)))) = @CodePDL;
+                WHERE LTRIM(RTRIM(CAST(NUM_CLI AS NVARCHAR(50)))) = @NumCli
+                  AND LTRIM(RTRIM(CAST(CodePDL AS NVARCHAR(100)))) = @CodePDL;
                 """;
 
             var url = await connection.QuerySingleOrDefaultAsync<string?>(
@@ -52,7 +59,8 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
                     sql,
                     new
                     {
-                        CodePDL = codePdl.Trim()
+                        NumCli = trimmedNumCli,
+                        CodePDL = trimmedCodePdl
                     },
                     cancellationToken: cancellationToken));
 
@@ -62,8 +70,9 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
         {
             _logger.LogWarning(
                 exception,
-                "Source finale des liens d'adresse de livraison indisponible pour le CodePDL {CodePDL}.",
-                codePdl);
+                "Source finale des liens d'adresse de livraison indisponible pour le client {NumCli} et le CodePDL {CodePDL}.",
+                trimmedNumCli,
+                trimmedCodePdl);
 
             return null;
         }

@@ -13,7 +13,7 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
         IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl = null)
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParClientEtPdl = null)
     {
         if (lignes.Count == 0)
         {
@@ -30,7 +30,7 @@ public sealed class TourneeMobileMapper
                 articles,
                 commentairesExceptionnels,
                 preRemplissages,
-                liensAdresseLivraisonParCodePdl))
+                liensAdresseLivraisonParClientEtPdl))
             .ToList();
 
         return new TourneeMobileDto
@@ -66,7 +66,7 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<ArticleSaisissableDto> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
         IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParClientEtPdl)
     {
         var idLigneSource = BuildIdLigneSource(dateTournee, ligne);
         var commentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentairesExceptionnels);
@@ -92,7 +92,10 @@ public sealed class TourneeMobileMapper
                 AdresseLigne3 = ligne.AdresseLigne3,
                 Ville = ligne.Ville,
                 CodePostal = ligne.CodePostal,
-                LienAdresseLivraison = FindLienAdresseLivraison(ligne.CodePDL, liensAdresseLivraisonParCodePdl)
+                LienAdresseLivraison = FindLienAdresseLivraison(
+                    ligne.NumClient,
+                    ligne.CodePDL,
+                    liensAdresseLivraisonParClientEtPdl)
             },
             Tournee = new TourneeInfoDto
             {
@@ -141,17 +144,33 @@ public sealed class TourneeMobileMapper
     }
 
     private static string? FindLienAdresseLivraison(
+        string? numClient,
         string? codePdl,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
+        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParClientEtPdl)
     {
-        if (string.IsNullOrWhiteSpace(codePdl) || liensAdresseLivraisonParCodePdl is null)
+        if (string.IsNullOrWhiteSpace(numClient)
+            || string.IsNullOrWhiteSpace(codePdl)
+            || liensAdresseLivraisonParClientEtPdl is null)
         {
             return null;
         }
 
-        return liensAdresseLivraisonParCodePdl.TryGetValue(codePdl.Trim(), out var lien)
+        var key = BuildAdresseLivraisonKey(numClient, codePdl);
+        return liensAdresseLivraisonParClientEtPdl.TryGetValue(key, out var lien)
             ? NormalizeNullable(lien)
             : null;
+    }
+
+    private static string BuildAdresseLivraisonKey(string? numClient, string? codePdl)
+    {
+        return $"{NormalizeKeyPart(numClient)}|{NormalizeKeyPart(codePdl)}";
+    }
+
+    private static string NormalizeKeyPart(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
     }
 
     private static QuantiteSaisieMobileDto MapQuantiteInitiale(

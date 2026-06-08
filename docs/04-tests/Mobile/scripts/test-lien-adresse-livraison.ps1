@@ -21,7 +21,7 @@ function Fail([string]$Message) {
 
 $url = Join-Url $ApiBaseUrl ('/api/tournees/jour?codeLivreur=' + [uri]::EscapeDataString($CodeLivreur) + '&codeTournee=' + [uri]::EscapeDataString($CodeTournee))
 
-Write-Host '=== Test lienAdresseLivraison final ==='
+Write-Host '=== Test lienAdresseLivraison final NUM_CLI + CodePDL ==='
 Write-Host ('URL : ' + $url)
 
 try {
@@ -51,14 +51,17 @@ if ($null -eq $json.lignes -or @($json.lignes).Count -eq 0) {
 }
 
 $withLien = @($json.lignes | Where-Object {
+    $null -ne $_.client -and
     $null -ne $_.pointLivraison -and
+    ($_.client.PSObject.Properties.Name -contains 'numClient') -and
+    ($_.pointLivraison.PSObject.Properties.Name -contains 'codePDL') -and
     ($_.pointLivraison.PSObject.Properties.Name -contains 'lienAdresseLivraison') -and
     -not [string]::IsNullOrWhiteSpace([string]$_.pointLivraison.lienAdresseLivraison)
 })
 
 if ($ExpectLienAdresseLivraison) {
     if ($withLien.Count -eq 0) {
-        Fail 'Aucun lienAdresseLivraison non vide trouvé. Vérifier que la vue contient au moins un CodePDL de cette tournée.'
+        Fail 'Aucun lienAdresseLivraison non vide trouvé. Vérifier que la vue contient au moins un couple NUM_CLI + CodePDL de cette tournée.'
     }
 
     foreach ($ligne in $withLien) {
@@ -77,6 +80,7 @@ Write-Host ('[OK] lignes avec lienAdresseLivraison non vide = ' + $withLien.Coun
 $withLien |
     Select-Object `
         ordreArret,
+        @{Name='numCli';Expression={$_.client.numClient}},
         @{Name='codePDL';Expression={$_.pointLivraison.codePDL}},
         @{Name='lienAdresseLivraison';Expression={$_.pointLivraison.lienAdresseLivraison}} |
     Format-Table -AutoSize

@@ -120,7 +120,7 @@ public sealed class TourneesService
         var articlesSaisissables = await _repository.GetArticlesSaisissablesAsync();
         var commentairesExceptionnels = await _repository.GetCommentairesExceptionnelsAsync(dateTournee, codeTournee);
         var preRemplissages = await _repository.GetPreRemplissagesAsync(dateTournee, codeTournee);
-        var liensAdresseLivraisonParCodePdl = await GetLiensAdresseLivraisonParCodePdlAsync(lignes);
+        var liensAdresseLivraisonParClientEtPdl = await GetLiensAdresseLivraisonParClientEtPdlAsync(lignes);
 
         var tournee = _mapper.Map(
             dateTournee,
@@ -129,7 +129,7 @@ public sealed class TourneesService
             articlesSaisissables,
             commentairesExceptionnels,
             preRemplissages,
-            liensAdresseLivraisonParCodePdl);
+            liensAdresseLivraisonParClientEtPdl);
 
         await _repository.SaveChargementTourneeAsync(
             dateTournee,
@@ -156,24 +156,45 @@ public sealed class TourneesService
         return await GetTourneeAsync(date, codeLivreur.Trim(), codeTournee.Trim(), nomLivreur);
     }
 
-    private async Task<IReadOnlyDictionary<string, string?>> GetLiensAdresseLivraisonParCodePdlAsync(
+    private async Task<IReadOnlyDictionary<string, string?>> GetLiensAdresseLivraisonParClientEtPdlAsync(
         IReadOnlyList<TourneeLigneRecord> lignes)
     {
         var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var codesPdl = lignes
-            .Select(ligne => ligne.CodePDL)
-            .Where(codePdl => !string.IsNullOrWhiteSpace(codePdl))
-            .Select(codePdl => codePdl!.Trim())
-            .Distinct(StringComparer.OrdinalIgnoreCase)
+        var points = lignes
+            .Where(ligne =>
+                !string.IsNullOrWhiteSpace(ligne.NumClient)
+                && !string.IsNullOrWhiteSpace(ligne.CodePDL))
+            .Select(ligne => new
+            {
+                NumClient = ligne.NumClient.Trim(),
+                CodePDL = ligne.CodePDL!.Trim()
+            })
+            .Distinct()
             .ToList();
 
-        foreach (var codePdl in codesPdl)
+        foreach (var point in points)
         {
-            var lien = await _lienAdresseLivraisonProvider.GetLienAdresseLivraisonAsync(codePdl);
-            result[codePdl] = string.IsNullOrWhiteSpace(lien) ? null : lien.Trim();
+            var key = BuildAdresseLivraisonKey(point.NumClient, point.CodePDL);
+            var lien = await _lienAdresseLivraisonProvider.GetLienAdresseLivraisonAsync(
+                point.NumClient,
+                point.CodePDL);
+
+            result[key] = string.IsNullOrWhiteSpace(lien) ? null : lien.Trim();
         }
 
         return result;
+    }
+
+    private static string BuildAdresseLivraisonKey(string? numClient, string? codePdl)
+    {
+        return $"{NormalizeKeyPart(numClient)}|{NormalizeKeyPart(codePdl)}";
+    }
+
+    private static string NormalizeKeyPart(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? string.Empty
+            : value.Trim();
     }
 
     private static int TryParseInt(string? value)
