@@ -120,7 +120,7 @@ public sealed class TourneesService
         var articlesSaisissables = await _repository.GetArticlesSaisissablesAsync();
         var commentairesExceptionnels = await _repository.GetCommentairesExceptionnelsAsync(dateTournee, codeTournee);
         var preRemplissages = await _repository.GetPreRemplissagesAsync(dateTournee, codeTournee);
-        var liensAdresseLivraisonParCodePdl = await GetLiensAdresseLivraisonParCodePdlAsync(lignes);
+        var adressesLivraisonParCodePdl = await GetAdressesLivraisonParCodePdlAsync(lignes);
 
         var tournee = _mapper.Map(
             dateTournee,
@@ -129,7 +129,7 @@ public sealed class TourneesService
             articlesSaisissables,
             commentairesExceptionnels,
             preRemplissages,
-            liensAdresseLivraisonParCodePdl);
+            adressesLivraisonParCodePdl);
 
         await _repository.SaveChargementTourneeAsync(
             dateTournee,
@@ -156,10 +156,10 @@ public sealed class TourneesService
         return await GetTourneeAsync(date, codeLivreur.Trim(), codeTournee.Trim(), nomLivreur);
     }
 
-    private async Task<IReadOnlyDictionary<string, string?>> GetLiensAdresseLivraisonParCodePdlAsync(
+    private async Task<IReadOnlyDictionary<string, AdresseLivraisonInfo?>> GetAdressesLivraisonParCodePdlAsync(
         IReadOnlyList<TourneeLigneRecord> lignes)
     {
-        var result = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var result = new Dictionary<string, AdresseLivraisonInfo?>(StringComparer.OrdinalIgnoreCase);
         var codesPdl = lignes
             .Select(ligne => ligne.CodePDL)
             .Where(codePdl => !string.IsNullOrWhiteSpace(codePdl))
@@ -169,8 +169,8 @@ public sealed class TourneesService
 
         foreach (var codePdl in codesPdl)
         {
-            var lien = await _lienAdresseLivraisonProvider.GetLienAdresseLivraisonAsync(codePdl);
-            result[codePdl] = string.IsNullOrWhiteSpace(lien) ? null : lien.Trim();
+            var info = await _lienAdresseLivraisonProvider.GetAdresseLivraisonAsync(codePdl);
+            result[codePdl] = info;
         }
 
         return result;

@@ -4,6 +4,7 @@ namespace API_ASP.NET_Core.Application.Mobile;
 
 /// <summary>
 /// Provider temporaire utilisé uniquement pour valider le flux API + mobile avant disponibilité de la source métier finale.
+/// En mode Hardcoded, les coordonnées GPS de test sont prioritaires sur l'URL de test.
 /// </summary>
 public sealed class HardcodedLienAdresseLivraisonProvider : ILienAdresseLivraisonProvider
 {
@@ -14,16 +15,20 @@ public sealed class HardcodedLienAdresseLivraisonProvider : ILienAdresseLivraiso
         _options = options.Value;
     }
 
-    public Task<string?> GetLienAdresseLivraisonAsync(
+    public Task<AdresseLivraisonInfo?> GetAdresseLivraisonAsync(
         string? codePdl,
         CancellationToken cancellationToken = default)
     {
         if (!_options.Enabled || string.IsNullOrWhiteSpace(codePdl))
         {
-            return Task.FromResult<string?>(null);
+            return Task.FromResult<AdresseLivraisonInfo?>(null);
         }
 
-        var url = LienAdresseLivraisonUrlValidator.NormalizeUrl(_options.HardcodedUrl);
-        return Task.FromResult(url);
+        var info = LienAdresseLivraisonUrlValidator.CreateInfo(
+            _options.HardcodedLatitude,
+            _options.HardcodedLongitude,
+            _options.HardcodedUrl);
+
+        return Task.FromResult(info);
     }
 }

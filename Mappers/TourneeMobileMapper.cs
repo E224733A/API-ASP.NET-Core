@@ -1,3 +1,4 @@
+using API_ASP.NET_Core.Application.Mobile;
 using API_ASP.NET_Core.Constants;
 using API_ASP.NET_Core.Models;
 using API_ASP.NET_Core.Repositories;
@@ -13,7 +14,7 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
         IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl = null)
+        IReadOnlyDictionary<string, AdresseLivraisonInfo?>? adressesLivraisonParCodePdl = null)
     {
         if (lignes.Count == 0)
         {
@@ -30,7 +31,7 @@ public sealed class TourneeMobileMapper
                 articles,
                 commentairesExceptionnels,
                 preRemplissages,
-                liensAdresseLivraisonParCodePdl))
+                adressesLivraisonParCodePdl))
             .ToList();
 
         return new TourneeMobileDto
@@ -66,11 +67,12 @@ public sealed class TourneeMobileMapper
         IReadOnlyList<ArticleSaisissableDto> articlesSaisissables,
         IReadOnlyList<CommentaireExceptionnelRecord> commentairesExceptionnels,
         IReadOnlyList<PreRemplissageQuantiteRecord> preRemplissages,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
+        IReadOnlyDictionary<string, AdresseLivraisonInfo?>? adressesLivraisonParCodePdl)
     {
         var idLigneSource = BuildIdLigneSource(dateTournee, ligne);
         var commentaireExceptionnel = FindCommentaireExceptionnel(idLigneSource, ligne, commentairesExceptionnels);
         var zoneDechargement = NormalizeNullable(ligne.ZoneDechargement);
+        var adresseLivraison = FindAdresseLivraison(ligne.CodePDL, adressesLivraisonParCodePdl);
 
         return new TourneeLigneMobileDto
         {
@@ -92,7 +94,9 @@ public sealed class TourneeMobileMapper
                 AdresseLigne3 = ligne.AdresseLigne3,
                 Ville = ligne.Ville,
                 CodePostal = ligne.CodePostal,
-                LienAdresseLivraison = FindLienAdresseLivraison(ligne.CodePDL, liensAdresseLivraisonParCodePdl)
+                LatitudeLivraison = adresseLivraison?.LatitudeLivraison,
+                LongitudeLivraison = adresseLivraison?.LongitudeLivraison,
+                LienAdresseLivraison = adresseLivraison?.LienAdresseLivraison
             },
             Tournee = new TourneeInfoDto
             {
@@ -140,17 +144,17 @@ public sealed class TourneeMobileMapper
         };
     }
 
-    private static string? FindLienAdresseLivraison(
+    private static AdresseLivraisonInfo? FindAdresseLivraison(
         string? codePdl,
-        IReadOnlyDictionary<string, string?>? liensAdresseLivraisonParCodePdl)
+        IReadOnlyDictionary<string, AdresseLivraisonInfo?>? adressesLivraisonParCodePdl)
     {
-        if (string.IsNullOrWhiteSpace(codePdl) || liensAdresseLivraisonParCodePdl is null)
+        if (string.IsNullOrWhiteSpace(codePdl) || adressesLivraisonParCodePdl is null)
         {
             return null;
         }
 
-        return liensAdresseLivraisonParCodePdl.TryGetValue(codePdl.Trim(), out var lien)
-            ? NormalizeNullable(lien)
+        return adressesLivraisonParCodePdl.TryGetValue(codePdl.Trim(), out var info)
+            ? info
             : null;
     }
 
