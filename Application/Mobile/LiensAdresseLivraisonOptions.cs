@@ -1,36 +1,16 @@
 namespace API_ASP.NET_Core.Application.Mobile;
 
 /// <summary>
-/// Configuration de l'enrichissement optionnel des points de livraison pour le mobile.
+/// Configuration finale de l'enrichissement optionnel des points de livraison mobile
+/// à partir de la vue SQL [lavinprosli].[dbo].[v_Mobile_AdresseLivraison].
 /// </summary>
 public sealed class LiensAdresseLivraisonOptions
 {
     public const string SectionName = "LiensAdresseLivraison";
 
     /// <summary>
-    /// Active ou désactive complètement l'enrichissement des points de livraison.
+    /// Active ou désactive la lecture du lien d'adresse de livraison depuis la vue SQL finale.
+    /// Si false, l'API renvoie null sans bloquer le chargement mobile.
     /// </summary>
-    public bool Enabled { get; set; }
-
-    /// <summary>
-    /// Mode de résolution : Disabled, Hardcoded ou Repository.
-    /// </summary>
-    public string Mode { get; set; } = "Disabled";
-
-    /// <summary>
-    /// URL temporaire utilisée uniquement en mode Hardcoded si aucune coordonnée GPS de test n'est fournie.
-    /// </summary>
-    public string? HardcodedUrl { get; set; }
-
-    /// <summary>
-    /// Latitude GPS WGS84 temporaire utilisée uniquement en mode Hardcoded pour tester le mobile avant livraison de la vue ERP.
-    /// Exemple : 4.9224.
-    /// </summary>
-    public double? HardcodedLatitude { get; set; }
-
-    /// <summary>
-    /// Longitude GPS WGS84 temporaire utilisée uniquement en mode Hardcoded pour tester le mobile avant livraison de la vue ERP.
-    /// Exemple : -52.3135.
-    /// </summary>
-    public double? HardcodedLongitude { get; set; }
+    public bool Enabled { get; set; } = true;
 }

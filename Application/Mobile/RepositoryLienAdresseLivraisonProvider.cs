@@ -1,32 +1,37 @@
 using API_ASP.NET_Core.Data;
 using Dapper;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
 
 namespace API_ASP.NET_Core.Application.Mobile;
 
 /// <summary>
-/// Provider final basé sur la source métier ERP/ABSSolute.
-/// La vue finale n'étant pas encore disponible, ce provider est tolérant :
-/// en cas de source absente ou de colonne différente, il retourne null et ne bloque jamais le chargement mobile.
+/// Provider final basé sur la vue SQL réutilisable :
+/// [lavinprosli].[dbo].[v_Mobile_AdresseLivraison].
+/// La vue doit exposer uniquement : CodePDL et AdresseLivraison.
+/// AdresseLivraison doit contenir un lien Google Maps déjà construit.
 /// </summary>
 public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivraisonProvider
 {
     private readonly SqlConnectionFactory _connectionFactory;
     private readonly ILogger<RepositoryLienAdresseLivraisonProvider> _logger;
+    private readonly LiensAdresseLivraisonOptions _options;
 
     public RepositoryLienAdresseLivraisonProvider(
         SqlConnectionFactory connectionFactory,
-        ILogger<RepositoryLienAdresseLivraisonProvider> logger)
+        ILogger<RepositoryLienAdresseLivraisonProvider> logger,
+        IOptions<LiensAdresseLivraisonOptions> options)
     {
         _connectionFactory = connectionFactory;
         _logger = logger;
+        _options = options.Value;
     }
 
-    public async Task<AdresseLivraisonInfo?> GetAdresseLivraisonAsync(
+    public async Task<string?> GetLienAdresseLivraisonAsync(
         string? codePdl,
         CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(codePdl))
+        if (!_options.Enabled || string.IsNullOrWhiteSpace(codePdl))
         {
             return null;
         }
@@ -35,24 +40,14 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
         {
             using var connection = _connectionFactory.CreateAbssoluteConnection();
 
-            /*
-             * Source attendue après livraison par l'ERP :
-             * - CodePDL
-             * - LatitudeLivraison  : latitude GPS WGS84, exemple 4.9224
-             * - LongitudeLivraison : longitude GPS WGS84, exemple -52.3135
-             *
-             * Si la vue finale porte un autre nom, modifier uniquement le FROM.
-             * Si les colonnes portent un autre nom, garder les alias SQL LatitudeLivraison / LongitudeLivraison.
-             */
             const string sql = """
                 SELECT TOP (1)
-                    TRY_CONVERT(float, LatitudeLivraison) AS LatitudeLivraison,
-                    TRY_CONVERT(float, LongitudeLivraison) AS LongitudeLivraison
-                FROM [lavinprosli].[dbo].[v_Mobile_CoordonneesLivraison]
+                    NULLIF(LTRIM(RTRIM(CAST(AdresseLivraison AS NVARCHAR(2048)))), N'') AS AdresseLivraison
+                FROM [lavinprosli].[dbo].[v_Mobile_AdresseLivraison]
                 WHERE LTRIM(RTRIM(CAST(CodePDL AS NVARCHAR(100)))) = @CodePDL;
                 """;
 
-            var record = await connection.QuerySingleOrDefaultAsync<AdresseLivraisonRepositoryRecord>(
+            var url = await connection.QuerySingleOrDefaultAsync<string?>(
                 new CommandDefinition(
                     sql,
                     new
@@ -61,24 +56,16 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
                     },
                     cancellationToken: cancellationToken));
 
-            return LienAdresseLivraisonUrlValidator.CreateInfo(
-                record?.LatitudeLivraison,
-                record?.LongitudeLivraison);
+            return LienAdresseLivraisonUrlValidator.NormalizeUrl(url);
         }
         catch (Exception exception) when (exception is SqlException or InvalidOperationException)
         {
             _logger.LogWarning(
                 exception,
-                "Source finale des coordonnées GPS de livraison indisponible pour le CodePDL {CodePDL}.",
+                "Source finale des liens d'adresse de livraison indisponible pour le CodePDL {CodePDL}.",
                 codePdl);
 
             return null;
         }
-    }
-
-    private sealed class AdresseLivraisonRepositoryRecord
-    {
-        public double? LatitudeLivraison { get; init; }
-        public double? LongitudeLivraison { get; init; }
     }
 }

@@ -68,20 +68,8 @@ public class PointLivraisonDto
     public string? CodePostal { get; init; }
 
     /// <summary>
-    /// Latitude GPS WGS84 du point de livraison.
-    /// Champ optionnel : null si la source ERP ne fournit pas de coordonnée exploitable.
-    /// </summary>
-    public double? LatitudeLivraison { get; init; }
-
-    /// <summary>
-    /// Longitude GPS WGS84 du point de livraison.
-    /// Champ optionnel : null si la source ERP ne fournit pas de coordonnée exploitable.
-    /// </summary>
-    public double? LongitudeLivraison { get; init; }
-
-    /// <summary>
-    /// Lien Maps optionnel conservé pour compatibilité avec les versions mobiles déjà préparées.
-    /// Pour le fonctionnement final, le mobile privilégie LatitudeLivraison / LongitudeLivraison.
+    /// Lien Google Maps optionnel fourni par la vue SQL finale via la colonne AdresseLivraison.
+    /// Null si le CodePDL est absent de la vue, si le lien est vide ou si le lien est invalide.
     /// </summary>
     public string? LienAdresseLivraison { get; init; }
 }

@@ -21,7 +21,7 @@ function Fail([string]$Message) {
 
 $url = Join-Url $ApiBaseUrl ('/api/tournees/jour?codeLivreur=' + [uri]::EscapeDataString($CodeLivreur) + '&codeTournee=' + [uri]::EscapeDataString($CodeTournee))
 
-Write-Host '=== Test lienAdresseLivraison ==='
+Write-Host '=== Test lienAdresseLivraison final ==='
 Write-Host ('URL : ' + $url)
 
 try {
@@ -50,35 +50,35 @@ if ($null -eq $json.lignes -or @($json.lignes).Count -eq 0) {
     Fail 'Aucune ligne retournée dans la tournée.'
 }
 
-$firstLine = @($json.lignes)[0]
-if ($null -eq $firstLine.pointLivraison) {
-    Fail 'pointLivraison absent sur la première ligne.'
-}
-
-$hasProperty = $firstLine.pointLivraison.PSObject.Properties.Name -contains 'lienAdresseLivraison'
-if (-not $hasProperty) {
-    Fail 'pointLivraison.lienAdresseLivraison absent du JSON.'
-}
-
-$lien = $firstLine.pointLivraison.lienAdresseLivraison
+$withLien = @($json.lignes | Where-Object {
+    $null -ne $_.pointLivraison -and
+    ($_.pointLivraison.PSObject.Properties.Name -contains 'lienAdresseLivraison') -and
+    -not [string]::IsNullOrWhiteSpace([string]$_.pointLivraison.lienAdresseLivraison)
+})
 
 if ($ExpectLienAdresseLivraison) {
-    if ([string]::IsNullOrWhiteSpace([string]$lien)) {
-        Fail 'lienAdresseLivraison attendu non vide en mode Hardcoded, mais il est vide ou null.'
+    if ($withLien.Count -eq 0) {
+        Fail 'Aucun lienAdresseLivraison non vide trouvé. Vérifier que la vue contient au moins un CodePDL de cette tournée.'
     }
 
-    if (-not [uri]::IsWellFormedUriString([string]$lien, [System.UriKind]::Absolute)) {
-        Fail ('lienAdresseLivraison invalide : ' + [string]$lien)
-    }
-}
-else {
-    if (-not [string]::IsNullOrWhiteSpace([string]$lien)) {
-        Fail ('lienAdresseLivraison attendu null/vide en mode Disabled, obtenu : ' + [string]$lien)
+    foreach ($ligne in $withLien) {
+        $lien = [string]$ligne.pointLivraison.lienAdresseLivraison
+        if (-not [uri]::IsWellFormedUriString($lien, [System.UriKind]::Absolute)) {
+            Fail ('lienAdresseLivraison invalide : ' + $lien)
+        }
     }
 }
 
 Write-Host '[OK] JSON parseable'
 Write-Host ('[OK] schemaVersion = ' + [string]$json.schemaVersion)
-Write-Host '[OK] pointLivraison présent'
-Write-Host ('[OK] lienAdresseLivraison = ' + ($(if ($null -eq $lien) { 'null' } else { [string]$lien })))
+Write-Host ('[OK] lignes = ' + @($json.lignes).Count)
+Write-Host ('[OK] lignes avec lienAdresseLivraison non vide = ' + $withLien.Count)
+
+$withLien |
+    Select-Object `
+        ordreArret,
+        @{Name='codePDL';Expression={$_.pointLivraison.codePDL}},
+        @{Name='lienAdresseLivraison';Expression={$_.pointLivraison.lienAdresseLivraison}} |
+    Format-Table -AutoSize
+
 exit 0

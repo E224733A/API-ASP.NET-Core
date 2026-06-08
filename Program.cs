@@ -6,7 +6,6 @@ using API_ASP.NET_Core.Repositories;
 using API_ASP.NET_Core.Services;
 using API_ASP.NET_Core.Validators;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Options;
 using Microsoft.OpenApi;
 using System.Text.Json.Serialization;
 
@@ -112,32 +111,7 @@ builder.Services.AddSingleton<DateMetierService>();
 
 builder.Services.Configure<LiensAdresseLivraisonOptions>(
     builder.Configuration.GetSection(LiensAdresseLivraisonOptions.SectionName));
-
-builder.Services.AddScoped<DisabledLienAdresseLivraisonProvider>();
-builder.Services.AddScoped<HardcodedLienAdresseLivraisonProvider>();
-builder.Services.AddScoped<RepositoryLienAdresseLivraisonProvider>();
-builder.Services.AddScoped<ILienAdresseLivraisonProvider>(serviceProvider =>
-{
-    var options = serviceProvider.GetRequiredService<IOptions<LiensAdresseLivraisonOptions>>().Value;
-    var mode = options.Mode?.Trim();
-
-    if (!options.Enabled || string.Equals(mode, "Disabled", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<DisabledLienAdresseLivraisonProvider>();
-    }
-
-    if (string.Equals(mode, "Hardcoded", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<HardcodedLienAdresseLivraisonProvider>();
-    }
-
-    if (string.Equals(mode, "Repository", StringComparison.OrdinalIgnoreCase))
-    {
-        return serviceProvider.GetRequiredService<RepositoryLienAdresseLivraisonProvider>();
-    }
-
-    return serviceProvider.GetRequiredService<DisabledLienAdresseLivraisonProvider>();
-});
+builder.Services.AddScoped<ILienAdresseLivraisonProvider, RepositoryLienAdresseLivraisonProvider>();
 
 builder.Services.AddScoped<LivreursRepository>();
 
