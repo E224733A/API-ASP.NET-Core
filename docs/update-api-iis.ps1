@@ -1,4 +1,4 @@
-#requires -RunAsAdministrator
+﻿#requires -RunAsAdministrator
 <#
 .SYNOPSIS
     Mise a jour applicative API MobileSLI sur SRVAPI1 en mode HTTPS strict.
@@ -322,7 +322,7 @@ function Assert-PortOpen {
         Fail "$Label doit etre ouvert. Port=$Port ; TcpTestSucceeded=False"
     }
 
-    Write-Ok "$Label ouvert : $HostName:$Port"
+    Write-Ok "$Label ouvert : ${HostName}:$Port"
 }
 
 function Assert-PortClosed {
@@ -346,7 +346,7 @@ function Assert-PortClosed {
         Fail "$Label doit etre ferme en mode HTTPS strict. Port=$Port ; TcpTestSucceeded=True"
     }
 
-    Write-Ok "$Label ferme ou non joignable comme attendu : $HostName:$Port"
+    Write-Ok "$Label ferme ou non joignable comme attendu : ${HostName}:$Port"
 }
 
 function Test-RuntimeState {
