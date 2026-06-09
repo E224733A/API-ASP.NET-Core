@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$ApiBaseUrl = 'http://192.168.1.233:5000',
     [string]$Endpoint = '/api/synchronisations',
     [string]$PayloadsRoot = '',
@@ -304,8 +304,8 @@ $testCases = @(
     (New-TestCase -Id 'MOB-API-017' -Order 17 -Scenario 'ROLLS_VIDES avec quantite prevue positive accepte' -FileName 'sync-valide-rolls-vides-prevue.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '17'),
     (New-TestCase -Id 'MOB-API-018' -Order 18 -Scenario 'ROLLS_VIDES recupere uniquement accepte' -FileName 'sync-valide-rolls-vides.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '18'),
 
-    # Tests preparatoires du futur contrat mobile strict 1.3 camion/trajet.
-    # Ils ne sont pas masques : ils peuvent rester KO tant que l'API 1.3 et GET /api/camions/disponibles ne sont pas codes.
+    # Tests definitifs du contrat mobile strict 1.3 camion/trajet.
+    # Ces tests doivent etre OK pour valider l'API mobile 1.3 et GET /api/camions/disponibles.
     (New-TestCase -Id 'MOB-API-019' -Order 19 -Scenario 'GET camions disponibles valide' -ExpectedHttp 200 -Method 'GET' -RelativeUrl '/api/camions/disponibles' -RequiresJson -ExpectedSchemaVersion '1.3' -RequiresCamionsArray),
     (New-TestCase -Id 'MOB-API-020' -Order 20 -Scenario 'Synchronisation 1.3 valide avec trajet camion' -FileName 'sync-valide-v13-trajet-camion.json' -ExpectedHttp 200 -ExpectedStatut 'SUCCESS' -CodeSuffix '20'),
     (New-TestCase -Id 'MOB-API-021' -Order 21 -Scenario 'Synchronisation 1.3 sans trajet' -FileName 'sync-v13-sans-trajet.json' -ExpectedHttp 400 -ExpectedStatut 'VALIDATION_ERROR' -CodeSuffix '21'),
@@ -330,7 +330,7 @@ Write-Host ('Rapports     : ' + $ReportsRoot)
 Write-Host ('Date tournee : ' + $dateTourneeText)
 Write-Host ('RunId        : ' + $runId)
 Write-Host ''
-Write-Host 'Note : les tests MOB-API-019 a MOB-API-031 couvrent le futur contrat strict 1.3 camion/trajet et peuvent echouer tant que le code API correspondant n''est pas developpe.' -ForegroundColor Yellow
+Write-Host 'Note : les tests MOB-API-019 a MOB-API-031 valident le contrat strict 1.3 camion/trajet actuellement attendu.' -ForegroundColor Yellow
 Write-Host ''
 
 $results = @()
@@ -560,3 +560,4 @@ Write-Host ''
 
 if ($koCount -gt 0) { exit 1 }
 exit 0
+
