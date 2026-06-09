@@ -1,15 +1,54 @@
-# API-ASP.NET-Core
+# API ASP.NET Core - MobileSLI
+
+API centrale du projet MobileSLI.
+
+Elle sert de point d'entrée unique entre :
+
+- l'application mobile Android utilisée par les livreurs ;
+- l'application Web Expédition / Administration ;
+- SQL Server ;
+- les vues ABSSolute utilisées en lecture seule ;
+- les tables `Mobile_*` dédiées au projet.
+
+Le mobile et le ServeWeb ne doivent pas accéder directement à SQL Server.
+
+## Etat validé
+
+```text
+Version fonctionnelle API : contrat mobile strict 1.3
+URL HTTPS cible           : https://srvapi1.sli.local
+GET mobile chargement     : schemaVersion 1.2
+GET camions disponibles   : schemaVersion 1.3
+POST synchronisation      : schemaVersion 1.3 uniquement
+schemaVersion 1.2 POST    : refusé
+Trajet camion POST        : obligatoire
+```
+
+Validation communiquée le 09/06/2026 :
+
+```text
+git status API                 : clean
+branche main                   : synchronisée avec origin/main
+Tests API Mobile HTTPS stricts : 31/31 OK
+Base testée                    : https://srvapi1.sli.local
+Tag API réalisé                : oui, d'après retour utilisateur
+```
+
+Les tests n'ont pas été relancés par cette mise à jour documentaire.
 
 ## Préconditions
 
-Avant de lancer l’API, vérifier que :
+Avant de lancer ou déployer l'API, vérifier que :
 
-le SDK .NET est installé ;
-SQL Server est accessible ;
-les vues ABSSolute nécessaires sont accessibles ;
-les tables Mobile_* existent ;
-la chaîne de connexion est configurée ;
-aucun secret n’est stocké dans Git.
+```text
+.NET SDK installé
+SQL Server accessible
+vues ABSSolute accessibles
+tables Mobile_* présentes
+chaîne de connexion configurée
+aucun secret stocké dans Git
+certificat HTTPS installé sur IIS en production
+```
 
 Vérifier .NET :
 
@@ -17,172 +56,144 @@ Vérifier .NET :
 dotnet --info
 ```
 
-Vérifier les workloads installés :
-```powershell
-dotnet workload list
-```
+## Lancer l'API en développement local
 
-## Lancer l’API en développement
+Le développement local reste en HTTP sur `127.0.0.1:5000`.
 
 ```powershell
-cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core"
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\API\API-ASP.NET-Core"
+
+$env:ASPNETCORE_ENVIRONMENT="Development"
+
+dotnet restore
 dotnet build
 dotnet run --no-launch-profile --urls "http://127.0.0.1:5000"
 ```
 
-La commande recommandée est :
-
-```powershell
-dotnet run --no-launch-profile --urls "http://127.0.0.1:5000"
-```
-
---no-launch-profile permet d’éviter que launchSettings.json force une autre adresse ou un autre port.
-
 Résultat attendu :
-```powershell
+
+```text
 Now listening on: http://127.0.0.1:5000
 Application started.
 ```
 
-## Arrêter l’API
-
-Dans le terminal où l’API tourne :
-
-Ctrl + C
-
-Attendre l’arrêt propre de l’application.
-
-Résultat attendu :
-
-Application is shutting down...
-
-## Vérifier que l’API répond
+## Vérifier l'API locale
 
 Dans un deuxième terminal :
 
 ```powershell
-curl.exe "http://127.0.0.1:5000/api/health"
+Invoke-RestMethod "http://127.0.0.1:5000/api/health"
+Invoke-RestMethod "http://127.0.0.1:5000/api/health/abssolute"
+Invoke-RestMethod "http://127.0.0.1:5000/api/health/mobile"
 ```
 
-Résultat attendu : HTTP 200 OK
+Résultat attendu : HTTP 200.
 
-Selon la version, le JSON exact peut varier.
+## Vérifier l'API production HTTPS
 
-Tester aussi :
-
-```powershell
-curl.exe "http://127.0.0.1:5000/api/health/abssolute"
-curl.exe "http://127.0.0.1:5000/api/health/mobile"
-```
-
-## Ouvrir Swagger
-
-Une fois l’API lancée :
-
-http://127.0.0.1:5000/swagger
-
-Swagger permet de consulter et tester les routes API.
-
-## Commandes de maintenance courantes
-
-Restaurer les dépendances : 
+Sur un poste ou serveur qui résout `srvapi1.sli.local` :
 
 ```powershell
-dotnet restore
-```
-
-Nettoyer la compilation : 
-
-```powershell
-dotnet clean
-```
-
-Compiler : 
-
-```powershell
-dotnet build
-```
-
-Lancer l’API : 
-
-```powershell
-dotnet run --no-launch-profile --urls "http://127.0.0.1:5000"
-```
-
-Compiler en Release : 
-
-```powershell
-dotnet build -c Release
-```
-
-Publier l’API :
-
-```powershell
-dotnet publish -c Release -o ".\publish"
-```
-
-Le dossier généré est :
-backend\API-ASP.NET-Core\publish
-
-## Vérifier le port 5000
-
-Si l’API ne démarre pas parce que le port est déjà utilisé :
-
-```powershell
-netstat -ano | findstr :5000
-```
-
-Exemple de résultat :
-
-TCP    127.0.0.1:5000    0.0.0.0:0    LISTENING    12345
-
-Le dernier nombre est le PID du processus.
-
-Pour arrêter ce processus :
-
-```powershell
-taskkill /PID 12345 /F
-```
-
-Remplacer 12345 par le vrai PID.
-
-## Tester depuis un téléphone Android physique
-
-Si le mobile utilise :
-
-http://127.0.0.1:5000
-
-il faut rediriger le port du téléphone vers le PC avec ADB.
-
-```powershell
-cd "C:\Program Files (x86)\Android\android-sdk\platform-tools"
-.\adb.exe devices -l
-.\adb.exe reverse --remove-all
-.\adb.exe reverse tcp:5000 tcp:5000
-.\adb.exe reverse --list
+Invoke-WebRequest "https://srvapi1.sli.local/api/health" -UseBasicParsing
 ```
 
 Résultat attendu :
 
-tcp:5000 tcp:5000
+```text
+StatusCode : 200
+```
 
-Dans ce mode, 127.0.0.1:5000 côté téléphone pointe vers l’API lancée sur le PC.
+Le fallback HTTP historique peut exister pour maintenance selon configuration IIS, mais l'URL cible validée pour le mobile et ServeWeb est :
 
+```text
+https://srvapi1.sli.local
+```
 
-
-Le fichier `MobileSLI.csproj` fourni ici remplace la configuration originale. Les changements clés sont :
-
-* **Alignement Android 31 :** la version minimale et cible est désormais fixée à 31 (`AndroidMinSdkVersion`, `AndroidTargetSdkVersion`, `AndroidCompileSdkVersion` et `SupportedOSPlatformVersion`). Cela évite les avertissements **CA1416/CA1418** liés aux API disponibles à partir d’Android 29 et supprime la nécessité d’annotations `[SupportedOSPlatform]` sur les méthodes.
-* **Corrections SQLite :** suppression du package `SQLitePCLRaw.bundle_e_sqlite3` et ajout de `SQLitePCLRaw.bundle_green` en version 2.1.11. Ce package utilise un *page size* conforme à Android 16 et élimine l’avertissement **XA0141** concernant `libe_sqlite3.so`.
-* **Compilation des bindings XAML :** l’option `MauiEnableXamlCBindingWithSourceCompilation` est activée pour permettre à MAUI de compiler les liaisons XAML et de réduire les warnings `XC0022`/`XC0025`.
-
-Après avoir remplacé votre fichier `.csproj` par celui-ci, exécutez les commandes suivantes :
+## Tests API Mobile stricts 1.3
 
 ```powershell
-cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\mobile\MobileSLI"
-Remove-Item -Recurse -Force ".\bin" -ErrorAction SilentlyContinue
-Remove-Item -Recurse -Force ".\obj" -ErrorAction SilentlyContinue
-dotnet restore --force-evaluate
-dotnet build ".\MobileSLI.csproj" -c Debug
-dotnet publish ".\MobileSLI.csproj" -f net10.0-android -c Release -p:AndroidPackageFormat=apk -p:RuntimeIdentifiers=android-arm64
+Set-ExecutionPolicy -Scope Process Bypass -Force
+
+.\docs\04-tests\Mobile\scripts\run-api-mobile-tests.ps1 `
+  -ApiBaseUrl "https://srvapi1.sli.local" `
+  -DateTournee "2026-06-09"
+```
+
+Résultat attendu :
+
+```text
+Total   : 31
+OK      : 31
+KO      : 0
+SKIPPED : 0
+```
+
+Adapter `DateTournee` à la date métier autorisée par l'API au moment du test.
+
+## Routes principales
+
+| Module | Méthode | Route | Rôle |
+|---|---:|---|---|
+| Santé | GET | `/api/health` | Vérifier que l'API répond |
+| Santé SQL ABSSolute | GET | `/api/health/abssolute` | Vérifier l'accès aux vues ABSSolute |
+| Santé SQL Mobile | GET | `/api/health/mobile` | Vérifier l'accès aux tables `Mobile_*` |
+| Livreurs | GET | `/api/livreurs` | Lister les livreurs |
+| Mobile | GET | `/api/tournees/disponibles` | Lister les tournées disponibles pour la date serveur autorisée |
+| Mobile | GET | `/api/tournees/jour` | Charger une tournée complète en schemaVersion 1.2 |
+| Mobile | GET | `/api/camions/disponibles` | Lister les camions disponibles en schemaVersion 1.3 |
+| Mobile | POST | `/api/synchronisations` | Envoyer le retour mobile strict 1.3 avec trajet camion |
+| Expédition | GET | `/api/expedition/preparations/a-preparer` | Charger les préparations Expédition à préparer |
+| Expédition | POST | `/api/expedition/preparations/verrouiller` | Verrouiller les préparations Expédition |
+
+## Commandes de maintenance courantes
+
+```powershell
+dotnet restore
+dotnet clean
+dotnet build
+dotnet build -c Release
+dotnet publish -c Release -o ".\publish"
+```
+
+## Déploiement IIS
+
+Le script de mise à jour applicative est :
+
+```text
+docs/update-api-iis.ps1
+```
+
+Ce script ne crée pas la configuration HTTPS. Il attend une configuration IIS déjà prête avec :
+
+```text
+Site IIS API      : MobileSLI.Api
+Binding HTTPS     : https *:443:srvapi1.sli.local
+Health HTTPS      : https://srvapi1.sli.local/api/health
+Fallback HTTP     : http://srvapi1.sli.local:5000/api/health si conservé
+```
+
+## Documentation utile
+
+| Fichier | Rôle |
+|---|---|
+| `docs/README.md` | Sommaire documentaire API |
+| `docs/01-api/README.md` | Vue d'ensemble des routes et contrats |
+| `docs/01-api/routes-mobile.md` | Routes utilisées par l'application mobile |
+| `docs/01-api/contrats-json-mobile.md` | Contrats JSON mobile |
+| `docs/01-api/routes-expedition.md` | Routes utilisées par ServeWeb Expédition |
+| `docs/01-api/contrats-json-expedition.md` | Contrats JSON Expédition |
+| `docs/01-api/erreurs-api.md` | Codes HTTP et erreurs |
+| `docs/02-base-donnees/README.md` | Stockage SQL et tables Mobile_* |
+| `docs/04-tests/Mobile/matrice-tests-mobile.md` | Matrice des tests API Mobile |
+
+## Règles à conserver
+
+```text
+Le mobile ne se connecte jamais directement à SQL Server.
+ServeWeb ne se connecte jamais directement à SQL Server.
+La date métier est calculée côté API avec le fuseau Europe/Paris.
+Les GET mobiles refusent les paramètres date et dateTournee.
+POST /api/synchronisations accepte uniquement schemaVersion 1.3.
+Le trajet camion est obligatoire en synchronisation 1.3.
+Les données trajet sont sauvegardées dans dbo.Mobile_TourneeCamion.
 ```
