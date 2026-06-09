@@ -1,7 +1,7 @@
 #requires -RunAsAdministrator
 <#
 .SYNOPSIS
-    Mise a jour applicative API MobileSLI sur SRVAPI1.
+    Mise a jour applicative API MobileSLI sur SRVAPI1 en mode HTTPS strict.
 
 .DESCRIPTION
     Ce script sert a mettre a jour l'application API uniquement.
@@ -16,11 +16,11 @@
 
     Configuration attendue deja validee par le script HTTPS :
     - Site IIS API : MobileSLI.Api
-    - Binding fallback HTTP : http *:5000:
     - Binding HTTPS : https *:443:srvapi1.sli.local
+    - Aucun binding fallback HTTP : http *:5000:
     - Health HTTPS : https://srvapi1.sli.local/api/health
-    - Health fallback : http://srvapi1.sli.local:5000/api/health
     - CRL : http://srvapi1.sli.local/crl/mobilesli-root-ca.crl
+    - Port 5000 ferme ou non utilise.
 
     Utilisation normale :
         Set-ExecutionPolicy -Scope Process Bypass -Force
@@ -36,6 +36,11 @@
         -ReplaceWebConfig
             Autorise le remplacement du web.config par celui du publish.
             A eviter sauf si le web.config publie doit vraiment etre redeploye.
+
+        -AllowHttpFallback5000
+            Mode temporaire exceptionnel.
+            Autorise encore le binding HTTP 5000 et le port 5000 ouvert.
+            Ne pas utiliser pour l'etat final HTTPS strict.
 #>
 
 [CmdletBinding()]
@@ -46,20 +51,20 @@ param(
     [string]$PublishPath = "C:\Publish\MobileSLI.Api",
     [string]$BackupRoot = "C:\Backups\MobileSLI.Api",
     [string]$ApiHostName = "srvapi1.sli.local",
-    [int]$FallbackHttpPort = 5000,
+    [int]$ForbiddenHttpFallbackPort = 5000,
     [switch]$SkipRuntimeTests,
     [switch]$SkipGitPull,
-    [switch]$ReplaceWebConfig
+    [switch]$ReplaceWebConfig,
+    [switch]$AllowHttpFallback5000
 )
 
 $ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $HttpsHealthUrl = "https://$ApiHostName/api/health"
-$HttpFallbackHealthUrl = "http://${ApiHostName}:$FallbackHttpPort/api/health"
 $CrlUrl = "http://$ApiHostName/crl/mobilesli-root-ca.crl"
-$ExpectedHttpBinding = "*:${FallbackHttpPort}:"
 $ExpectedHttpsBinding = "*:443:$ApiHostName"
+$ForbiddenHttpBinding = "*:${ForbiddenHttpFallbackPort}:"
 
 $RobocopyExcludedDirectories = @("logs", "data")
 $RobocopyExcludedFiles = @("*.log", "appsettings.Production.json")
@@ -206,33 +211,42 @@ function Get-IisDeploymentInfo {
 function Assert-ExpectedIisState {
     Write-Step "Verification configuration IIS existante"
 
-    $bindings = Get-WebBinding -Name $SiteName -ErrorAction Stop
+    $bindings = @(Get-WebBinding -Name $SiteName -ErrorAction Stop)
 
     Write-Host "Bindings IIS actuels :"
     $bindings | Select-Object protocol, bindingInformation | Format-Table -AutoSize
 
-    $httpFallbackBinding = $bindings |
-        Where-Object {
-            $_.protocol -eq "http" -and $_.bindingInformation -eq $ExpectedHttpBinding
-        } |
-        Select-Object -First 1
+    $httpsBinding = @(
+        $bindings |
+            Where-Object {
+                $_.protocol -eq "https" -and $_.bindingInformation -eq $ExpectedHttpsBinding
+            }
+    )
 
-    $httpsBinding = $bindings |
-        Where-Object {
-            $_.protocol -eq "https" -and $_.bindingInformation -eq $ExpectedHttpsBinding
-        } |
-        Select-Object -First 1
+    $httpFallbackBindings = @(
+        $bindings |
+            Where-Object {
+                $_.protocol -eq "http" -and $_.bindingInformation -eq $ForbiddenHttpBinding
+            }
+    )
 
-    if ($null -eq $httpFallbackBinding) {
-        Fail "Binding fallback HTTP attendu absent : $ExpectedHttpBinding. Ce script ne reconfigure pas IIS."
-    }
-
-    if ($null -eq $httpsBinding) {
+    if ($httpsBinding.Count -eq 0) {
         Fail "Binding HTTPS attendu absent : $ExpectedHttpsBinding. Relancer d'abord Configure-MobileSLI-ApiHttpsAndCrl.ps1."
     }
 
-    Write-Ok "Binding fallback HTTP conserve : $ExpectedHttpBinding"
-    Write-Ok "Binding HTTPS conserve : $ExpectedHttpsBinding"
+    if ($httpFallbackBindings.Count -gt 0) {
+        if ($AllowHttpFallback5000) {
+            Write-Warn "Binding fallback HTTP encore present mais autorise temporairement par -AllowHttpFallback5000 : $ForbiddenHttpBinding"
+        }
+        else {
+            Fail "Binding fallback HTTP interdit encore present : $ForbiddenHttpBinding. Supprimer avec : Remove-WebBinding -Name `"$SiteName`" -Protocol `"http`" -Port $ForbiddenHttpFallbackPort -HostHeader `"`""
+        }
+    }
+    else {
+        Write-Ok "Aucun binding fallback HTTP interdit detecte : $ForbiddenHttpBinding"
+    }
+
+    Write-Ok "Binding HTTPS valide : $ExpectedHttpsBinding"
 }
 
 function Test-DotNetEnvironment {
@@ -292,6 +306,49 @@ function Invoke-CurlStatus {
     }
 }
 
+function Assert-PortOpen {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $result = Test-NetConnection $HostName -Port $Port -WarningAction SilentlyContinue |
+        Select-Object ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded
+
+    $result | Format-List
+
+    if (-not $result.TcpTestSucceeded) {
+        Fail "$Label doit etre ouvert. Port=$Port ; TcpTestSucceeded=False"
+    }
+
+    Write-Ok "$Label ouvert : $HostName:$Port"
+}
+
+function Assert-PortClosed {
+    param(
+        [Parameter(Mandatory = $true)][string]$HostName,
+        [Parameter(Mandatory = $true)][int]$Port,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $result = Test-NetConnection $HostName -Port $Port -WarningAction SilentlyContinue |
+        Select-Object ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded
+
+    $result | Format-List
+
+    if ($result.TcpTestSucceeded) {
+        if ($AllowHttpFallback5000) {
+            Write-Warn "$Label encore ouvert mais autorise temporairement par -AllowHttpFallback5000. Port=$Port"
+            return
+        }
+
+        Fail "$Label doit etre ferme en mode HTTPS strict. Port=$Port ; TcpTestSucceeded=True"
+    }
+
+    Write-Ok "$Label ferme ou non joignable comme attendu : $HostName:$Port"
+}
+
 function Test-RuntimeState {
     param([string]$Phase)
 
@@ -302,13 +359,12 @@ function Test-RuntimeState {
 
     Write-Step "Tests runtime $Phase"
 
-    Test-NetConnection $ApiHostName -Port 443 | Select-Object ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded | Format-List
-    Test-NetConnection $ApiHostName -Port 80 | Select-Object ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded | Format-List
-    Test-NetConnection $ApiHostName -Port $FallbackHttpPort | Select-Object ComputerName, RemoteAddress, RemotePort, TcpTestSucceeded | Format-List
+    Assert-PortOpen -HostName $ApiHostName -Port 443 -Label "Port API HTTPS"
+    Assert-PortOpen -HostName $ApiHostName -Port 80 -Label "Port CRL HTTP"
+    Assert-PortClosed -HostName $ApiHostName -Port $ForbiddenHttpFallbackPort -Label "Port fallback HTTP interdit"
 
     Invoke-CurlStatus -Url $CrlUrl -AllowedStatusCodes @(200)
     Invoke-CurlStatus -Url $HttpsHealthUrl -AllowedStatusCodes @(200) -ShowBody
-    Invoke-CurlStatus -Url $HttpFallbackHealthUrl -AllowedStatusCodes @(200) -ShowBody
 }
 
 function Update-GitAndPublish {
@@ -528,19 +584,20 @@ function Run-FinalChecks {
 
 Write-Step "Mise a jour applicative API MobileSLI"
 
-Write-Host "Site IIS                  : $SiteName"
-Write-Host "Source                    : $SourcePath"
-Write-Host "Projet                    : $ProjectPath"
-Write-Host "Publish                   : $PublishPath"
-Write-Host "Backups                   : $BackupRoot"
-Write-Host "API HTTPS                 : $HttpsHealthUrl"
-Write-Host "API fallback HTTP         : $HttpFallbackHealthUrl"
-Write-Host "CRL                       : $CrlUrl"
-Write-Host "Binding HTTPS attendu     : $ExpectedHttpsBinding"
-Write-Host "Binding HTTP attendu      : $ExpectedHttpBinding"
-Write-Host "ReplaceWebConfig          : $ReplaceWebConfig"
-Write-Host "SkipRuntimeTests          : $SkipRuntimeTests"
-Write-Host "SkipGitPull               : $SkipGitPull"
+Write-Host "Site IIS                     : $SiteName"
+Write-Host "Source                       : $SourcePath"
+Write-Host "Projet                       : $ProjectPath"
+Write-Host "Publish                      : $PublishPath"
+Write-Host "Backups                      : $BackupRoot"
+Write-Host "API HTTPS                    : $HttpsHealthUrl"
+Write-Host "CRL                          : $CrlUrl"
+Write-Host "Binding HTTPS attendu        : $ExpectedHttpsBinding"
+Write-Host "Binding HTTP interdit        : $ForbiddenHttpBinding"
+Write-Host "Port HTTP interdit           : $ForbiddenHttpFallbackPort"
+Write-Host "AllowHttpFallback5000        : $AllowHttpFallback5000"
+Write-Host "ReplaceWebConfig             : $ReplaceWebConfig"
+Write-Host "SkipRuntimeTests             : $SkipRuntimeTests"
+Write-Host "SkipGitPull                  : $SkipGitPull"
 
 Assert-Admin
 Import-IisModuleOrStop
@@ -592,11 +649,18 @@ catch {
 
 Write-Step "Mise a jour API terminee"
 
-Write-Host "API HTTPS validee         : $HttpsHealthUrl" -ForegroundColor Green
-Write-Host "Fallback HTTP valide      : $HttpFallbackHealthUrl" -ForegroundColor Green
-Write-Host "CRL validee               : $CrlUrl" -ForegroundColor Green
-Write-Host "Site IIS                  : $SiteName" -ForegroundColor Green
-Write-Host "Dossier deploye           : $DeployPath" -ForegroundColor Green
-Write-Host "Backup                    : $backupPath" -ForegroundColor Green
+Write-Host "API HTTPS validee            : $HttpsHealthUrl" -ForegroundColor Green
+Write-Host "CRL validee                  : $CrlUrl" -ForegroundColor Green
+
+if ($AllowHttpFallback5000) {
+    Write-Host "Fallback HTTP 5000           : autorise temporairement par option -AllowHttpFallback5000" -ForegroundColor Yellow
+}
+else {
+    Write-Host "Fallback HTTP 5000           : interdit / absent attendu" -ForegroundColor Green
+}
+
+Write-Host "Site IIS                     : $SiteName" -ForegroundColor Green
+Write-Host "Dossier deploye              : $DeployPath" -ForegroundColor Green
+Write-Host "Backup                       : $backupPath" -ForegroundColor Green
 Write-Host ""
-Write-Host "[OK] Mise a jour applicative terminee sans reconfiguration HTTPS/IIS." -ForegroundColor Green
+Write-Host "[OK] Mise a jour applicative terminee en mode HTTPS strict, sans reconfiguration HTTPS/IIS." -ForegroundColor Green
