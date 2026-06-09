@@ -12,31 +12,74 @@
 
 ## Erreurs Mobile
 
-### DATE_TOURNEE_EXPIREE
-
-```http
-400 Bad Request
-```
-
-Signifie que la date de tournée calculée par l'API a expiré ou n'est plus autorisée pour les opérations mobiles.
-
-### DATE_TOURNEE_NON_AUTORISEE
-
-```http
-400 Bad Request
-```
-
-Signifie que la date de tournée calculée côté API n'est pas autorisée pour des raisons métier (weekend, jour férié, etc.).
-
 ### DATE_QUERY_PARAM_INTERDIT
 
 ```http
 400 Bad Request
 ```
 
-Signifie que la requête a inclus un paramètre `date` ou `dateTournee` dans l'URL, ce qui est explicitement interdit.
+Signifie que la requête GET mobile a inclus un paramètre `date` ou `dateTournee` dans l'URL, ce qui est explicitement interdit.
 
 La date est toujours calculée côté API avec le fuseau horaire **Europe/Paris**.
+
+### VALIDATION_ERROR
+
+```http
+400 Bad Request
+```
+
+Signifie que la requête mobile ne respecte pas le contrat JSON ou les règles métier.
+
+Exemples :
+
+```text
+schemaVersion absent ou différent de 1.3 sur POST /api/synchronisations.
+schemaVersion 1.2 envoyé sur POST /api/synchronisations.
+trajet manquant.
+camion manquant.
+idCamion manquant.
+kilométrage manquant ou négatif.
+kilometrageArrivee inférieur à kilometrageDepart.
+dateDepartMobile ou dateArriveeMobile manquante.
+A_FAIRE envoyé dans l'envoi final.
+NON_FAIT ou ANOMALIE sans commentaire livreur.
+```
+
+### DATE_TOURNEE_EXPIREE
+
+```http
+409 Conflict
+```
+
+Signifie que la date de tournée envoyée par le mobile est antérieure à la date métier actuellement autorisée par l'API.
+
+La réponse contient notamment :
+
+```text
+success = false
+statut = CONFLICT
+code = DATE_TOURNEE_EXPIREE
+dateTourneePayload
+dateTourneeAutorisee
+```
+
+### DATE_TOURNEE_NON_AUTORISEE
+
+```http
+409 Conflict
+```
+
+Signifie que la date de tournée envoyée par le mobile ne correspond pas à la date métier autorisée par l'API.
+
+La réponse contient notamment :
+
+```text
+success = false
+statut = CONFLICT
+code = DATE_TOURNEE_NON_AUTORISEE
+dateTourneePayload
+dateTourneeAutorisee
+```
 
 ### SYNCHRONISATION_ALREADY_EXISTS
 
@@ -58,13 +101,7 @@ Signifie qu'une tournée a déjà été envoyée pour le même couple :
 DateTournee + CodeTournee
 ```
 
-### VALIDATION_ERROR
-
-```http
-400 Bad Request
-```
-
-Signifie que la requête mobile ne respecte pas le contrat JSON ou les règles métier.
+Le `CodeLivreur` sert à tracer qui a envoyé la tournée, mais il ne permet pas d'envoyer une deuxième fois la même tournée le même jour.
 
 ## Erreurs Expédition
 
