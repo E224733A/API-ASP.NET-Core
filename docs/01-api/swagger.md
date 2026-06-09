@@ -6,10 +6,12 @@ La documentation Swagger doit être alignée avec les fichiers du dossier `01-ap
 
 ## Accès local
 
+Swagger est activé uniquement en environnement `Development` dans `Program.cs`.
+
 Lancer l'API :
 
 ```powershell
-cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\backend\API-ASP.NET-Core"
+cd "C:\Users\Logistique\Downloads\Stage\ProjetMobileTournee\API\API-ASP.NET-Core"
 
 $env:ASPNETCORE_ENVIRONMENT="Development"
 
@@ -22,7 +24,17 @@ Ouvrir Swagger :
 http://127.0.0.1:5000/swagger
 ```
 
-## Routes à afficher dans Swagger
+## Production
+
+En production, l'URL API cible validée est :
+
+```text
+https://srvapi1.sli.local
+```
+
+Swagger n'est pas exposé en production par la configuration actuelle.
+
+## Routes à afficher dans Swagger en développement
 
 | Méthode | Route | Rôle |
 |---|---|---|
@@ -32,12 +44,68 @@ http://127.0.0.1:5000/swagger
 | GET | `/api/livreurs` | Lister les livreurs |
 | GET | `/api/tournees/disponibles` | Lister les tournées disponibles |
 | GET | `/api/tournees/jour` | Charger une tournée complète |
-| POST | `/api/synchronisations` | Enregistrer le retour mobile |
-| GET | `/api/synchronisations` | Consulter les synchronisations reçues |
-| GET | `/api/synchronisations/{idTourneeMobile}` | Consulter le détail d'une synchronisation |
+| GET | `/api/camions/disponibles` | Lister les camions disponibles en schemaVersion 1.3 |
+| POST | `/api/synchronisations` | Enregistrer le retour mobile strict 1.3 avec trajet camion |
+| GET | `/api/synchronisations` | Consulter les synchronisations reçues si la route est active dans le code courant |
+| GET | `/api/synchronisations/{idTourneeMobile}` | Consulter le détail d'une synchronisation si la route est active dans le code courant |
 | GET | `/api/expedition/preparations/a-preparer` | Charger toutes les préparations Expédition |
 | POST | `/api/expedition/preparations/verrouiller` | Verrouiller un lot global de préparations Expédition |
-| GET | `/api/debug/sql/*` | Routes de debug SQL en développement |
+
+## Tester les routes Mobile depuis Swagger
+
+### GET /api/camions/disponibles
+
+Ne renseigner aucun paramètre.
+
+Résultat attendu :
+
+```http
+200 OK
+```
+
+La réponse doit contenir :
+
+```text
+schemaVersion = 1.3
+camions[]
+```
+
+Erreur attendue si un paramètre date est envoyé :
+
+```http
+GET /api/camions/disponibles?dateTournee=2026-06-09
+```
+
+```text
+400 Bad Request
+statut = VALIDATION_ERROR
+```
+
+### POST /api/synchronisations
+
+Utiliser un JSON du dossier :
+
+```text
+docs/04-tests/Mobile/payloads/
+```
+
+Champs obligatoires principaux :
+
+```text
+schemaVersion = 1.3
+idSynchronisation
+dateTournee
+codeTournee
+livreur
+mobile
+trajet
+trajet.camion.idCamion
+trajet.kilometrageDepart
+trajet.kilometrageArrivee
+trajet.dateDepartMobile
+trajet.dateArriveeMobile
+lignes[]
+```
 
 ## Tester les routes Expédition depuis Swagger
 
@@ -114,9 +182,3 @@ descriptions des DTO
 codes de réponse
 règles métier visibles dans Swagger UI
 ```
-
-## Routes de debug SQL
-
-Les routes `/api/debug/sql/*` sont utiles en développement.
-
-Elles doivent être désactivées, protégées ou réservées à un rôle administrateur avant une mise en production réelle.
