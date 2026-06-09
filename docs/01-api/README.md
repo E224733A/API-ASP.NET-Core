@@ -10,26 +10,30 @@ L'API est le point d'entrée unique entre :
 - les vues ABSSolute en lecture seule ;
 - les tables `Mobile_*` dédiées au projet.
 
-## Version de contrat mobile
+## Contrats mobiles actuels
 
-Version actuelle pour `POST /api/synchronisations` :
-
-```json
-{
-  "schemaVersion": "1.3"
-}
+```text
+GET /api/tournees/disponibles -> schemaVersion 1.2.
+GET /api/tournees/jour -> schemaVersion 1.2.
+GET /api/camions/disponibles -> schemaVersion 1.3.
+POST /api/synchronisations -> schemaVersion 1.3 uniquement.
 ```
 
 Le contrat de synchronisation mobile est strict :
 
 ```text
 schemaVersion = "1.3" uniquement.
-schemaVersion = "1.2" refusé.
+schemaVersion = "1.2" refusé sur POST /api/synchronisations.
 trajet obligatoire.
 camion obligatoire.
-kilométrages départ/arrivée obligatoires.
-dates départ/arrivée obligatoires.
+idCamion obligatoire.
+kilométrages départ et arrivée obligatoires.
+dates départ et arrivée obligatoires.
+kilometrageArrivee doit être supérieur ou égal à kilometrageDepart.
+dateArriveeMobile doit être supérieure ou égale à dateDepartMobile.
 ```
+
+Le contrat de chargement du matin reste en `schemaVersion = "1.2"`. Cette version 1.2 ne doit pas être envoyée au POST final de synchronisation.
 
 ## Routes principales
 
@@ -60,33 +64,11 @@ dates départ/arrivée obligatoires.
 ## Architecture logique
 
 ```text
-Controllers/
-├── HealthController.cs
-├── LivreursController.cs
-├── TourneesController.cs
-├── CamionsController.cs
-├── SynchronisationsController.cs
-├── ExpeditionPreparationsController.cs
-└── DebugSqlController.cs
-
-Services/
-├── TourneesService.cs
-├── CamionsService.cs
-├── SynchronisationService.cs
-└── ExpeditionService.cs
-
-Repositories/
-├── LivreursRepository.cs
-├── TourneesRepository.cs
-├── CamionsRepository.cs
-├── SynchronisationsRepository.cs
-└── ExpeditionRepository.cs
-
-Mappers/
-└── TourneeMobileMapper.cs
-
-Validators/
-└── SynchronisationTourneeValidator.cs
+Controllers : HealthController, LivreursController, TourneesController, CamionsController, SynchronisationsController, ExpeditionPreparationsController.
+Services : TourneesService, CamionsService, SynchronisationService, ExpeditionService, ExpeditionPreparationService, ExpeditionVerrouillageService.
+Repositories : LivreursRepository, TourneesRepository, CamionsRepository, SynchronisationsRepository, ExpeditionRepository.
+Mappers : TourneeMobileMapper, SynchronisationMapper, ExpeditionMapper.
+Validators : TourneeRequestValidator, SynchronisationTourneeValidator, ExpeditionVerrouillageValidator.
 ```
 
 ## Règles majeures
@@ -99,4 +81,7 @@ L'anti-doublon mobile technique est IdSynchronisation.
 L'anti-doublon mobile métier est DateTournee + CodeTournee.
 Le POST /api/synchronisations exige schemaVersion = "1.3".
 Le POST /api/synchronisations exige un trajet camion complet.
+Le trajet camion est sauvegardé avec la synchronisation mobile.
+Les GET mobiles refusent les paramètres date et dateTournee.
+La date métier est calculée côté API avec le fuseau Europe/Paris.
 ```
