@@ -11,11 +11,11 @@ namespace API_ASP.NET_Core.Models;
 /// - l'identifiant unique de synchronisation ;
 /// - le livreur ;
 /// - les informations de l'appareil mobile ;
-/// - les informations de trajet à partir du contrat 1.3 ;
+/// - les informations de trajet obligatoires en contrat 1.3 ;
 /// - les lignes de tournée validées par le livreur.
 ///
-/// Contrat JSON historique : schemaVersion = "1.2".
-/// Contrat JSON avec trajet : schemaVersion = "1.3".
+/// Contrat JSON de synchronisation accepté : schemaVersion = "1.3".
+/// Contrat JSON historique 1.2 : refusé sur POST /api/synchronisations.
 /// </remarks>
 public class SynchronisationTourneeRequest
 {
@@ -82,8 +82,8 @@ public class SynchronisationTourneeRequest
     /// Informations de trajet envoyées par le mobile.
     /// </summary>
     /// <remarks>
-    /// Obligatoire à partir de schemaVersion = "1.3".
-    /// Dans ce lot, la section est validée mais pas encore sauvegardée en base.
+    /// Obligatoire pour schemaVersion = "1.3".
+    /// Les données de trajet sont sauvegardées dans dbo.Mobile_TourneeCamion.
     /// </remarks>
     public SynchronisationTrajetRequest? Trajet { get; set; }
 
