@@ -4,8 +4,8 @@ namespace API_ASP.NET_Core.Models;
 /// Informations de trajet envoyées par le mobile lors de la synchronisation finale.
 /// </summary>
 /// <remarks>
-/// Ce modèle prépare le contrat POST /api/synchronisations v1.3.
-/// Dans ce lot, ces données sont validées mais ne sont pas encore sauvegardées en base.
+/// Ce modèle fait partie du contrat POST /api/synchronisations v1.3.
+/// Les données de trajet sont validées puis sauvegardées avec la synchronisation mobile.
 /// </remarks>
 public sealed class SynchronisationTrajetRequest
 {
