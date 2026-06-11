@@ -4,8 +4,23 @@ using API_ASP.NET_Core.Repositories;
 
 namespace API_ASP.NET_Core.Mappers;
 
+/// <summary>
+/// Mapper chargé de construire le contrat JSON de chargement mobile à partir des données SQL.
+/// </summary>
+/// <remarks>
+/// Ce mapper assemble les vues métier ABSSolute, les commentaires exceptionnels,
+/// les préremplissages Expédition et les liens d'adresse de livraison. Il ne charge pas
+/// les données lui-même : il transforme les records fournis par le service en DTO mobiles.
+/// </remarks>
 public sealed class TourneeMobileMapper
 {
+    /// <summary>
+    /// Construit la réponse complète de tournée envoyée au mobile le matin.
+    /// </summary>
+    /// <remarks>
+    /// La réponse reste en schemaVersion 1.2 côté chargement. Les lignes sont initialisées
+    /// avec le statut A_FAIRE et les quantités préremplies issues de l'Expédition si elles existent.
+    /// </remarks>
     public TourneeMobileDto Map(
         DateOnly dateTournee,
         LivreurRecord livreur,
@@ -60,6 +75,13 @@ public sealed class TourneeMobileMapper
         };
     }
 
+    /// <summary>
+    /// Convertit une ligne SQL de tournée en ligne mobile complète.
+    /// </summary>
+    /// <remarks>
+    /// Cette méthode ajoute les informations utiles au livreur : client, point de livraison,
+    /// retour, instructions, commentaire exceptionnel, zone de déchargement et saisie initiale.
+    /// </remarks>
     private static TourneeLigneMobileDto MapLigne(
         DateOnly dateTournee,
         TourneeLigneRecord ligne,
@@ -143,6 +165,9 @@ public sealed class TourneeMobileMapper
         };
     }
 
+    /// <summary>
+    /// Recherche le lien d'adresse de livraison correspondant au client et au point de livraison.
+    /// </summary>
     private static string? FindLienAdresseLivraison(
         string? numClient,
         string? codePdl,
@@ -161,11 +186,17 @@ public sealed class TourneeMobileMapper
             : null;
     }
 
+    /// <summary>
+    /// Construit la clé de recherche du lien d'adresse de livraison.
+    /// </summary>
     private static string BuildAdresseLivraisonKey(string? numClient, string? codePdl)
     {
         return $"{NormalizeKeyPart(numClient)}|{NormalizeKeyPart(codePdl)}";
     }
 
+    /// <summary>
+    /// Normalise une partie de clé sans transformer une absence de valeur en NULL.
+    /// </summary>
     private static string NormalizeKeyPart(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -173,6 +204,13 @@ public sealed class TourneeMobileMapper
             : value.Trim();
     }
 
+    /// <summary>
+    /// Initialise une quantité mobile avec le préremplissage Expédition lorsqu'il existe.
+    /// </summary>
+    /// <remarks>
+    /// La quantité livrée démarre avec la quantité prévue pour faciliter la saisie livreur,
+    /// tandis que la quantité récupérée reste à 0 au chargement.
+    /// </remarks>
     private static QuantiteSaisieMobileDto MapQuantiteInitiale(
         ArticleSaisissableDto article,
         TourneeLigneRecord ligne,
@@ -195,6 +233,13 @@ public sealed class TourneeMobileMapper
         };
     }
 
+    /// <summary>
+    /// Retrouve la quantité prévue Expédition à appliquer à une ligne mobile.
+    /// </summary>
+    /// <remarks>
+    /// La recherche privilégie l'identifiant stable idLigneSource. Le repli NumClient + CodePDL
+    /// conserve la compatibilité avec les préremplissages qui ne portent pas encore cet identifiant.
+    /// </remarks>
     private static PreRemplissageQuantiteRecord? FindPreRemplissage(
         string codeArticle,
         TourneeLigneRecord ligne,
@@ -216,6 +261,13 @@ public sealed class TourneeMobileMapper
             && string.Equals(preRemplissage.CodeArticle, codeArticle, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Recherche le commentaire exceptionnel à afficher au livreur pour une ligne.
+    /// </summary>
+    /// <remarks>
+    /// La priorité est donnée au commentaire rattaché à idLigneSource, puis au couple
+    /// NumClient + CodePDL, puis au commentaire client global si aucun PDL n'est précisé.
+    /// </remarks>
     private static string? FindCommentaireExceptionnel(
         string idLigneSource,
         TourneeLigneRecord ligne,
@@ -246,6 +298,13 @@ public sealed class TourneeMobileMapper
         return NormalizeNullable(commentaireClient?.Commentaire);
     }
 
+    /// <summary>
+    /// Construit la liste des articles saisissables envoyés au mobile.
+    /// </summary>
+    /// <remarks>
+    /// Si le référentiel SQL est vide, le mapper utilise le référentiel applicatif v1
+    /// pour conserver un chargement mobile exploitable.
+    /// </remarks>
     private static List<ArticleSaisissableDto> BuildArticlesSaisissables(
         IReadOnlyList<ArticleSaisissableRecord> articlesSaisissables)
     {
@@ -271,6 +330,13 @@ public sealed class TourneeMobileMapper
             .ToList();
     }
 
+    /// <summary>
+    /// Construit l'identifiant stable que le mobile doit renvoyer lors du POST final.
+    /// </summary>
+    /// <remarks>
+    /// L'identifiant combine date, tournée, client, point de livraison et ordre d'arrêt.
+    /// Il sert aussi à rattacher les commentaires exceptionnels et les préremplissages.
+    /// </remarks>
     public static string BuildIdLigneSource(DateOnly dateTournee, TourneeLigneRecord ligne)
     {
         var date = dateTournee.ToString("yyyy-MM-dd");
@@ -283,6 +349,13 @@ public sealed class TourneeMobileMapper
         return $"{date}|{codeTournee}|{jour}|{numClient}|{codePdl}|{ordreArret}";
     }
 
+    /// <summary>
+    /// Construit la zone de déchargement affichée au livreur.
+    /// </summary>
+    /// <remarks>
+    /// Une zone commençant par + est affichée avec le jour de retour afin de conserver
+    /// l'information métier utile au déchargement.
+    /// </remarks>
     private static string? BuildZoneDechargementAffichee(
         int? jourTourneeRetour,
         string? zoneDechargement)
@@ -305,6 +378,9 @@ public sealed class TourneeMobileMapper
         return zone;
     }
 
+    /// <summary>
+    /// Normalise une partie d'identifiant stable en conservant une valeur de remplacement explicite.
+    /// </summary>
     private static string NormalizeIdPart(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -312,6 +388,9 @@ public sealed class TourneeMobileMapper
             : value.Trim();
     }
 
+    /// <summary>
+    /// Normalise une chaîne optionnelle pour le contrat mobile.
+    /// </summary>
     private static string? NormalizeNullable(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -319,6 +398,9 @@ public sealed class TourneeMobileMapper
             : value.Trim();
     }
 
+    /// <summary>
+    /// Convertit le numéro de jour métier en libellé lisible pour le mobile.
+    /// </summary>
     private static string? GetJourLibelle(int? jour)
     {
         return jour switch
