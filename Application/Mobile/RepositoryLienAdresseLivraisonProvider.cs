@@ -6,11 +6,12 @@ using Microsoft.Extensions.Options;
 namespace API_ASP.NET_Core.Application.Mobile;
 
 /// <summary>
-/// Provider final basé sur la vue SQL réutilisable :
-/// [lavinprosli].[dbo].[v_Mobile_AdresseLivraison].
-/// La vue doit exposer NUM_CLI, CodePDL et AdresseLivraison.
-/// AdresseLivraison doit contenir un lien Google Maps déjà construit.
+/// Provider basé sur la vue SQL [lavinprosli].[dbo].[v_Mobile_AdresseLivraison].
 /// </summary>
+/// <remarks>
+/// Le lien d'adresse enrichit le contrat mobile. Il reste optionnel : une absence de valeur
+/// retourne null et le chargement de tournée continue.
+/// </remarks>
 public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivraisonProvider
 {
     private readonly SqlConnectionFactory _connectionFactory;
@@ -27,6 +28,9 @@ public sealed class RepositoryLienAdresseLivraisonProvider : ILienAdresseLivrais
         _options = options.Value;
     }
 
+    /// <summary>
+    /// Recherche le lien associé au couple NUM_CLI / CodePDL.
+    /// </summary>
     public async Task<string?> GetLienAdresseLivraisonAsync(
         string? numCli,
         string? codePdl,
