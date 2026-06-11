@@ -13,20 +13,21 @@ namespace API_ASP.NET_Core.Validators;
 
 /// <summary>
 /// Validator pour la requête de verrouillage Expédition.
-/// Ce composant isole les règles de validation du payload afin
-/// de garantir un contrôle complet avant d'appeler la couche
-/// métier et la persistance. Il reprend la logique de
-/// <see cref="ExpeditionService"/> sans toutefois modifier les
-/// comportements existants.
 /// </summary>
+/// <remarks>
+/// Ce composant isole les règles de validation du payload ServeWeb avant l'appel au service
+/// de verrouillage et à la persistance SQL. Il vérifie le contrat JSON Expédition v1.2,
+/// la source attendue, le fuseau métier, les lignes préparables, les statuts web et les
+/// articles autorisés côté Expédition.
+/// </remarks>
 public sealed class ExpeditionVerrouillageValidator
 {
-    // Valeurs attendues pour le contrat JSON Expédition v1.2
+    // Contrat JSON Expédition v1.2 : ces valeurs sont attendues telles quelles depuis ServeWeb.
     private const string SchemaVersionExpedition = "1.2";
     private const string SourceAttendue = "APPLICATION_WEB_EXPEDITION";
     private const string FuseauHoraireMetier = "Europe/Paris";
 
-    // Articles autorisés côté Expédition
+    // Articles préparables côté Expédition. ROLLS_VIDES est explicitement autorisé comme quantité prévue.
     private static readonly HashSet<string> ArticlesAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "ROLLS",
@@ -35,7 +36,7 @@ public sealed class ExpeditionVerrouillageValidator
         "SACS"
     };
 
-    // Statuts de préparation web autorisés
+    // Statuts acceptés depuis ServeWeb avant verrouillage API.
     private static readonly HashSet<string> StatutsPreparationWebAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "PRETE_VERROUILLAGE",
@@ -59,8 +60,12 @@ public sealed class ExpeditionVerrouillageValidator
     }
 
     /// <summary>
-    /// Valide la requête de verrouillage. Retourne toutes les erreurs rencontrées.
+    /// Valide la requête de verrouillage Expédition et retourne toutes les erreurs détectées.
     /// </summary>
+    /// <remarks>
+    /// Le validator ne verrouille rien lui-même. Il sécurise le payload avant orchestration :
+    /// corps JSON, version, source, dates, fuseau, tournées, lignes et quantités prévues.
+    /// </remarks>
     /// <param name="request">Requête à valider.</param>
     /// <param name="cancellationToken">Jeton d'annulation.</param>
     /// <returns>Liste des messages d'erreur. Vide si aucune erreur.</returns>
@@ -72,32 +77,27 @@ public sealed class ExpeditionVerrouillageValidator
         DateTime? dateTourneeValide = null;
         DateTimeOffset? dateVerrouillageDemandeeValide = null;
 
-        // Corps obligatoire
         if (request is null)
         {
             errors.Add("Le corps JSON du lot Expédition est obligatoire.");
             return errors;
         }
 
-        // SchemaVersion doit être exactement 1.2
         if (!string.Equals(request.SchemaVersion?.Trim(), SchemaVersionExpedition, StringComparison.OrdinalIgnoreCase))
         {
             errors.Add("schemaVersion doit être égal à \"1.2\".");
         }
 
-        // IdLotVerrouillage obligatoire
         if (string.IsNullOrWhiteSpace(request.IdLotVerrouillage))
         {
             errors.Add("idLotVerrouillage est obligatoire.");
         }
 
-        // Source obligatoire et doit correspondre
         if (!string.Equals(request.Source?.Trim(), SourceAttendue, StringComparison.OrdinalIgnoreCase))
         {
             errors.Add($"source doit être égal à \"{SourceAttendue}\".");
         }
 
-        // DateTournee obligatoire au format yyyy-MM-dd
         if (!DateTime.TryParse(request.DateTournee, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateTournee))
         {
             errors.Add("dateTournee est obligatoire et doit être une date valide au format yyyy-MM-dd.");
@@ -107,7 +107,6 @@ public sealed class ExpeditionVerrouillageValidator
             dateTourneeValide = dateTournee.Date;
         }
 
-        // DateVerrouillageDemandee obligatoire au format ISO avec offset
         if (!DateTimeOffset.TryParse(request.DateVerrouillageDemandee, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateVerrouillageDemandee))
         {
             errors.Add("dateVerrouillageDemandee est obligatoire et doit être une date ISO 8601 avec offset.");
@@ -121,28 +120,25 @@ public sealed class ExpeditionVerrouillageValidator
             dateVerrouillageDemandeeValide = dateVerrouillageDemandee;
         }
 
-        // FuseauHoraireMetier obligatoire et doit correspondre
         if (!string.Equals(request.FuseauHoraireMetier?.Trim(), FuseauHoraireMetier, StringComparison.OrdinalIgnoreCase))
         {
             errors.Add($"fuseauHoraireMetier doit être égal à \"{FuseauHoraireMetier}\".");
         }
 
-        // Tournees obligatoire et non vide
         if (request.Tournees is null || request.Tournees.Count == 0)
         {
             errors.Add("tournees doit contenir au moins une tournée.");
             return errors;
         }
 
-        // Si une date de tournée est valide, on peut potentiellement contrôler l'existence des lignes
         HashSet<string>? idLignesPreparables = null;
         if (dateTourneeValide.HasValue)
         {
-            // Obtenir la date métier autorisée
             var dateAutorisee = _dateMetierService.GetDateTourneeExpeditionPreparable().ToDateTime(TimeOnly.MinValue).Date;
 
             if (dateTourneeValide.Value == dateAutorisee)
             {
+                // Contrôle croisé : les lignes reçues doivent exister dans les lignes préparables de la date autorisée.
                 var dateOnly = DateOnly.FromDateTime(dateTourneeValide.Value);
                 var lignesPreparables = (await _tourneesRepository.GetTourneeLinesAsync(dateOnly, codeLivreur: string.Empty, codeTournee: null)).ToList();
                 idLignesPreparables = lignesPreparables
@@ -156,6 +152,14 @@ public sealed class ExpeditionVerrouillageValidator
         return errors;
     }
 
+    /// <summary>
+    /// Valide les tournées, les lignes et les quantités prévues contenues dans le lot Expédition.
+    /// </summary>
+    /// <remarks>
+    /// Les identifiants de lignes doivent être uniques dans une tournée et dans le lot global.
+    /// Les quantités prévues restent optionnelles, mais chaque quantité transmise doit porter
+    /// un article autorisé et une valeur positive ou nulle.
+    /// </remarks>
     private void ValidateTournees(
         ExpeditionVerrouillageLotRequest request,
         HashSet<string>? idLignesPreparables,
@@ -169,23 +173,19 @@ public sealed class ExpeditionVerrouillageValidator
             var tournee = request.Tournees[indexTournee];
             var prefixTournee = $"tournees[{indexTournee}]";
 
-            // CodeTournee obligatoire
             if (string.IsNullOrWhiteSpace(tournee.CodeTournee))
             {
                 errors.Add($"{prefixTournee}.codeTournee est obligatoire.");
             }
 
-            // StatutPreparationWeb optionnel mais doit être autorisé
             if (!string.IsNullOrWhiteSpace(tournee.StatutPreparationWeb) &&
                 !StatutsPreparationWebAutorises.Contains(tournee.StatutPreparationWeb))
             {
                 errors.Add($"{prefixTournee}.statutPreparationWeb doit être PRETE_VERROUILLAGE ou EN_PREPARATION_WEB.");
             }
 
-            // DateModification de la tournée
             ValidateDateModificationTournee(tournee, prefixTournee, errors, dateVerrouillageDemandee);
 
-            // Lignes non null et non vides
             if (tournee.Lignes is null || tournee.Lignes.Count == 0)
             {
                 errors.Add($"{prefixTournee}.lignes doit contenir au moins une ligne.");
@@ -199,7 +199,6 @@ public sealed class ExpeditionVerrouillageValidator
                 var ligne = tournee.Lignes[indexLigne];
                 var prefixLigne = $"{prefixTournee}.lignes[{indexLigne}]";
 
-                // IdLigneSource obligatoire
                 if (string.IsNullOrWhiteSpace(ligne.IdLigneSource))
                 {
                     errors.Add($"{prefixLigne}.idLigneSource est obligatoire.");
@@ -207,30 +206,25 @@ public sealed class ExpeditionVerrouillageValidator
                 else
                 {
                     var idLigne = ligne.IdLigneSource.Trim();
-                    // Unicité dans la tournée
                     if (!idLignesTournee.Add(idLigne))
                     {
                         errors.Add($"{prefixLigne}.idLigneSource est présent plusieurs fois dans la même tournée.");
                     }
-                    // Unicité globale dans le lot
                     if (!idLignesGlobal.Add(idLigne))
                     {
                         errors.Add($"{prefixLigne}.idLigneSource est présent dans plusieurs tournées du lot.");
                     }
-                    // Contrôle sur la présence dans les lignes préparables
                     if (idLignesPreparables is not null && !idLignesPreparables.Contains(idLigne))
                     {
                         errors.Add($"{prefixLigne}.idLigneSource n'existe pas dans les lignes préparables de la date.");
                     }
                 }
 
-                // Client obligatoire avec NumClient
                 if (ligne.Client is null || string.IsNullOrWhiteSpace(ligne.Client.NumClient))
                 {
                     errors.Add($"{prefixLigne}.client.numClient est obligatoire.");
                 }
 
-                // QuantitesPrevues peut être null -> rien à valider
                 if (ligne.QuantitesPrevues is null)
                 {
                     continue;
@@ -248,17 +242,14 @@ public sealed class ExpeditionVerrouillageValidator
                         continue;
                     }
                     var codeArticle = NormalizeArticleCode(quantite.CodeArticle);
-                    // Unicité des articles dans une ligne
                     if (!codesArticles.Add(codeArticle))
                     {
                         errors.Add($"{prefixQuantite}.codeArticle est présent plusieurs fois dans la même ligne.");
                     }
-                    // Vérification que l'article est autorisé
                     if (!ArticlesAutorises.Contains(codeArticle))
                     {
                         errors.Add($"{prefixQuantite}.codeArticle doit être ROLLS, ROLLS_VIDES, TAPIS ou SACS.");
                     }
-                    // Quantité non négative
                     if (quantite.QuantiteLivreePrevue.HasValue && quantite.QuantiteLivreePrevue.Value < 0)
                     {
                         errors.Add($"{prefixQuantite}.quantiteLivreePrevue doit être positive ou nulle.");
@@ -268,6 +259,13 @@ public sealed class ExpeditionVerrouillageValidator
         }
     }
 
+    /// <summary>
+    /// Valide la date de modification fonctionnelle envoyée par ServeWeb pour une tournée.
+    /// </summary>
+    /// <remarks>
+    /// Cette date représente l'heure du clic ou de la dernière modification côté Expédition.
+    /// Elle doit porter un offset explicite et ne doit pas être postérieure au verrouillage demandé.
+    /// </remarks>
     private static void ValidateDateModificationTournee(
         ExpeditionVerrouillageTourneeRequest tournee,
         string prefixTournee,
@@ -294,6 +292,9 @@ public sealed class ExpeditionVerrouillageValidator
         }
     }
 
+    /// <summary>
+    /// Normalise un code article avant contrôle d'autorisation.
+    /// </summary>
     private static string NormalizeArticleCode(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -301,6 +302,13 @@ public sealed class ExpeditionVerrouillageValidator
             : value.Trim().ToUpperInvariant();
     }
 
+    /// <summary>
+    /// Vérifie qu'une date textuelle porte explicitement un offset horaire.
+    /// </summary>
+    /// <remarks>
+    /// Le verrouillage Expédition repose sur le fuseau métier Europe/Paris. Exiger un offset
+    /// évite d'interpréter une date locale ambiguë différemment selon l'environnement serveur.
+    /// </remarks>
     private static bool HasExplicitOffset(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
