@@ -5,6 +5,14 @@ using Microsoft.Data.SqlClient;
 
 namespace API_ASP.NET_Core.Services;
 
+/// <summary>
+/// Service applicatif responsable du traitement métier du POST final mobile.
+/// </summary>
+/// <remarks>
+/// Ce service applique les règles avant l'écriture SQL : validation du contrat JSON,
+/// contrôle de la date métier, idempotence technique, doublon métier et conversion
+/// des erreurs SQL de doublon en réponses API stables pour le mobile.
+/// </remarks>
 public sealed class SynchronisationService
 {
     private readonly SynchronisationTourneeValidator _validator;
@@ -24,6 +32,14 @@ public sealed class SynchronisationService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Valide et enregistre la synchronisation finale envoyée par le mobile.
+    /// </summary>
+    /// <remarks>
+    /// La date de tournée est imposée par le serveur et les doublons sont bloqués avant
+    /// l'insertion. Cette méthode retourne directement le statut HTTP et le corps JSON
+    /// attendus par le contrôleur.
+    /// </remarks>
     public async Task<SynchronisationServiceResult> EnregistrerSynchronisationAsync(
         SynchronisationTourneeRequest request,
         string? adresseIp,
@@ -58,6 +74,7 @@ public sealed class SynchronisationService
         var dateTourneePayload = DateOnly.FromDateTime(dateTournee);
         var dateTourneeAutorisee = _dateMetierService.GetDateTourneeAutorisee();
 
+        // Règle métier : le mobile ne peut synchroniser que la tournée du jour calculée par l'API.
         if (dateTourneePayload != dateTourneeAutorisee)
         {
             return SynchronisationServiceResult.Conflict(
@@ -210,6 +227,9 @@ public sealed class SynchronisationService
         }
     }
 
+    /// <summary>
+    /// Convertit l'identifiant de synchronisation déjà validé en Guid exploitable par le service.
+    /// </summary>
     private static Guid ParseIdSynchronisation(object? value)
     {
         if (SynchronisationTourneeValidator.TryParseGuid(value, out var idSynchronisation))
@@ -220,6 +240,13 @@ public sealed class SynchronisationService
         throw new InvalidOperationException("L'identifiant de synchronisation a été validé mais reste invalide.");
     }
 
+    /// <summary>
+    /// Construit la réponse de conflit lorsque la date envoyée ne correspond pas à la date métier autorisée.
+    /// </summary>
+    /// <remarks>
+    /// Les codes DATE_TOURNEE_EXPIREE et DATE_TOURNEE_NON_AUTORISEE permettent au client
+    /// de distinguer un ancien payload d'une date future ou inattendue.
+    /// </remarks>
     private static object BuildDateTourneeNonAutoriseeResponse(
         DateOnly dateTourneePayload,
         DateOnly dateTourneeAutorisee,
@@ -252,6 +279,9 @@ public sealed class SynchronisationService
         };
     }
 
+    /// <summary>
+    /// Détermine si l'erreur SQL correspond à une contrainte d'unicité sur IdSynchronisation.
+    /// </summary>
     private static bool IsSqlDuplicateIdSynchronisation(SqlException exception)
     {
         return exception.Message.Contains("IdSynchronisation", StringComparison.OrdinalIgnoreCase)
@@ -260,6 +290,13 @@ public sealed class SynchronisationService
     }
 }
 
+/// <summary>
+/// Résultat applicatif retourné par le service de synchronisation au contrôleur HTTP.
+/// </summary>
+/// <remarks>
+/// Cette enveloppe évite de mélanger la logique métier du service avec les types IActionResult
+/// du contrôleur, tout en conservant le statut HTTP à retourner.
+/// </remarks>
 public sealed class SynchronisationServiceResult
 {
     private SynchronisationServiceResult(int statusCode, object body)
