@@ -4,6 +4,10 @@ namespace API_ASP.NET_Core.Models;
 /// Réponse du GET global Expédition.
 /// Contrat JSON v1.2 uniquement.
 /// </summary>
+/// <remarks>
+/// Cette réponse alimente ServeWeb pour préparer la date métier calculée par l'API.
+/// Aucun filtre client, livreur ou tournée ne doit être imposé par le client HTTP.
+/// </remarks>
 public sealed class ExpeditionPreparationResponseDto
 {
     public string Statut { get; set; } = "SUCCESS";
@@ -36,6 +40,10 @@ public sealed class ExpeditionArticlePreparableDto
 /// <summary>
 /// Tournée contenue dans le chargement global Expédition.
 /// </summary>
+/// <remarks>
+/// StatutPreparationWeb décrit l'état connu côté API au moment du chargement.
+/// La décision finale de verrouiller reste portée par ServeWeb après le clic humain.
+/// </remarks>
 public sealed class ExpeditionPreparationTourneeDto
 {
     public string CodeTournee { get; set; } = string.Empty;
@@ -47,6 +55,10 @@ public sealed class ExpeditionPreparationTourneeDto
 /// <summary>
 /// Ligne de tournée préparée côté Expédition.
 /// </summary>
+/// <remarks>
+/// IdLigneSource est l'identifiant stable qui permet de relier le GET Expédition,
+/// le verrouillage ServeWeb, le chargement mobile et la synchronisation finale.
+/// </remarks>
 public sealed class ExpeditionPreparationLigneDto
 {
     public string IdLigneSource { get; set; } = string.Empty;
@@ -57,6 +69,9 @@ public sealed class ExpeditionPreparationLigneDto
     public ExpeditionPreparationInitialeDto PreparationInitiale { get; set; } = new();
 }
 
+/// <summary>
+/// Informations client exposées dans les contrats Expédition.
+/// </summary>
 public sealed class ExpeditionClientDto
 {
     public string NumClient { get; set; } = string.Empty;
@@ -64,6 +79,9 @@ public sealed class ExpeditionClientDto
     public string? NomAffiche { get; set; }
 }
 
+/// <summary>
+/// Informations du point de livraison exposées dans les contrats Expédition.
+/// </summary>
 public sealed class ExpeditionPointLivraisonDto
 {
     public string? CodePDL { get; set; }
@@ -75,6 +93,9 @@ public sealed class ExpeditionPointLivraisonDto
     public string? CodePostal { get; set; }
 }
 
+/// <summary>
+/// Informations de lecture issues des vues métier, non saisies par l'Expédition.
+/// </summary>
 public sealed class ExpeditionInfosLectureDto
 {
     public string? Horaire { get; set; }
@@ -96,6 +117,13 @@ public sealed class ExpeditionPreparationInitialeDto
     public List<ExpeditionQuantitePrevueDto> QuantitesPrevues { get; set; } = new();
 }
 
+/// <summary>
+/// Quantité prévue affichée ou sauvegardée côté Expédition.
+/// </summary>
+/// <remarks>
+/// Une quantité null signifie que l'Expédition n'a pas renseigné de valeur prévue.
+/// Elle ne doit pas être interprétée comme une quantité 0.
+/// </remarks>
 public sealed class ExpeditionQuantitePrevueDto
 {
     public string CodeArticle { get; set; } = string.Empty;
@@ -103,6 +131,9 @@ public sealed class ExpeditionQuantitePrevueDto
     public int? QuantiteLivreePrevue { get; set; }
 }
 
+/// <summary>
+/// Règles déclaratives renvoyées à ServeWeb avec le contrat Expédition.
+/// </summary>
 public sealed class ExpeditionReglesDto
 {
     public string HeureVerrouillageMetier { get; set; } = "22:35";
@@ -118,6 +149,10 @@ public sealed class ExpeditionReglesDto
 /// Requête POST globale de verrouillage Expédition.
 /// Contrat JSON v1.2 uniquement.
 /// </summary>
+/// <remarks>
+/// Cette requête est envoyée par ServeWeb lorsque les préparations sont prêtes à être
+/// sauvegardées définitivement dans les tables Mobile_*.
+/// </remarks>
 public sealed class ExpeditionVerrouillageLotRequest
 {
     public string SchemaVersion { get; set; } = "1.2";
@@ -129,6 +164,9 @@ public sealed class ExpeditionVerrouillageLotRequest
     public List<ExpeditionVerrouillageTourneeRequest> Tournees { get; set; } = new();
 }
 
+/// <summary>
+/// Tournée contenue dans le POST de verrouillage Expédition.
+/// </summary>
 public sealed class ExpeditionVerrouillageTourneeRequest
 {
     public string CodeTournee { get; set; } = string.Empty;
@@ -145,6 +183,13 @@ public sealed class ExpeditionVerrouillageTourneeRequest
     public List<ExpeditionVerrouillageLigneRequest> Lignes { get; set; } = new();
 }
 
+/// <summary>
+/// Ligne contenue dans le POST de verrouillage Expédition.
+/// </summary>
+/// <remarks>
+/// CommentaireExceptionnel suit une règle précise côté repository : null ne modifie pas,
+/// chaîne vide désactive, texte non vide remplace le commentaire actif.
+/// </remarks>
 public sealed class ExpeditionVerrouillageLigneRequest
 {
     public string IdLigneSource { get; set; } = string.Empty;
@@ -156,12 +201,18 @@ public sealed class ExpeditionVerrouillageLigneRequest
     public List<ExpeditionQuantitePrevueRequest> QuantitesPrevues { get; set; } = new();
 }
 
+/// <summary>
+/// Quantité prévue transmise dans le POST de verrouillage Expédition.
+/// </summary>
 public sealed class ExpeditionQuantitePrevueRequest
 {
     public string CodeArticle { get; set; } = string.Empty;
     public int? QuantiteLivreePrevue { get; set; }
 }
 
+/// <summary>
+/// Métadonnées optionnelles de dernière modification côté ServeWeb.
+/// </summary>
 public sealed class ExpeditionDerniereModificationDto
 {
     public string? Date { get; set; }
@@ -200,6 +251,9 @@ public sealed class ExpeditionLotVerrouillageDto
     public long? IdPreparationExpedition { get; set; }
 }
 
+/// <summary>
+/// État SQL courant d'une préparation Expédition pour une date et une tournée.
+/// </summary>
 public sealed class ExpeditionPreparationEtatDto
 {
     public long IdPreparationExpedition { get; set; }
@@ -210,6 +264,9 @@ public sealed class ExpeditionPreparationEtatDto
     public Guid? IdLotVerrouillage { get; set; }
 }
 
+/// <summary>
+/// Résultat de sauvegarde retourné après verrouillage transactionnel d'un lot Expédition.
+/// </summary>
 public sealed class ExpeditionVerrouillageLotSaveResult
 {
     public int NombreTourneesVerrouillees { get; set; }
