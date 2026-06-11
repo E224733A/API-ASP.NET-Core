@@ -5,12 +5,18 @@ using System.Data;
 
 namespace API_ASP.NET_Core.Repositories;
 
+/// <summary>
+/// Projection SQL minimale d'un livreur lu depuis la source ABSSolute.
+/// </summary>
 public record LivreurRecord
 {
     public string CodeLivreur { get; init; } = string.Empty;
     public string NomLivreur { get; init; } = string.Empty;
 }
 
+/// <summary>
+/// Projection SQL utilisée pour l'écran mobile de choix de tournée.
+/// </summary>
 public record TourneeDisponibleRecord
 {
     public string CodeTournee { get; init; } = string.Empty;
@@ -18,6 +24,9 @@ public record TourneeDisponibleRecord
     public int NombrePoints { get; init; }
 }
 
+/// <summary>
+/// Projection SQL d'un article saisissable exposé au mobile et à l'Expédition.
+/// </summary>
 public record ArticleSaisissableRecord
 {
     public string CodeArticle { get; init; } = string.Empty;
@@ -25,6 +34,9 @@ public record ArticleSaisissableRecord
     public int OrdreAffichage { get; init; }
 }
 
+/// <summary>
+/// Projection SQL d'un commentaire exceptionnel actif pour une ligne ou un client.
+/// </summary>
 public record CommentaireExceptionnelRecord
 {
     public string? IdLigneSource { get; init; }
@@ -34,6 +46,9 @@ public record CommentaireExceptionnelRecord
     public string Commentaire { get; init; } = string.Empty;
 }
 
+/// <summary>
+/// Projection SQL des quantités prévues issues du verrouillage Expédition.
+/// </summary>
 public record PreRemplissageQuantiteRecord
 {
     public string IdLigneSource { get; init; } = string.Empty;
@@ -44,6 +59,9 @@ public record PreRemplissageQuantiteRecord
     public int? QuantiteLivreePrevue { get; init; }
 }
 
+/// <summary>
+/// Projection SQL complète d'une ligne de tournée destinée au contrat mobile et au flux Expédition.
+/// </summary>
 public record TourneeLigneRecord
 {
     public string NumClient { get; init; } = string.Empty;
@@ -84,6 +102,14 @@ public record TourneeLigneRecord
     public string? MotifFermeture { get; init; }
 }
 
+/// <summary>
+/// Repository SQL de lecture des données de tournée et d'écriture des diagnostics de chargement mobile.
+/// </summary>
+/// <remarks>
+/// Les données de référence viennent principalement des vues ABSSolute. Les informations propres
+/// au projet MobileSLI, comme les articles saisissables, les commentaires exceptionnels,
+/// les préremplissages Expédition et les logs de chargement, sont lues ou écrites dans les tables Mobile_*.
+/// </remarks>
 public class TourneesRepository
 {
     private readonly SqlConnectionFactory _connectionFactory;
@@ -93,6 +119,9 @@ public class TourneesRepository
         _connectionFactory = connectionFactory;
     }
 
+    /// <summary>
+    /// Recherche un livreur dans la vue ABSSolute des chauffeurs.
+    /// </summary>
     public async Task<LivreurRecord?> GetLivreurAsync(string codeLivreur)
     {
         using var connection = _connectionFactory.CreateAbssoluteConnection();
@@ -148,6 +177,12 @@ public class TourneesRepository
             });
     }
 
+    /// <summary>
+    /// Lit les articles saisissables actifs depuis les tables Mobile_*.
+    /// </summary>
+    /// <remarks>
+    /// Ces articles alimentent les quantités de saisie mobile et les quantités prévues Expédition.
+    /// </remarks>
     public async Task<IReadOnlyList<ArticleSaisissableRecord>> GetArticlesSaisissablesAsync()
     {
         using var connection = _connectionFactory.CreateMobileConnection();
@@ -169,6 +204,13 @@ public class TourneesRepository
         return articles.ToList();
     }
 
+    /// <summary>
+    /// Récupère les commentaires exceptionnels actifs applicables à une date et une tournée.
+    /// </summary>
+    /// <remarks>
+    /// Un commentaire peut être rattaché à une tournée précise, ou être global à la date
+    /// lorsque le code tournée est absent. Le choix final de priorité est fait dans les mappers.
+    /// </remarks>
     public async Task<IReadOnlyList<CommentaireExceptionnelRecord>> GetCommentairesExceptionnelsAsync(
         DateOnly dateTournee,
         string codeTournee)
@@ -203,12 +245,17 @@ public class TourneesRepository
         return commentaires.ToList();
     }
 
-    // Important : ne pas filtrer sur Mobile_ExpeditionLotVerrouillage.StatutLot ici.
-    // Mobile_ExpeditionLotVerrouillage est un journal technique des lots.
-    // Une tournée est valide pour le mobile si sa préparation est VERROUILLEE,
-    // EstVerrouille = 1, et si ses lignes sont Actif = 1.
-    // Un ancien lot peut être en REMPLACE sans invalider les tournées déjà présentes
-    // dans Mobile_ExpeditionPreparation.
+    /// <summary>
+    /// Récupère les quantités prévues verrouillées par l'Expédition pour préremplir le mobile.
+    /// </summary>
+    /// <remarks>
+    /// Important : ne pas filtrer sur Mobile_ExpeditionLotVerrouillage.StatutLot ici.
+    /// Mobile_ExpeditionLotVerrouillage est un journal technique des lots.
+    /// Une tournée est valide pour le mobile si sa préparation est VERROUILLEE,
+    /// EstVerrouille = 1, et si ses lignes sont Actif = 1.
+    /// Un ancien lot peut être en REMPLACE sans invalider les tournées déjà présentes
+    /// dans Mobile_ExpeditionPreparation.
+    /// </remarks>
     public async Task<IReadOnlyList<PreRemplissageQuantiteRecord>> GetPreRemplissagesAsync(
         DateOnly dateTournee,
         string codeTournee)
@@ -246,6 +293,13 @@ public class TourneesRepository
         return preRemplissages.ToList();
     }
 
+    /// <summary>
+    /// Enregistre le chargement d'une tournée par le mobile dans les tables de diagnostic.
+    /// </summary>
+    /// <remarks>
+    /// Cette écriture ne crée pas une synchronisation finale : elle trace seulement le fait
+    /// qu'une tournée a été transmise au mobile, avec le livreur et le nombre de points envoyés.
+    /// </remarks>
     public async Task SaveChargementTourneeAsync(
         DateOnly dateTournee,
         string schemaVersion,
@@ -269,6 +323,7 @@ public class TourneesRepository
 
         try
         {
+            // Référentiel Mobile_* : le livreur est créé ou réactivé avant l'écriture du diagnostic.
             await connection.ExecuteAsync(
                 """
                 MERGE INTO dbo.Mobile_Livreur AS target
@@ -416,6 +471,13 @@ public class TourneesRepository
         }
     }
 
+    /// <summary>
+    /// Détermine le nom réel de la colonne client dans la vue v_fermeture.
+    /// </summary>
+    /// <remarks>
+    /// Cas particulier SQL : certains environnements exposent CUSTOMERNUMBER, d'autres
+    /// CUSTOMERNUBLER. La détection évite de figer l'API sur une seule variante de schéma.
+    /// </remarks>
     private async Task<string> GetFermetureCustomerColumnAsync(IDbConnection connection)
     {
         const string sql = """
@@ -432,6 +494,14 @@ public class TourneesRepository
             : "CUSTOMERNUBLER";
     }
 
+    /// <summary>
+    /// Charge les lignes détaillées d'une tournée depuis les vues ABSSolute.
+    /// </summary>
+    /// <remarks>
+    /// La requête dédoublonne les lignes de tournée et les points de livraison avant mapping.
+    /// Elle rattache aussi les fermetures client du jour afin que le mobile sache si un client
+    /// est fermé au chargement.
+    /// </remarks>
     public async Task<IEnumerable<TourneeLigneRecord>> GetTourneeLinesAsync(
         DateOnly dateTournee,
         string codeLivreur,
@@ -556,6 +626,9 @@ public class TourneesRepository
             });
     }
 
+    /// <summary>
+    /// Convertit une date .NET en numéro de jour utilisé par les vues de tournée ABSSolute.
+    /// </summary>
     public static int GetJourTournee(DateOnly dateTournee)
     {
         return dateTournee.DayOfWeek switch
