@@ -5,14 +5,22 @@ namespace API_ASP.NET_Core.Mappers;
 
 /// <summary>
 /// Mapper dédié au module Expédition.
-/// Convertit les DTO publics en modèles internes utilisés par les services et repositories.
 /// </summary>
+/// <remarks>
+/// Il convertit le DTO public reçu depuis ServeWeb en commande interne utilisée par
+/// le service de verrouillage et le repository SQL. Le mapper ne valide pas le payload :
+/// il suppose que <see cref="Validators.ExpeditionVerrouillageValidator"/> a déjà contrôlé
+/// le contrat JSON Expédition.
+/// </remarks>
 public sealed class ExpeditionMapper
 {
     /// <summary>
-    /// Convertit le DTO public de verrouillage Expédition en commande interne.
-    /// La validation du payload doit avoir été effectuée avant l'appel à cette méthode.
+    /// Convertit le lot public de verrouillage Expédition en commande interne.
     /// </summary>
+    /// <remarks>
+    /// La date texte est conservée pour les réponses API, tandis que DateOnly sert aux
+    /// comparaisons métier et aux écritures SQL.
+    /// </remarks>
     public ExpeditionVerrouillageLotCommand ToVerrouillageCommand(ExpeditionVerrouillageLotRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -32,6 +40,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit une tournée Expédition du payload public vers le modèle interne de verrouillage.
+    /// </summary>
     private static ExpeditionVerrouillageTourneeCommand ToVerrouillageTourneeCommand(
         ExpeditionVerrouillageTourneeRequest tournee)
     {
@@ -47,6 +58,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit une ligne Expédition avec ses informations client, point de livraison et quantités prévues.
+    /// </summary>
     private static ExpeditionVerrouillageLigneCommand ToVerrouillageLigneCommand(
         ExpeditionVerrouillageLigneRequest ligne)
     {
@@ -64,6 +78,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit les informations client sans inventer de valeur métier absente.
+    /// </summary>
     private static ExpeditionVerrouillageClientCommand ToVerrouillageClientCommand(ExpeditionClientDto? client)
     {
         if (client is null)
@@ -79,6 +96,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit le point de livraison associé à une ligne Expédition.
+    /// </summary>
     private static ExpeditionVerrouillagePointLivraisonCommand ToVerrouillagePointLivraisonCommand(
         ExpeditionPointLivraisonDto? pointLivraison)
     {
@@ -99,6 +119,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit les métadonnées de dernière modification quand ServeWeb les fournit.
+    /// </summary>
     private static ExpeditionVerrouillageDerniereModificationCommand? ToVerrouillageDerniereModificationCommand(
         ExpeditionDerniereModificationDto? derniereModification)
     {
@@ -114,6 +137,9 @@ public sealed class ExpeditionMapper
         };
     }
 
+    /// <summary>
+    /// Convertit une quantité prévue Expédition vers la commande interne de verrouillage.
+    /// </summary>
     private static ExpeditionVerrouillageQuantiteCommand ToVerrouillageQuantiteCommand(
         ExpeditionQuantitePrevueRequest quantite)
     {
