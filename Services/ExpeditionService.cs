@@ -5,11 +5,20 @@ using API_ASP.NET_Core.Repositories;
 
 namespace API_ASP.NET_Core.Services;
 
+/// <summary>
+/// Service de lecture du flux Expédition à préparer.
+/// </summary>
+/// <remarks>
+/// Ce service construit le contrat JSON du GET global Expédition. Il calcule la date
+/// préparable via <see cref="DateMetierService"/>, lit les lignes de tournée, rattache
+/// les quantités prévues déjà préparées et expose les règles nécessaires à ServeWeb.
+/// </remarks>
 public sealed class ExpeditionService
 {
     private const string SchemaVersionExpedition = "1.2";
     private const string FuseauHoraireMetier = "Europe/Paris";
 
+    // Articles autorisés dans la préparation Expédition. ROLLS_VIDES est volontairement conservé.
     private static readonly HashSet<string> ArticlesAutorises = new(StringComparer.OrdinalIgnoreCase)
     {
         "ROLLS",
@@ -33,11 +42,13 @@ public sealed class ExpeditionService
     }
 
     /// <summary>
-    /// GET global Expédition.
-    /// La date est calculée côté API avec la date métier Europe/Paris.
-    /// Règle métier : l'Expédition prépare le prochain jour ouvré métier.
-    /// Version actuelle : le samedi et le dimanche sont ignorés.
+    /// Charge toutes les préparations Expédition à préparer pour la date métier calculée par l'API.
     /// </summary>
+    /// <remarks>
+    /// Règle métier : l'Expédition prépare le prochain jour ouvré métier. Le GET est global :
+    /// ServeWeb ne choisit pas la date, la tournée ou le livreur. Les week-ends sont ignorés
+    /// dans la version actuelle de la règle de date.
+    /// </remarks>
     public async Task<ExpeditionPreparationResponseDto> GetPreparationsAPreparerAsync(
         CancellationToken cancellationToken = default)
     {
@@ -172,6 +183,13 @@ public sealed class ExpeditionService
         return response;
     }
 
+    /// <summary>
+    /// Retourne les articles affichés dans l'interface Expédition pour la saisie des quantités prévues.
+    /// </summary>
+    /// <remarks>
+    /// Le référentiel SQL est prioritaire. Si aucun article actif n'est disponible, le service
+    /// utilise la liste applicative de secours afin que le GET Expédition reste exploitable.
+    /// </remarks>
     private async Task<List<ArticleSaisissableRecord>> GetArticlesPreparablesAsync()
     {
         var articles = (await _tourneesRepository.GetArticlesSaisissablesAsync())
@@ -196,6 +214,13 @@ public sealed class ExpeditionService
             .ToList();
     }
 
+    /// <summary>
+    /// Construit les règles déclaratives renvoyées à ServeWeb avec le contrat Expédition.
+    /// </summary>
+    /// <remarks>
+    /// Ces informations documentent côté client les contraintes principales : heure de
+    /// verrouillage, fuseau métier, articles autorisés et acceptation des quantités nulles.
+    /// </remarks>
     private static ExpeditionReglesDto BuildRegles()
     {
         return new ExpeditionReglesDto
@@ -210,6 +235,13 @@ public sealed class ExpeditionService
         };
     }
 
+    /// <summary>
+    /// Retrouve une quantité prévue déjà sauvegardée pour préremplir la préparation Expédition.
+    /// </summary>
+    /// <remarks>
+    /// La recherche privilégie idLigneSource. Le repli NumClient + CodePDL conserve la compatibilité
+    /// avec les données qui ne portent pas encore l'identifiant stable.
+    /// </remarks>
     private static PreRemplissageQuantiteRecord? FindPreRemplissage(
         string idLigneSource,
         TourneeLigneRecord ligne,
@@ -231,6 +263,13 @@ public sealed class ExpeditionService
             && string.Equals(preRemplissage.CodeArticle, codeArticle, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Retrouve le commentaire exceptionnel à afficher dans la préparation Expédition.
+    /// </summary>
+    /// <remarks>
+    /// La priorité suit le même principe que le mobile : commentaire par idLigneSource,
+    /// puis commentaire exact NumClient + CodePDL, puis commentaire global client.
+    /// </remarks>
     private static string? FindCommentaireExceptionnel(
         string idLigneSource,
         TourneeLigneRecord ligne,
@@ -261,11 +300,17 @@ public sealed class ExpeditionService
         return NormalizeNullable(commentaireClient?.Commentaire);
     }
 
+    /// <summary>
+    /// Indique si un article est autorisé dans le flux de préparation Expédition.
+    /// </summary>
     private static bool IsArticleAutoriseExpedition(string? codeArticle)
     {
         return ArticlesAutorises.Contains(NormalizeArticleCode(codeArticle));
     }
 
+    /// <summary>
+    /// Normalise un code article avant comparaison ou exposition dans le contrat Expédition.
+    /// </summary>
     private static string NormalizeArticleCode(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -273,6 +318,9 @@ public sealed class ExpeditionService
             : value.Trim().ToUpperInvariant();
     }
 
+    /// <summary>
+    /// Normalise une partie d'identifiant stable en conservant une valeur de remplacement explicite.
+    /// </summary>
     private static string NormalizeIdPart(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -280,6 +328,9 @@ public sealed class ExpeditionService
             : value.Trim();
     }
 
+    /// <summary>
+    /// Normalise une chaîne optionnelle pour éviter d'exposer des valeurs vides dans le contrat JSON.
+    /// </summary>
     private static string? NormalizeNullable(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
