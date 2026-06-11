@@ -61,14 +61,14 @@ public class TourneesController : ControllerBase
     public async Task<ActionResult<TourneesDisponiblesResponseDto>> GetTourneesDisponibles(
         [FromQuery] string? codeLivreur)
     {
-        // Valider : aucun paramètre de date n'est accepté
+        // Règle de contrat : la tournée du jour est imposée par l'API, jamais par une date envoyée en query string.
         var parametreDateInterdit = _tourneeValidator.ValidateNoDatesInQuery(Request.Query);
         if (parametreDateInterdit is not null)
         {
             return BadRequest(_tourneeValidator.BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
-        // Valider : codeLivreur obligatoire
+        // Règle de contrat : le code livreur est l'identifiant obligatoire pour filtrer les tournées accessibles.
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
             return BadRequest(new ApiValidationErrorResponse
@@ -81,7 +81,7 @@ public class TourneesController : ControllerBase
             });
         }
 
-        // Normalisation du code pour l'affichage du message d'erreur éventuel
+        // Le code normalisé sert uniquement au message de diagnostic si aucun livreur n'est trouvé.
         var codeLivreurNormalise = codeLivreur.Trim();
 
         var response = await _tourneesService.GetTourneesDisponiblesAsync(codeLivreur);
@@ -138,14 +138,14 @@ public class TourneesController : ControllerBase
         [FromQuery] string? codeTournee = null,
         [FromQuery] string? nomLivreur = null)
     {
-        // Valider : aucun paramètre de date n'est accepté
+        // Règle de contrat : le mobile ne choisit pas la date métier, même pour charger une tournée précise.
         var parametreDateInterdit = _tourneeValidator.ValidateNoDatesInQuery(Request.Query);
         if (parametreDateInterdit is not null)
         {
             return BadRequest(_tourneeValidator.BuildDateQueryForbiddenResponse(parametreDateInterdit));
         }
 
-        // Valider : codeLivreur obligatoire
+        // Règle de contrat : le code livreur rattache le chargement au livreur connecté ou sélectionné.
         if (string.IsNullOrWhiteSpace(codeLivreur))
         {
             return BadRequest(new ApiValidationErrorResponse
@@ -158,7 +158,7 @@ public class TourneesController : ControllerBase
             });
         }
 
-        // Valider : codeTournee obligatoire
+        // Règle de parcours mobile : le détail ne se charge qu'après sélection explicite d'une tournée.
         if (string.IsNullOrWhiteSpace(codeTournee))
         {
             return BadRequest(new ApiValidationErrorResponse
