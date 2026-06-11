@@ -1,9 +1,12 @@
 namespace API_ASP.NET_Core.Middleware;
 
 /// <summary>
-/// Middleware pour gérer un identifiant de corrélation par requête.
-/// Permet de tracer les requêtes à travers les logs et les erreurs.
+/// Middleware chargé de propager un identifiant de corrélation par requête.
 /// </summary>
+/// <remarks>
+/// L'identifiant permet de relier une requête mobile ou ServeWeb aux logs API.
+/// Si le client fournit X-Correlation-Id, il est conservé ; sinon l'API génère un GUID.
+/// </remarks>
 public class CorrelationIdMiddleware
 {
     private const string CorrelationIdHeaderName = "X-Correlation-Id";
@@ -18,15 +21,15 @@ public class CorrelationIdMiddleware
         _logger = logger;
     }
 
+    /// <summary>
+    /// Ajoute le correlationId au contexte HTTP, à la réponse et aux logs.
+    /// </summary>
     public async Task InvokeAsync(HttpContext context)
     {
-        // Récupérer le CorrelationId du header, ou générer un nouveau GUID
         var correlationId = GetOrGenerateCorrelationId(context);
 
-        // Stocker dans HttpContext.Items pour l'utiliser dans les middlewares suivants
         context.Items[CorrelationIdItemsKey] = correlationId;
 
-        // Ajouter le header à la réponse
         context.Response.Headers[CorrelationIdHeaderName] = correlationId;
 
         _logger.LogInformation("Requête reçue : {CorrelationId} {Method} {Path}",
@@ -38,6 +41,9 @@ public class CorrelationIdMiddleware
             correlationId, context.Response.StatusCode);
     }
 
+    /// <summary>
+    /// Récupère l'identifiant fourni par le client ou génère un GUID.
+    /// </summary>
     private string GetOrGenerateCorrelationId(HttpContext context)
     {
         if (context.Request.Headers.TryGetValue("X-Correlation-Id", out var headerValue))
@@ -54,7 +60,7 @@ public class CorrelationIdMiddleware
 }
 
 /// <summary>
-/// Extension pour ajouter facilement le middleware de CorrelationId au pipeline.
+/// Extension pour ajouter le middleware de correlationId au pipeline ASP.NET Core.
 /// </summary>
 public static class CorrelationIdMiddlewareExtensions
 {
@@ -64,8 +70,7 @@ public static class CorrelationIdMiddlewareExtensions
     }
 
     /// <summary>
-    /// Récupère le CorrelationId depuis HttpContext.Items.
-    /// À utiliser dans les contrôleurs ou services.
+    /// Récupère le correlationId depuis HttpContext.Items.
     /// </summary>
     public static string? GetCorrelationId(this HttpContext context)
     {
