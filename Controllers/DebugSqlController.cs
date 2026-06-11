@@ -6,15 +6,16 @@ using API_ASP.NET_Core.Filters;
 namespace API_ASP.NET_Core.Controllers;
 
 /// <summary>
-/// Contrôleur de débogage SQL - **CONFIGURATION CONTRÔLÉE**
-/// 
-/// ⚠️ SÉCURITÉ: Ce contrôleur expose les schémas SQL et est dangereux en production.
-/// Il est désactivé si la configuration "DebugSql:Enabled" = false.
-/// Par défaut en développement, la valeur est true.
+/// Contrôleur de diagnostic SQL réservé aux vérifications techniques.
 /// </summary>
+/// <remarks>
+/// Attention : ces routes exposent des informations de schéma ou des extraits de vues SQL.
+/// Elles ne portent aucune fonctionnalité métier mobile ou Expédition. Leur accès dépend
+/// du filtre <see cref="DebugSqlOnlyAttribute"/> et de la configuration DebugSql:Enabled.
+/// </remarks>
 [ApiController]
 [Route("api/debug/sql")]
-[DebugSqlOnly] // Protéger toutes les actions du contrôleur
+[DebugSqlOnly]
 public class DebugSqlController : ControllerBase
 {
     private readonly SqlConnectionFactory _connectionFactory;
@@ -24,6 +25,9 @@ public class DebugSqlController : ControllerBase
         _connectionFactory = connectionFactory;
     }
 
+    /// <summary>
+    /// Liste les tables Mobile_* visibles dans la base mobile.
+    /// </summary>
     [HttpGet("tables-mobile")]
     public async Task<IActionResult> GetTablesMobile()
     {
@@ -39,6 +43,9 @@ public class DebugSqlController : ControllerBase
         return Ok(tables);
     }
 
+    /// <summary>
+    /// Retourne la liste déclarative des vues ABSSolute utilisées ou vérifiées par l'API.
+    /// </summary>
     [HttpGet("vues-abssolute")]
     public IActionResult GetVuesAbssoluteConnues()
     {
@@ -58,6 +65,9 @@ public class DebugSqlController : ControllerBase
         return Ok(vues);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue des chauffeurs pour diagnostic de mapping livreur.
+    /// </summary>
     [HttpGet("chauffeurs")]
     public async Task<IActionResult> GetChauffeurs()
     {
@@ -71,6 +81,9 @@ public class DebugSqlController : ControllerBase
         return Ok(chauffeurs);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue des tournées pour diagnostic de chargement mobile et Expédition.
+    /// </summary>
     [HttpGet("tournees")]
     public async Task<IActionResult> GetTournees()
     {
@@ -84,6 +97,9 @@ public class DebugSqlController : ControllerBase
         return Ok(tournees);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue clients pour diagnostic des informations client.
+    /// </summary>
     [HttpGet("clients")]
     public async Task<IActionResult> GetClients()
     {
@@ -97,6 +113,9 @@ public class DebugSqlController : ControllerBase
         return Ok(clients);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut des points de livraison par jour pour diagnostic des adresses et PDL.
+    /// </summary>
     [HttpGet("pdl-jour")]
     public async Task<IActionResult> GetPdlJour()
     {
@@ -110,6 +129,9 @@ public class DebugSqlController : ControllerBase
         return Ok(pdlJour);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut des fermetures client pour diagnostic du statut client fermé.
+    /// </summary>
     [HttpGet("fermetures")]
     public async Task<IActionResult> GetFermetures()
     {
@@ -123,6 +145,9 @@ public class DebugSqlController : ControllerBase
         return Ok(fermetures);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue jour client pour diagnostic des règles de tournée.
+    /// </summary>
     [HttpGet("jour-client")]
     public async Task<IActionResult> GetJourClient()
     {
@@ -136,6 +161,9 @@ public class DebugSqlController : ControllerBase
         return Ok(joursClient);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue route number pour diagnostic des codes de tournée.
+    /// </summary>
     [HttpGet("route-number")]
     public async Task<IActionResult> GetRouteNumber()
     {
@@ -149,6 +177,9 @@ public class DebugSqlController : ControllerBase
         return Ok(routes);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue articles pour diagnostic des produits saisissables.
+    /// </summary>
     [HttpGet("articles")]
     public async Task<IActionResult> GetArticles()
     {
@@ -162,6 +193,9 @@ public class DebugSqlController : ControllerBase
         return Ok(articles);
     }
 
+    /// <summary>
+    /// Affiche un extrait brut de la vue produits ABSSolute pour comparaison avec les articles.
+    /// </summary>
     [HttpGet("produits-abssolute")]
     public async Task<IActionResult> GetProduitsAbssolute()
     {
