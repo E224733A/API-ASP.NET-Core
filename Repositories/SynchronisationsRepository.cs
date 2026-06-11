@@ -5,6 +5,15 @@ using System.Data;
 
 namespace API_ASP.NET_Core.Repositories;
 
+/// <summary>
+/// Repository SQL responsable de l'enregistrement final des tournées envoyées par le mobile.
+/// </summary>
+/// <remarks>
+/// Ce repository écrit dans les tables Mobile_* après validation du contrat JSON par le service.
+/// Il centralise la persistance transactionnelle de la tournée, du livreur, du trajet camion,
+/// des lignes, des quantités et des logs. Les contrôles de doublon s'appuient sur
+/// IdSynchronisation et sur le couple DateTournee + CodeTournee.
+/// </remarks>
 public sealed class SynchronisationsRepository
 {
     private const string CodeArticleRollsVides = "ROLLS_VIDES";
@@ -20,6 +29,13 @@ public sealed class SynchronisationsRepository
             ?? throw new InvalidOperationException("La chaîne de connexion MobileConnection est introuvable.");
     }
 
+/// <summary>
+/// Recherche une synchronisation déjà reçue avec le même IdSynchronisation.
+/// </summary>
+/// <remarks>
+/// Ce contrôle protège l'idempotence technique : si le mobile renvoie le même identifiant
+/// après un retry réseau, l'API peut reconnaître l'envoi déjà enregistré.
+/// </remarks>
     public async Task<SynchronisationDejaRecueDto?> GetSynchronisationDejaRecueAsync(
         Guid idSynchronisation,
         CancellationToken cancellationToken = default)
@@ -69,6 +85,13 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
         };
     }
 
+/// <summary>
+/// Recherche une tournée déjà envoyée pour la même date métier et le même code tournée.
+/// </summary>
+/// <remarks>
+/// Ce contrôle protège le doublon métier : deux IdSynchronisation différents ne doivent pas
+/// permettre d'enregistrer deux fois la même tournée finalisée.
+/// </remarks>
     public async Task<TourneeDejaEnvoyeeDto?> GetTourneeDejaEnvoyeeAsync(
         DateTime dateTournee,
         string codeTournee,
@@ -120,6 +143,15 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
         };
     }
 
+/// <summary>
+/// Enregistre transactionnellement le bilan final d'une tournée mobile.
+/// </summary>
+/// <remarks>
+/// À ce stade, le payload a déjà été validé par le service et le validator.
+/// La transaction garantit que l'en-tête de tournée, le livreur, le trajet camion,
+/// les lignes, les quantités et le log restent cohérents. En cas d'erreur,
+/// aucune partie de la synchronisation ne doit rester enregistrée seule.
+/// </remarks>
     public async Task<SynchronisationEnregistrementResult> EnregistrerSynchronisationAsync(
         SynchronisationTourneeRequest request,
         string? adresseIp,
@@ -141,10 +173,12 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
         await using var connection = new SqlConnection(_connectionString);
         await connection.OpenAsync(cancellationToken);
 
+        // Transaction critique : une tournée mobile ne doit jamais être enregistrée partiellement.
         await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
 
         try
         {
+            // Référentiel mobile : le livreur reçu est synchronisé dans Mobile_Livreur avant la tournée.
             var idLivreur = await GetOrCreateLivreurAsync(
                 connection,
                 (SqlTransaction)transaction,
@@ -164,6 +198,7 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
                 adresseIp,
                 cancellationToken);
 
+            // Contrat 1.3 : le trajet camion est obligatoire dans l'envoi final mobile.
             await InsertTourneeCamionAsync(
                 connection,
                 (SqlTransaction)transaction,
@@ -188,6 +223,8 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
 
                 var saisie = ligne.Saisie
                     ?? throw new InvalidOperationException("La saisie d'une ligne a été validée mais reste null.");
+
+                // Normalisation avant persistance : les codes articles doivent être stables en base.
                 var quantitesLigne = NormalizeQuantites(
                     saisie.Quantites
                     ?? throw new InvalidOperationException("Les quantités d'une ligne ont été validées mais restent null."));
@@ -245,6 +282,14 @@ ORDER BY t.DateReceptionApi ASC, t.IdTourneeMobile ASC;
         }
     }
 
+/// <summary>
+/// Trace une tentative de double envoi refusée par les contrôles métier.
+/// </summary>
+/// <remarks>
+/// Aucun nouvel enregistrement de tournée n'est créé ici. Le log sert uniquement à expliquer
+/// pourquoi le POST mobile a été rejeté alors qu'une tournée existe déjà pour la même date
+/// et le même code tournée.
+/// </remarks>
     public async Task EcrireLogDoubleEnvoiAsync(
         SynchronisationTourneeRequest request,
         TourneeDejaEnvoyeeDto tourneeExistante,
@@ -311,6 +356,13 @@ VALUES
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+/// <summary>
+/// Crée ou met à jour le livreur mobile utilisé par la synchronisation.
+/// </summary>
+/// <remarks>
+/// Le verrou SQL évite de créer deux lignes Mobile_Livreur pour le même code livreur
+/// si deux synchronisations arrivent en même temps.
+/// </remarks>
     private async Task<int> GetOrCreateLivreurAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -356,6 +408,13 @@ SELECT @IdLivreur;
         return Convert.ToInt32(result);
     }
 
+/// <summary>
+/// Retrouve l'identifiant SQL du livreur si le code est exploitable.
+/// </summary>
+/// <remarks>
+/// Cette méthode est utilisée pour enrichir les logs sans bloquer l'écriture du diagnostic
+/// lorsqu'aucun livreur ne peut être rattaché proprement.
+/// </remarks>
     private async Task<int?> GetLivreurIdOrNullAsync(
         SqlConnection connection,
         string? codeLivreur,
@@ -379,6 +438,14 @@ WHERE CodeLivreur = @CodeLivreur;
         return result is null || result == DBNull.Value ? null : Convert.ToInt32(result);
     }
 
+/// <summary>
+/// Insère l'en-tête de tournée mobile finalisée.
+/// </summary>
+/// <remarks>
+/// Cette ligne porte l'identité de la synchronisation, la date métier, le livreur,
+/// le statut ENVOYEE et les informations appareil. Les lignes et quantités sont ensuite
+/// rattachées à l'identifiant généré.
+/// </remarks>
     private async Task<long> InsertTourneeAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -454,6 +521,13 @@ VALUES
         return Convert.ToInt64(result);
     }
 
+/// <summary>
+/// Enregistre le camion et les informations de trajet déclarés par le mobile.
+/// </summary>
+/// <remarks>
+/// Le trajet camion fait partie du contrat d'envoi final : identifiant camion,
+/// kilométrages et horaires mobiles doivent avoir été validés avant l'appel repository.
+/// </remarks>
     private async Task InsertTourneeCamionAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -519,6 +593,14 @@ VALUES
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+/// <summary>
+/// Insère une ligne de tournée mobile avec les informations client, point de livraison et saisie livreur.
+/// </summary>
+/// <remarks>
+/// Cette méthode conserve à la fois les données chargées le matin et le résultat saisi par le livreur.
+/// Les totaux de quantités sont recalculés depuis le détail des articles pour garder une synthèse
+/// exploitable directement dans Mobile_TourneeLigne.
+/// </remarks>
     private async Task<long> InsertLigneAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -527,6 +609,7 @@ VALUES
         long idTourneeMobile,
         CancellationToken cancellationToken)
     {
+        // Synthèse SQL : les totaux par ligne sont recalculés depuis les quantités détaillées du payload.
         var quantites = NormalizeQuantites(ligne.Saisie?.Quantites ?? new List<SynchronisationQuantiteRequest>());
         var totalLivre = quantites.Sum(q => q.QuantiteLivree);
         var totalRecupere = quantites.Sum(q => q.QuantiteRecuperee);
@@ -682,6 +765,7 @@ VALUES
         command.Parameters.Add("@NbRecuperes", SqlDbType.Int).Value = totalRecupere;
 
         command.Parameters.Add("@PrecisionLivreur", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.Saisie?.PrecisionLivreur);
+        // Comportement existant : le statut FAIT reste la valeur de repli si la saisie ne fournit pas de statut.
         command.Parameters.Add("@StatutPassage", SqlDbType.NVarChar, 30).Value = ligne.Saisie?.StatutPassage?.Trim() ?? "FAIT";
         command.Parameters.Add("@CommentaireLivreur", SqlDbType.NVarChar, 1000).Value = ToDbValue(ligne.Saisie?.CommentaireLivreur);
         command.Parameters.Add("@HeureValidation", SqlDbType.DateTimeOffset).Value = ToDbValue(ParseDateTimeOffsetOrNull(ligne.Saisie?.HeureValidation));
@@ -691,6 +775,14 @@ VALUES
         return Convert.ToInt64(result);
     }
 
+/// <summary>
+/// Garantit l'existence de l'article saisissable avant d'insérer une quantité.
+/// </summary>
+/// <remarks>
+/// Le mobile peut envoyer des articles du contrat de saisie. Le repository maintient
+/// le référentiel Mobile_ArticleSaisissable actif afin que les quantités restent rattachées
+/// à un code article connu.
+/// </remarks>
     private async Task EnsureArticleAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -736,6 +828,13 @@ END
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+/// <summary>
+/// Insère le détail des quantités livrées, prévues et récupérées pour une ligne de tournée.
+/// </summary>
+/// <remarks>
+/// Les quantités détaillées sont la source de vérité pour les articles saisis.
+/// Elles permettent de distinguer la livraison, la reprise et la quantité prévue issue de l'Expédition.
+/// </remarks>
     private async Task InsertQuantiteAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -777,6 +876,13 @@ VALUES
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+/// <summary>
+/// Écrit un événement de diagnostic lié à une synchronisation mobile.
+/// </summary>
+/// <remarks>
+/// Les logs conservent le contexte utile à l'exploitation : tournée, livreur,
+/// identifiant de synchronisation, appareil, version applicative et adresse IP.
+/// </remarks>
     private async Task InsertLogAsync(
         SqlConnection connection,
         SqlTransaction transaction,
@@ -836,12 +942,20 @@ VALUES
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+// Normalise la liste des quantités avant calcul des totaux et insertion SQL.
     private static List<SynchronisationQuantiteRequest> NormalizeQuantites(
         IEnumerable<SynchronisationQuantiteRequest> quantites)
     {
         return quantites.Select(NormalizeQuantite).ToList();
     }
 
+/// <summary>
+/// Normalise une quantité article selon les conventions persistées en base.
+/// </summary>
+/// <remarks>
+/// Les codes articles sont stockés en majuscules. Le libellé de ROLLS_VIDES est forcé
+/// pour garder un vocabulaire métier stable entre Expédition, mobile et base SQL.
+/// </remarks>
     private static SynchronisationQuantiteRequest NormalizeQuantite(SynchronisationQuantiteRequest quantite)
     {
         var codeArticle = string.IsNullOrWhiteSpace(quantite.CodeArticle)
@@ -858,6 +972,13 @@ VALUES
         };
     }
 
+/// <summary>
+/// Détermine le libellé article à persister après normalisation du code article.
+/// </summary>
+/// <remarks>
+/// Règle métier : ROLLS_VIDES doit toujours apparaître comme "Chariots vides",
+/// même si le mobile envoie un libellé absent ou différent.
+/// </remarks>
     private static string NormalizeLibelleArticle(string codeArticle, string? libelle)
     {
         if (IsRollsVides(codeArticle))
@@ -870,11 +991,13 @@ VALUES
             : libelle.Trim();
     }
 
+// Indique si le code article correspond au cas métier ROLLS_VIDES.
     private static bool IsRollsVides(string? codeArticle)
     {
         return string.Equals(codeArticle?.Trim(), CodeArticleRollsVides, StringComparison.OrdinalIgnoreCase);
     }
 
+// Convertit l'identifiant de synchronisation déjà validé en Guid exploitable SQL
     private static Guid ParseGuid(object? value)
     {
         if (SynchronisationTourneeValidator.TryParseGuid(value, out var guid))
@@ -885,6 +1008,7 @@ VALUES
         throw new InvalidOperationException("L'identifiant de synchronisation est invalide.");
     }
 
+// Convertit une date mobile optionnelle en DateTimeOffset sans déclencher d'écriture invalide.
     private static DateTimeOffset? ParseDateTimeOffsetOrNull(object? value)
     {
         return SynchronisationTourneeValidator.TryParseDateTimeOffsetNullable(value, out var dateTimeOffset)
@@ -892,6 +1016,7 @@ VALUES
             : null;
     }
 
+// Calcule le total livré d'un article précis pour alimenter les colonnes de synthèse de ligne.
     private static int GetQuantiteLivreeArticle(
         IEnumerable<SynchronisationQuantiteRequest> quantites,
         string codeArticle)
@@ -901,6 +1026,13 @@ VALUES
             .Sum(q => q.QuantiteLivree);
     }
 
+/// <summary>
+/// Convertit les valeurs optionnelles au format attendu par SQL Server.
+/// </summary>
+/// <remarks>
+/// Les chaînes nulles, vides ou composées d'espaces deviennent DBNull.Value afin de stocker
+/// une absence réelle de valeur plutôt qu'un texte vide.
+/// </remarks>
     private static object ToDbValue(object? value)
     {
         if (value is null)
@@ -916,12 +1048,14 @@ VALUES
         return value;
     }
 
+// Lit une chaîne SQL nullable depuis un SqlDataReader.
     private static string? ReadNullableString(SqlDataReader reader, string columnName)
     {
         var ordinal = reader.GetOrdinal(columnName);
         return reader.IsDBNull(ordinal) ? null : reader.GetString(ordinal);
     }
 
+// Lit une date SQL nullable depuis un SqlDataReader pour les diagnostics de synchronisation.
     private static DateTimeOffset? ReadNullableDateTimeOffset(SqlDataReader reader, string columnName)
     {
         var ordinal = reader.GetOrdinal(columnName);
@@ -929,6 +1063,7 @@ VALUES
     }
 }
 
+// Projection SQL utilisée lorsqu'une tournée a déjà été envoyée pour la même date et le même code tournée.
 public sealed class TourneeDejaEnvoyeeDto
 {
     public long IdTourneeMobile { get; set; }
@@ -948,6 +1083,7 @@ public sealed class TourneeDejaEnvoyeeDto
     public DateTimeOffset? DateReceptionApi { get; set; }
 }
 
+// Projection SQL utilisée lorsqu'un IdSynchronisation a déjà été reçu par l'API.
 public sealed class SynchronisationDejaRecueDto
 {
     public long IdTourneeMobile { get; set; }
@@ -969,6 +1105,7 @@ public sealed class SynchronisationDejaRecueDto
     public DateTimeOffset? DateReceptionApi { get; set; }
 }
 
+// Résultat minimal retourné après l'enregistrement transactionnel d'une synchronisation mobile.
 public sealed class SynchronisationEnregistrementResult
 {
     public long IdTourneeMobile { get; set; }
