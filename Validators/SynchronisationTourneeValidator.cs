@@ -3,6 +3,15 @@ using System.Globalization;
 
 namespace API_ASP.NET_Core.Validators;
 
+/// <summary>
+/// Validator du contrat JSON de synchronisation finale envoyé par le mobile.
+/// </summary>
+/// <remarks>
+/// Ce validator protège l'API avant toute écriture SQL : version de schéma, identifiant
+/// de synchronisation, date de tournée, livreur, trajet camion, lignes, statuts et quantités.
+/// La version 1.2 est volontairement refusée pour le POST final, car le contrat 1.3 impose
+/// désormais les informations de trajet camion.
+/// </remarks>
 public sealed class SynchronisationTourneeValidator
 {
     private const string SchemaVersionHistoriqueRefusee = "1.2";
@@ -15,6 +24,13 @@ public sealed class SynchronisationTourneeValidator
         "ANOMALIE"
     };
 
+    /// <summary>
+    /// Valide l'ensemble du payload mobile avant traitement métier et persistance.
+    /// </summary>
+    /// <remarks>
+    /// Les erreurs sont accumulées afin de renvoyer au mobile une liste complète des champs
+    /// incorrects plutôt qu'une seule erreur bloquante à la fois.
+    /// </remarks>
     public SynchronisationValidationResult Validate(SynchronisationTourneeRequest? request)
     {
         var errors = new List<SynchronisationValidationError>();
@@ -42,6 +58,7 @@ public sealed class SynchronisationTourneeValidator
 
         if (string.Equals(schemaVersion, SchemaVersionAvecTrajet, StringComparison.OrdinalIgnoreCase))
         {
+            // Contrat 1.3 : le trajet camion fait partie du POST final et devient obligatoire.
             ValidateTrajet(request.Trajet, errors);
         }
 
@@ -123,6 +140,7 @@ public sealed class SynchronisationTourneeValidator
                 errors.Add(new SynchronisationValidationError($"{prefix}.saisie.statutPassage", "Le statut de passage doit être FAIT, NON_FAIT ou ANOMALIE."));
             }
 
+            // Règle métier : un arrêt non réalisé ou en anomalie doit être expliqué par le livreur.
             if ((string.Equals(statut, "NON_FAIT", StringComparison.OrdinalIgnoreCase)
                     || string.Equals(statut, "ANOMALIE", StringComparison.OrdinalIgnoreCase))
                 && string.IsNullOrWhiteSpace(ligne.Saisie.CommentaireLivreur))
@@ -188,6 +206,13 @@ public sealed class SynchronisationTourneeValidator
         return new SynchronisationValidationResult(errors);
     }
 
+    /// <summary>
+    /// Valide le trajet camion obligatoire dans le contrat de synchronisation mobile 1.3.
+    /// </summary>
+    /// <remarks>
+    /// Les kilométrages et les dates mobiles sont contrôlés ici afin que le repository puisse
+    /// persister le trajet sans recalculer les règles de cohérence.
+    /// </remarks>
     private static void ValidateTrajet(
         SynchronisationTrajetRequest? trajet,
         ICollection<SynchronisationValidationError> errors)
@@ -257,6 +282,9 @@ public sealed class SynchronisationTourneeValidator
         }
     }
 
+    /// <summary>
+    /// Convertit une date de tournée déjà validée ou lève une erreur interne si elle reste invalide.
+    /// </summary>
     public static DateTime ParseDateTournee(object? value)
     {
         if (TryParseDateTournee(value, out var dateTournee))
@@ -267,6 +295,9 @@ public sealed class SynchronisationTourneeValidator
         throw new InvalidOperationException("La date de tournée est invalide.");
     }
 
+    /// <summary>
+    /// Tente de lire la date de tournée depuis les formats acceptés par le contrat JSON.
+    /// </summary>
     public static bool TryParseDateTournee(object? value, out DateTime dateTournee)
     {
         if (value is DateTime dateTime)
@@ -301,6 +332,9 @@ public sealed class SynchronisationTourneeValidator
         return false;
     }
 
+    /// <summary>
+    /// Tente de convertir une valeur JSON en GUID de synchronisation.
+    /// </summary>
     public static bool TryParseGuid(object? value, out Guid guid)
     {
         if (value is Guid existingGuid)
@@ -312,6 +346,13 @@ public sealed class SynchronisationTourneeValidator
         return Guid.TryParse(Convert.ToString(value), out guid);
     }
 
+    /// <summary>
+    /// Tente de convertir une date mobile optionnelle avec offset.
+    /// </summary>
+    /// <remarks>
+    /// Le retour false permet au validator de signaler précisément les champs de date absents
+    /// ou invalides sans déclencher d'exception pendant la validation du payload.
+    /// </remarks>
     public static bool TryParseDateTimeOffsetNullable(object? value, out DateTimeOffset? dateTimeOffset)
     {
         if (value is null)
@@ -365,6 +406,9 @@ public sealed class SynchronisationTourneeValidator
     }
 }
 
+/// <summary>
+/// Résultat de validation du payload de synchronisation mobile.
+/// </summary>
 public sealed class SynchronisationValidationResult
 {
     public SynchronisationValidationResult(IReadOnlyList<SynchronisationValidationError> errors)
@@ -377,6 +421,9 @@ public sealed class SynchronisationValidationResult
     public IReadOnlyList<SynchronisationValidationError> Errors { get; }
 }
 
+/// <summary>
+/// Erreur de validation associée à un champ précis du contrat JSON mobile.
+/// </summary>
 public sealed class SynchronisationValidationError
 {
     public SynchronisationValidationError(string field, string message)
