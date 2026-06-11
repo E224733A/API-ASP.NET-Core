@@ -4,13 +4,22 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace API_ASP.NET_Core.Controllers;
 
+/// <summary>
+/// Point d'entrée HTTP du module Expédition pour charger et verrouiller les préparations.
+/// </summary>
+/// <remarks>
+/// Les routes Expédition sont volontairement globales : la date métier est calculée côté API
+/// et aucun paramètre de date, tournée ou livreur ne doit piloter le chargement. Le contrôleur
+/// reste limité au contrat HTTP ; les règles de préparation et de verrouillage sont portées
+/// par les services applicatifs.
+/// </remarks>
 [ApiController]
 [Route("api/expedition/preparations")]
 [Produces("application/json")]
 public sealed class ExpeditionPreparationsController : ControllerBase
 {
-    // Les contrôleurs ne doivent plus contenir de logique métier directe ;
-    // ils délèguent au service de préparation et au service de verrouillage.
+    // Règle d'architecture : le contrôleur ne décide pas du métier Expédition.
+    // Il délègue aux services pour éviter de mélanger contrat HTTP, validation et persistance SQL.
     private readonly ExpeditionPreparationService _preparationService;
     private readonly ExpeditionVerrouillageService _verrouillageService;
 
