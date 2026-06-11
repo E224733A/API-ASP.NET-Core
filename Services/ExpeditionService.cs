@@ -105,6 +105,8 @@ public sealed class ExpeditionService
             {
                 CodeTournee = codeTournee,
                 LibelleTournee = lignesTournee.FirstOrDefault()?.LibelleTournee,
+                // Ce statut décrit l'état central connu par l'API au moment du chargement.
+                // L'éligibilité finale au verrouillage reste décidée côté SERVWEB par l'état local créé après le clic humain "prêt".
                 StatutPreparationWeb = etatPreparation is not null && !etatPreparation.EstVerrouille
                     ? "EN_PREPARATION_WEB"
                     : "PRETE_VERROUILLAGE",
