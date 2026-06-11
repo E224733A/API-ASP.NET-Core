@@ -9,6 +9,12 @@ namespace API_ASP.NET_Core.Services;
 /// <summary>
 /// Service dédié aux opérations de consultation des tournées pour les livreurs.
 /// </summary>
+/// <remarks>
+/// Ce service prépare les réponses de chargement mobile : liste des tournées disponibles,
+/// détail complet d'une tournée, articles saisissables, commentaires exceptionnels,
+/// préremplissages Expédition et liens d'adresse de livraison. La date métier reste fournie
+/// par <see cref="DateMetierService"/> afin que le mobile ne pilote pas la date chargée.
+/// </remarks>
 public sealed class TourneesService
 {
     private readonly TourneesRepository _repository;
@@ -28,6 +34,13 @@ public sealed class TourneesService
         _lienAdresseLivraisonProvider = lienAdresseLivraisonProvider;
     }
 
+    /// <summary>
+    /// Retourne les tournées disponibles pour un livreur et une date métier déjà déterminée.
+    /// </summary>
+    /// <remarks>
+    /// Cette surcharge est utile pour tester ou réutiliser explicitement une date calculée.
+    /// Elle vérifie d'abord que le livreur existe avant de construire la liste des tournées.
+    /// </remarks>
     public async Task<TourneesDisponiblesResponseDto?> GetTourneesDisponiblesAsync(
         DateOnly dateTournee,
         string codeLivreur)
@@ -73,6 +86,9 @@ public sealed class TourneesService
         };
     }
 
+    /// <summary>
+    /// Retourne les tournées disponibles pour le livreur sur la date métier mobile autorisée.
+    /// </summary>
     public async Task<TourneesDisponiblesResponseDto?> GetTourneesDisponiblesAsync(string? codeLivreur)
     {
         if (string.IsNullOrWhiteSpace(codeLivreur))
@@ -84,6 +100,14 @@ public sealed class TourneesService
         return await GetTourneesDisponiblesAsync(date, codeLivreur.Trim());
     }
 
+    /// <summary>
+    /// Charge le détail complet d'une tournée mobile pour une date métier déjà déterminée.
+    /// </summary>
+    /// <remarks>
+    /// La réponse combine les lignes de tournée, les articles saisissables, les commentaires
+    /// exceptionnels, les préremplissages Expédition et les liens d'adresse de livraison.
+    /// Le chargement est ensuite tracé en base pour diagnostic.
+    /// </remarks>
     public async Task<TourneeMobileDto?> GetTourneeAsync(
         DateOnly dateTournee,
         string codeLivreur,
@@ -131,6 +155,7 @@ public sealed class TourneesService
             preRemplissages,
             liensAdresseLivraisonParClientEtPdl);
 
+        // Diagnostic métier : conserver une trace du chargement envoyé au mobile.
         await _repository.SaveChargementTourneeAsync(
             dateTournee,
             SchemaVersions.SynchronisationActuelle,
@@ -142,6 +167,9 @@ public sealed class TourneesService
         return tournee;
     }
 
+    /// <summary>
+    /// Charge le détail d'une tournée pour la date métier mobile autorisée.
+    /// </summary>
     public async Task<TourneeMobileDto?> GetTourneeAsync(
         string? codeLivreur,
         string? codeTournee = null,
@@ -156,6 +184,13 @@ public sealed class TourneesService
         return await GetTourneeAsync(date, codeLivreur.Trim(), codeTournee.Trim(), nomLivreur);
     }
 
+    /// <summary>
+    /// Récupère les liens d'adresse de livraison pour les couples client / point de livraison de la tournée.
+    /// </summary>
+    /// <remarks>
+    /// Les liens sont chargés à part afin de ne pas bloquer le modèle principal de tournée
+    /// sur une source optionnelle. L'absence de lien reste représentée par null.
+    /// </remarks>
     private async Task<IReadOnlyDictionary<string, string?>> GetLiensAdresseLivraisonParClientEtPdlAsync(
         IReadOnlyList<TourneeLigneRecord> lignes)
     {
@@ -185,11 +220,17 @@ public sealed class TourneesService
         return result;
     }
 
+    /// <summary>
+    /// Construit la clé utilisée pour rattacher un lien d'adresse à un client et un PDL.
+    /// </summary>
     private static string BuildAdresseLivraisonKey(string? numClient, string? codePdl)
     {
         return $"{NormalizeKeyPart(numClient)}|{NormalizeKeyPart(codePdl)}";
     }
 
+    /// <summary>
+    /// Normalise une partie de clé sans produire de valeur nulle.
+    /// </summary>
     private static string NormalizeKeyPart(string? value)
     {
         return string.IsNullOrWhiteSpace(value)
@@ -197,6 +238,9 @@ public sealed class TourneesService
             : value.Trim();
     }
 
+    /// <summary>
+    /// Convertit un code tournée numérique en valeur de tri, avec repli en fin de liste.
+    /// </summary>
     private static int TryParseInt(string? value)
     {
         return int.TryParse(value, out var number)
