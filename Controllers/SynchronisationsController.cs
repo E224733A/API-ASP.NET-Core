@@ -6,12 +6,13 @@ using Microsoft.AspNetCore.Mvc;
 namespace API_ASP.NET_Core.Controllers;
 
 /// <summary>
-/// Contrôleur HTTP dédié aux synchronisations de tournées mobiles.
-/// Il se contente d'orchestrer la réception de la requête et de déléguer
-/// la logique métier au <see cref="SynchronisationService"/>. Toute logique
-/// de validation ou d'accès aux données est déportée dans les services
-/// et validateurs appropriés.
+/// Contrôleur HTTP dédié au POST final de synchronisation mobile.
 /// </summary>
+/// <remarks>
+/// Cette route reçoit le bilan d'une tournée terminée par un livreur. Le contrôleur ne
+/// décide pas des règles de date ou de doublon : il transmet le payload au service de
+/// synchronisation, qui applique les contrôles métier avant persistance.
+/// </remarks>
 [ApiController]
 [Route("api/synchronisations")]
 public sealed class SynchronisationsController : ControllerBase
@@ -47,7 +48,7 @@ public sealed class SynchronisationsController : ControllerBase
         [FromBody] SynchronisationTourneeRequest? request,
         CancellationToken cancellationToken)
     {
-        // Validation HTTP minimale : le corps de requête ne doit pas être nul.
+        // Règle de contrat : un POST de synchronisation doit toujours contenir un corps JSON exploitable.
         if (request is null)
         {
             return BadRequest(new
@@ -88,7 +89,7 @@ public sealed class SynchronisationsController : ControllerBase
         }
         catch (Exception exception)
         {
-            // Toute exception non gérée est considérée comme une erreur interne.
+            // Diagnostic production : journaliser la tournée et la date reçues facilite l'analyse d'un incident.
             _logger.LogError(
                 exception,
                 "Erreur technique lors de la synchronisation de la tournée {CodeTournee} du {DateTournee}.",
