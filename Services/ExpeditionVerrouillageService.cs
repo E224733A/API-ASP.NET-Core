@@ -95,7 +95,8 @@ public sealed class ExpeditionVerrouillageService
 
         if (existingLot is not null)
         {
-            // Idempotence : le même identifiant de lot est accepté uniquement si le contenu est identique.
+            // Idempotence : une relance identique renvoie Statut=SUCCESS et Code=ALREADY_PROCESSED.
+            // Le même identifiant de lot avec un contenu différent reste refusé en 409.
             if (string.Equals(existingLot.EmpreintePayload, empreintePayload, StringComparison.OrdinalIgnoreCase))
             {
                 return (
