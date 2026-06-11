@@ -1,5 +1,13 @@
 namespace API_ASP.NET_Core.Services;
 
+/// <summary>
+/// Source unique de calcul des dates métier utilisées par l'API.
+/// </summary>
+/// <remarks>
+/// Le serveur reste responsable des dates autorisées pour les flux mobile et Expédition.
+/// Cette centralisation évite qu'un client HTTP force une date ancienne ou future dans
+/// un chargement, une synchronisation ou un verrouillage.
+/// </remarks>
 public sealed class DateMetierService
 {
     private const string WindowsParisTimeZoneId = "Romance Standard Time";
@@ -72,31 +80,53 @@ public sealed class DateMetierService
         return GetDateTourneeMobileAutorisee();
     }
 
+    /// <summary>
+    /// Retourne l'heure courante dans le fuseau métier Europe/Paris.
+    /// </summary>
     public DateTimeOffset GetNowParis()
     {
         return TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, GetParisTimeZone());
     }
 
+    /// <summary>
+    /// Vérifie qu'une date correspond à la date mobile autorisée.
+    /// </summary>
     public bool EstDateTourneeAutorisee(DateOnly dateTournee)
     {
         return dateTournee == GetDateTourneeAutorisee();
     }
 
+    /// <summary>
+    /// Vérifie qu'une date DateTime correspond à la date mobile autorisée, sans tenir compte de l'heure.
+    /// </summary>
     public bool EstDateTourneeAutorisee(DateTime dateTournee)
     {
         return EstDateTourneeAutorisee(DateOnly.FromDateTime(dateTournee.Date));
     }
 
+    /// <summary>
+    /// Vérifie qu'une date correspond à la date préparable Expédition.
+    /// </summary>
     public bool EstDateTourneeExpeditionPreparable(DateOnly dateTournee)
     {
         return dateTournee == GetDateTourneeExpeditionPreparable();
     }
 
+    /// <summary>
+    /// Vérifie qu'une date DateTime correspond à la date préparable Expédition, sans tenir compte de l'heure.
+    /// </summary>
     public bool EstDateTourneeExpeditionPreparable(DateTime dateTournee)
     {
         return EstDateTourneeExpeditionPreparable(DateOnly.FromDateTime(dateTournee.Date));
     }
 
+    /// <summary>
+    /// Résout le fuseau métier Paris selon l'environnement d'exécution.
+    /// </summary>
+    /// <remarks>
+    /// IIS Windows utilise "Romance Standard Time". Les environnements Linux ou certains outils
+    /// de développement utilisent plutôt l'identifiant IANA "Europe/Paris".
+    /// </remarks>
     private static TimeZoneInfo GetParisTimeZone()
     {
         try
