@@ -27,6 +27,7 @@ builder.Services.AddControllers()
 
 builder.Services.Configure<ApiBehaviorOptions>(options =>
 {
+    // Contrat d'erreur commun : les erreurs automatiques de désérialisation doivent rester en JSON lisible.
     options.InvalidModelStateResponseFactory = context =>
     {
         var errors = context.ModelState.Values
@@ -48,6 +49,7 @@ builder.Services.AddEndpointsApiExplorer();
 
 builder.Services.AddSwaggerGen(options =>
 {
+    // Swagger documente les contrats actuels, mais la validation réelle reste portée par les validators et services.
     options.SwaggerDoc("v1", new OpenApiInfo
     {
         Title = "API Mobile SLI - Tournées livreurs",
@@ -109,6 +111,7 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddSingleton<SqlConnectionFactory>();
 builder.Services.AddSingleton<DateMetierService>();
 
+// Enrichissement optionnel du contrat mobile : liens d'adresse de livraison par client et point de livraison.
 builder.Services.Configure<LiensAdresseLivraisonOptions>(
     builder.Configuration.GetSection(LiensAdresseLivraisonOptions.SectionName));
 builder.Services.AddScoped<ILienAdresseLivraisonProvider, RepositoryLienAdresseLivraisonProvider>();
@@ -127,6 +130,7 @@ builder.Services.AddScoped<TourneeMobileMapper>();
 builder.Services.AddScoped<CamionsRepository>();
 builder.Services.AddScoped<CamionsService>();
 
+// Module Synchronisation mobile : POST final de tournée avec contrat 1.3.
 builder.Services.AddScoped<SynchronisationsRepository>();
 builder.Services.AddScoped<SynchronisationTourneeValidator>();
 builder.Services.AddScoped<SynchronisationMapper>();
@@ -149,7 +153,7 @@ builder.Services.AddScoped<ExpeditionMapper>();
 
 var app = builder.Build();
 
-// Middlewares globaux : traçabilité et gestion d'erreurs
+// Middlewares globaux : traçabilité et gestion d'erreurs.
 app.UseCorrelationId();
 app.UseApiExceptionHandling();
 
