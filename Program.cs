@@ -138,9 +138,10 @@ builder.Services.AddScoped<SynchronisationService>();
 builder.Services.AddScoped<ExpeditionRepository>();
 builder.Services.AddScoped<ExpeditionService>();
 
-// Services supplémentaires pour respecter l’architecture MVC :
-// - service de préparation et de verrouillage qui délèguent au service existant ;
-// - validator et mapper dédiés au module Expédition.
+// Module Expédition :
+// - ExpeditionPreparationService isole le GET et délègue au service de lecture existant ;
+// - ExpeditionVerrouillageService orchestre le POST de verrouillage : validation, mapping, idempotence et persistance ;
+// - ExpeditionVerrouillageValidator et ExpeditionMapper gardent le contrat JSON séparé de la persistance SQL.
 builder.Services.AddScoped<ExpeditionPreparationService>();
 builder.Services.AddScoped<ExpeditionVerrouillageService>();
 builder.Services.AddScoped<ExpeditionVerrouillageValidator>();
@@ -163,8 +164,8 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-// En développement local, on laisse HTTP.
-// En production sous IIS, HTTPS sera configuré proprement.
+// L'API ne force pas HTTPS par middleware ASP.NET.
+// En production, HTTPS doit être imposé par IIS : binding, certificat, règles réseau et suppression des accès HTTP publics.
 // app.UseHttpsRedirection();
 
 app.MapControllers();
