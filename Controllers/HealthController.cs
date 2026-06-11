@@ -4,6 +4,15 @@ using API_ASP.NET_Core.Data;
 
 namespace API_ASP.NET_Core.Controllers;
 
+/// <summary>
+/// Routes de diagnostic permettant de vérifier l'état minimal de l'API et ses connexions SQL.
+/// </summary>
+/// <remarks>
+/// Ces routes servent aux tests de déploiement, aux scripts de contrôle IIS et aux diagnostics
+/// d'exploitation. Elles ne portent aucune logique métier de tournée, mais elles exposent des
+/// informations utiles sur les bases configurées : elles doivent donc rester limitées à un usage
+/// de vérification technique.
+/// </remarks>
 [ApiController]
 [Route("api/health")]
 public class HealthController : ControllerBase
